@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- ACE server mod: anti-cheat guards for the Asherons Call Revived shard (docs/security/ANTI-CHEAT.md).
+       Built ON the GPU box against the running server's own assemblies (tools/gpubox-ace/build-mods.sh);
+       ACEBIN points at ~/ace/src/Source/ACE.Server/bin/Release/net10.0. Never copied next to the mod:
+       the host already has them loaded. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <AssemblyName>RevivalGuard</AssemblyName>
+    <ACEBIN Condition="'$(ACEBIN)' == ''">$(HOME)/ace/src/Source/ACE.Server/bin/Release/net10.0</ACEBIN>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="ACE.Server"><HintPath>$(ACEBIN)/ACE.Server.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ACE.Entity"><HintPath>$(ACEBIN)/ACE.Entity.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ACE.Common"><HintPath>$(ACEBIN)/ACE.Common.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ACE.DatLoader"><HintPath>$(ACEBIN)/ACE.DatLoader.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ACE.Database"><HintPath>$(ACEBIN)/ACE.Database.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Microsoft.EntityFrameworkCore"><HintPath>$(ACEBIN)/Microsoft.EntityFrameworkCore.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(ACEBIN)/0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="log4net"><HintPath>$(ACEBIN)/log4net.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

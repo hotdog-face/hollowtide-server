@@ -1,0 +1,16 @@
+-- THE ARMOR STAND'S WOODEN FIGURE STANDS STILL (owner, 2026-09-29, in his mansion: "wooden figure
+-- turned into a human body and it has an animated idle"). Sweep #9, docs/SWEEP-HOUSING-ITEMS-2026-09-29.md.
+--
+-- The figure (900510, spawned by RevivalGuard MansionFurniture on an Armor Stand) was given the
+-- statue motion table 0x090000F3 on the belief that it has no animation. It has: read with ACE's
+-- DatLoader, 0x090000F3 is the full human table (366 cycles, default style 0x8000003D, NonCombat
+-- Ready -> 0x03000001, the human breathing idle, the same as 0x09000001), so our client played the
+-- idle on the figure. With NO motion table the client draws the figure from the part-node export
+-- 0x02000001_0x00000000 (ServerLink.ModelKeyFor: an item dressed by its ObjDesc), which has a
+-- partNN node for every part to dress and no clips: a still figure. Nothing on the server reads
+-- the figure's motion table (it is a Generic object; FigureDress builds its ObjDesc).
+--
+-- Apply: tools/gpubox-ace/apply-live.sh tools/gpubox-ace/armor-stand-figure-still-2026-09-30.sql
+-- (clears the weenie cache; a figure already standing keeps its old look until its stand is
+-- refreshed: dress or undress it, or the landblock reloads). Undo: re-insert (900510, 2, 150995187).
+DELETE FROM weenie_properties_d_i_d WHERE object_Id = 900510 AND type = 2;

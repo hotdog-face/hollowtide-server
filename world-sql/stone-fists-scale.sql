@@ -1,0 +1,11 @@
+-- Stone Fists (1838) and Demon Fists (2045, Bael'Zharon's, including the world boss 900200) never
+-- landed. Both spawn weenie 7306 "Shockwave" (setup 0x0200087C) at DefaultScale 18.8, which is the
+-- 2005 retail value, but ACE sizes the volley from setup.Spheres[0].Radius * scale
+-- (WorldObject_Magic.GetProjectileRadius): 0.5 * 18.8 = 9.4 m. CalculateProjectileOrigins then spaced
+-- the 3x3 grid 2*9.4+padding apart and pushed it 2*9.4 m further ahead, and a 9.4 m collision sphere
+-- touched terrain or a building on spawn, so every rock exploded where it appeared.
+-- The rest of the falling family collides at about 0.5 m: Avalanche 7304 is 0.1 * 5, Squall of
+-- Swords 7307 is 0.106 * 4.5. Scale 1 is the model's native size: a 3 m boulder with a 0.5 m
+-- sphere, in line with them. Owner 2026-09-29: "make them work. i dont want monsters casting a
+-- spell that doesnt work." ACE caches the radius (ProjectileRadiusCache): restart the shard.
+UPDATE weenie_properties_float SET value = 1 WHERE object_Id = 7306 AND type = 39;

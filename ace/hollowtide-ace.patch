@@ -1,0 +1,2185 @@
+diff --git a/Source/ACE.DatLoader/DxtUtil.cs b/Source/ACE.DatLoader/DxtUtil.cs
+index fbb97ebe..4f9a7673 100644
+--- a/Source/ACE.DatLoader/DxtUtil.cs
++++ b/Source/ACE.DatLoader/DxtUtil.cs
+@@ -45,13 +45,13 @@ namespace ACE.DatLoader
+ 
+     public static class DxtUtil
+     {
+-        internal static byte[] DecompressDxt1(byte[] imageData, int width, int height)
++        public static byte[] DecompressDxt1(byte[] imageData, int width, int height)
+         {
+             using (MemoryStream imageStream = new MemoryStream(imageData))
+                 return DecompressDxt1(imageStream, width, height);
+         }
+ 
+-        internal static byte[] DecompressDxt1(Stream imageStream, int width, int height)
++        public static byte[] DecompressDxt1(Stream imageStream, int width, int height)
+         {
+             byte[] imageData = new byte[width * height * 4];
+ 
+@@ -159,13 +159,13 @@ private static void DecompressDxt1Block(BinaryReader imageReader, int x, int y,
+             }
+         }
+ 
+-        internal static byte[] DecompressDxt3(byte[] imageData, int width, int height)
++        public static byte[] DecompressDxt3(byte[] imageData, int width, int height)
+         {
+             using (MemoryStream imageStream = new MemoryStream(imageData))
+                 return DecompressDxt3(imageStream, width, height);
+         }
+ 
+-        internal static byte[] DecompressDxt3(Stream imageStream, int width, int height)
++        public static byte[] DecompressDxt3(Stream imageStream, int width, int height)
+         {
+             byte[] imageData = new byte[width * height * 4];
+ 
+@@ -307,13 +307,13 @@ private static void DecompressDxt3Block(BinaryReader imageReader, int x, int y,
+             }
+         }
+ 
+-        internal static byte[] DecompressDxt5(byte[] imageData, int width, int height)
++        public static byte[] DecompressDxt5(byte[] imageData, int width, int height)
+         {
+             using (MemoryStream imageStream = new MemoryStream(imageData))
+                 return DecompressDxt5(imageStream, width, height);
+         }
+ 
+-        internal static byte[] DecompressDxt5(Stream imageStream, int width, int height)
++        public static byte[] DecompressDxt5(Stream imageStream, int width, int height)
+         {
+             byte[] imageData = new byte[width * height * 4];
+ 
+diff --git a/Source/ACE.DatLoader/FileTypes/SetupModel.cs b/Source/ACE.DatLoader/FileTypes/SetupModel.cs
+index b53bae90..3a0069c2 100644
+--- a/Source/ACE.DatLoader/FileTypes/SetupModel.cs
++++ b/Source/ACE.DatLoader/FileTypes/SetupModel.cs
+@@ -115,5 +115,38 @@ public static SetupModel CreateSimpleSetup()
+ 
+             return setup;
+         }
++
++        /// <summary>
++        /// Synthesizes a single-part SetupModel that wraps a raw 0x01 GfxObj, so that consumers
++        /// which expect a 0x02 SetupModel can be handed a mesh id without parsing it as a setup.
++        /// <para />
++        /// This mirrors what the physics layer already does for the same id in
++        /// ACE.Server.Physics.Setup.MakeSimpleSetup: one part, holding the mesh itself. The
++        /// PhysicsPolygons / PhysicsBSP ride on the GfxObj rather than the setup, so collision is
++        /// unaffected by the wrapping -- HasPhysicsBSP is simply carried across from the mesh flags.
++        /// <para />
++        /// Note this deliberately does NOT go through DatDatabase.ReadFromDat: that cache is keyed
++        /// on file id alone and blind-casts to T, so caching a synthesized SetupModel under a mesh
++        /// id would make every later ReadFromDat&lt;GfxObj&gt; of that same id throw InvalidCastException
++        /// (and vice versa). Callers must cache these separately.
++        /// </summary>
++        public static SetupModel CreateSimpleSetup(uint gfxObjId, GfxObj gfxObj)
++        {
++            var setup = CreateSimpleSetup();
++
++            setup.Id = gfxObjId;
++            setup.Parts.Add(gfxObjId);
++
++            if (gfxObj != null && (gfxObj.Flags & GfxObjFlags.HasPhysics) != 0)
++            {
++                setup.Flags |= SetupFlags.HasPhysicsBSP;
++                setup.HasPhysicsBSP = true;
++            }
++
++            // a single resting frame covering the one part, matching the physics-side simple setup
++            setup.PlacementFrames.Add((int)Placement.Resting, new PlacementType());
++
++            return setup;
++        }
+     }
+ }
+diff --git a/Source/ACE.Entity/CharacterCreateInfo.cs b/Source/ACE.Entity/CharacterCreateInfo.cs
+index 632a7ee4..23a48a34 100644
+--- a/Source/ACE.Entity/CharacterCreateInfo.cs
++++ b/Source/ACE.Entity/CharacterCreateInfo.cs
+@@ -31,6 +31,21 @@ public class CharacterCreateInfo
+ 
+         public uint StartArea { get; private set; }
+ 
++        /// <summary>
++        /// (custom) TRUE if the client set the 0x80 flag on StartArea, requesting to skip the
++        /// Training Academy and begin in the starter town proper. Retail clients never set this.
++        /// Honored only when the allow_town_spawn shard property is enabled.
++        /// </summary>
++        public bool SkipAcademy { get; private set; }
++
++        /// <summary>
++        /// (custom) TRUE if the client set the 0x40 flag on StartArea, requesting the Samurai
++        /// starter loadout (Yoroi set + Kabuton) at creation. Composes with the 0x80 town-spawn
++        /// flag (0xC0 = both). Retail clients never set this. Honored only when the
++        /// samurai_starter_loadout shard property is enabled.
++        /// </summary>
++        public bool SamuraiLoadout { get; private set; }
++
+         public bool IsAdmin { get; private set; }
+         public bool IsSentinel { get; private set; }
+ 
+@@ -63,6 +78,17 @@ public void Unpack(BinaryReader reader)
+ 
+             StartArea = reader.ReadUInt32();
+ 
++            // (custom) high-bit flags on StartArea = create-time options from the custom client:
++            //   0x80 - player opted out of the Training Academy (allow_town_spawn)
++            //   0x40 - player picked the Samurai creation flavor (samurai_starter_loadout)
++            // The bits compose (0xC0 = both). Strip them here, unconditionally, BEFORE the value
++            // is used anywhere, so a flagged index can never reach the StarterAreas
++            // lookup/validation. Retail clients never set either bit, so their values pass
++            // through unchanged.
++            SkipAcademy = (StartArea & 0x80) != 0;
++            SamuraiLoadout = (StartArea & 0x40) != 0;
++            StartArea &= 0x3F;
++
+             IsAdmin = (reader.ReadUInt32() == 1);
+             IsSentinel = (reader.ReadUInt32() == 1);
+         }
+diff --git a/Source/ACE.Server/Command/CommandManager.cs b/Source/ACE.Server/Command/CommandManager.cs
+index e2340aee..e501c2de 100644
+--- a/Source/ACE.Server/Command/CommandManager.cs
++++ b/Source/ACE.Server/Command/CommandManager.cs
+@@ -128,17 +128,48 @@ public static void Initialize()
+ 
+         private static void CommandThread()
+         {
++            // ADDITIVE ACE MOD (headless server): when stdin is NOT a terminal (server backgrounded /
++            // daemonized), Console.ReadLine() returns null immediately on EOF, so the "ACE >> " prompt loop
++            // below busy-spins — pegging a CPU core and writing gigabytes of "ACE >> " to the log. Detect that
++            // and skip the interactive console entirely; the server runs headless (network + admin tooling).
++            // Interactive launches (a real Terminal tty) are unaffected. See server/ace-mods/.
++            // ACE_CONSOLE_STDIN=1 opts back IN to the console on redirected stdin. The content sandbox
++            // feeds stdin from a FIFO whose write end it holds open for the life of the server, so
++            // ReadLine() blocks between commands instead of returning null — no EOF, no busy-spin. That
++            // is what makes `accountcreate` reachable on a backgrounded sandbox (server/ace-sandbox/
++            // start-ace-sandbox.command `console` subcommand). The null-is-EOF break below makes this
++            // safe even if the writer does close.
++            var pipedConsole = Console.IsInputRedirected
++                            && Environment.GetEnvironmentVariable("ACE_CONSOLE_STDIN") == "1";
++            if (Console.IsInputRedirected && !pipedConsole)
++            {
++                Console.WriteLine("");
++                Console.WriteLine("ACEmulator running headless (stdin is not a terminal) — interactive console disabled.");
++                return;
++            }
++
+             Console.WriteLine("");
+-            Console.WriteLine("ACEmulator command prompt ready.");
++            Console.WriteLine(pipedConsole
++                ? "ACEmulator command console reading from redirected stdin (ACE_CONSOLE_STDIN=1)."
++                : "ACEmulator command prompt ready.");
+             Console.WriteLine("");
+             Console.WriteLine("Type \"acecommands\" for help.");
+             Console.WriteLine("");
+ 
+             for (; ; )
+             {
+-                Console.Write("ACE >> ");
++                // No "ACE >> " prompt on a piped console: nothing is there to read it, and it would
++                // bloat the log line-for-line with every command.
++                if (!pipedConsole)
++                    Console.Write("ACE >> ");
+ 
+                 string commandLine = Console.ReadLine();
++                if (commandLine == null)
++                {
++                    // Real EOF (writer closed / stdin exhausted) — stop, never spin.
++                    Console.WriteLine("stdin closed — interactive console stopping.");
++                    return;
++                }
+                 if (string.IsNullOrWhiteSpace(commandLine))
+                     continue;
+ 
+diff --git a/Source/ACE.Server/Command/Handlers/AdminCommands.cs b/Source/ACE.Server/Command/Handlers/AdminCommands.cs
+index 2e678809..cd37349e 100644
+--- a/Source/ACE.Server/Command/Handlers/AdminCommands.cs
++++ b/Source/ACE.Server/Command/Handlers/AdminCommands.cs
+@@ -961,6 +961,54 @@ public static void HandleTeleportLOC(Session session, params string[] parameters
+             }
+         }
+ 
++        // agentuse <guid> — headless-agent helper: activate a world object directly
++        [CommandHandler("agentuse", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 1,
++            "Activate a world object by guid directly, bypassing the move-to-object chain.",
++            "<0xGuid>\nFor headless agent/bot control: triggers portals/doors/NPCs without validated movement. " +
++            "Runs the object's real OnActivate (legit gates — portal cooldown/level/PK — still apply).")]
++        public static void HandleAgentUse(Session session, params string[] parameters)
++        {
++            var s = parameters[0];
++            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
++                s = s.Substring(2);
++            if (!uint.TryParse(s, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var guid))
++            {
++                ChatPacket.SendServerMessage(session, $"agentuse: invalid guid '{parameters[0]}'", ChatMessageType.Broadcast);
++                return;
++            }
++            var wo = session.Player.FindObject(guid, Player.SearchLocations.Everywhere, out _, out _, out _);
++            if (wo == null)
++            {
++                ChatPacket.SendServerMessage(session, $"agentuse: object 0x{guid:X8} not found near you", ChatMessageType.Broadcast);
++                return;
++            }
++            // TryUseItem(item, true) → item.OnActivate(player). For a Portal: CheckUseRequirements → ActOnUse → ThreadSafeTeleport.
++            session.Player.TryUseItem(wo, true);
++            ChatPacket.SendServerMessage(session, $"agentuse: activated {wo.Name} (0x{guid:X8})", ChatMessageType.Broadcast);
++        }
++
++        // agentgive <targetGuid> <itemGuid> [amount] — headless-agent helper: hand an inventory item to an
++        // NPC/player directly, bypassing the move-to-target chain (headless bots run no client physics, so
++        // the chain never completes — the give hung silently). The NPC's REAL give/emote logic still runs.
++        [CommandHandler("agentgive", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 2,
++            "Give an inventory item to a target by guid directly, bypassing the move-to-target chain.",
++            "<0xTargetGuid> <0xItemGuid> [amount]\nFor headless agent/bot control: quest handins etc. The target's real give/emote/refusal logic still applies.")]
++        public static void HandleAgentGive(Session session, params string[] parameters)
++        {
++            static bool ParseGuid(string s, out uint v)
++            {
++                if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) s = s.Substring(2);
++                return uint.TryParse(s, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out v);
++            }
++            if (!ParseGuid(parameters[0], out var targetGuid) || !ParseGuid(parameters[1], out var itemGuid))
++            {
++                ChatPacket.SendServerMessage(session, $"agentgive: invalid guid(s) '{parameters[0]}' '{parameters[1]}'", ChatMessageType.Broadcast);
++                return;
++            }
++            int amount = parameters.Length > 2 && int.TryParse(parameters[2], out var a) ? a : 1;
++            session.Player.AgentGiveDirect(targetGuid, itemGuid, amount);
++        }
++
+         // time
+         [CommandHandler("time", AccessLevel.Envoy, CommandHandlerFlag.None, 0,
+             "Displays the server's current game time.")]
+diff --git a/Source/ACE.Server/Entity/SetupResolver.cs b/Source/ACE.Server/Entity/SetupResolver.cs
+new file mode 100644
+index 00000000..565500a4
+--- /dev/null
++++ b/Source/ACE.Server/Entity/SetupResolver.cs
+@@ -0,0 +1,77 @@
++using System.Collections.Concurrent;
++
++using log4net;
++
++using ACE.DatLoader;
++using ACE.DatLoader.FileTypes;
++using ACE.Server.Managers;
++
++namespace ACE.Server.Entity
++{
++    /// <summary>
++    /// Resolves a weenie's Setup DID to a SetupModel, tolerating raw 0x01 GfxObj (mesh) ids.
++    /// <para />
++    /// Stock ACE assumes every Setup DID is a 0x02 SetupModel and reads it with
++    /// ReadFromDat&lt;SetupModel&gt;. Handing it a 0x01 mesh id makes SetupModel.Unpack read a garbage
++    /// numParts and run off the end of the buffer, throwing an uncaught EndOfStreamException on the
++    /// World Manager thread -- which aborts the whole process. This is not mesh-specific: all 15,318
++    /// 0x01 files in client_portal.dat fail to parse as a SetupModel.
++    /// <para />
++    /// The physics layer already handles 0x01 correctly (PhysicsObj.makeObject ->
++    /// InitPartArrayObject -> MasterDBMap.DivineType 0x01 -> PartArray.CreateMesh ->
++    /// Setup.MakeSimpleSetup), and the PhysicsPolygons / PhysicsBSP ride on the GfxObj, so collision
++    /// survives. Only the WorldObject-level read is broken. This routes 0x01 through the same
++    /// single-part wrapping the physics layer uses, and caches the result.
++    /// <para />
++    /// Why the synthesized setups get their own cache: DatDatabase.FileCache is keyed on file id
++    /// alone and blind-casts the hit to T. The mesh is also read as a GfxObj by the physics layer
++    /// (GfxObjCache -> DBObj.GetGfxObj -> ReadFromDat&lt;GfxObj&gt;), so reusing FileCache for the
++    /// synthesized SetupModel would make whichever read lost the race throw InvalidCastException on
++    /// the cast. Keeping them separate means neither type ever collides in FileCache.
++    /// </summary>
++    public static class SetupResolver
++    {
++        private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
++
++        /// <summary>
++        /// Synthesized single-part setups for raw 0x01 mesh ids, kept out of DatDatabase.FileCache
++        /// so a mesh id never resolves to two different FileType subclasses in the same cache.
++        /// </summary>
++        private static readonly ConcurrentDictionary<uint, SetupModel> GfxObjSetups = new ConcurrentDictionary<uint, SetupModel>();
++
++        /// <summary>
++        /// An inert stand-in returned when a 0x01 setup is refused, so a bad weenie yields a
++        /// non-functional object instead of taking the server down. No parts, no physics BSP.
++        /// </summary>
++        private static readonly SetupModel InertSetup = SetupModel.CreateSimpleSetup();
++
++        private static readonly ConcurrentDictionary<uint, bool> LoggedRefusals = new ConcurrentDictionary<uint, bool>();
++
++        /// <summary>
++        /// True if this Setup DID points at a 0x01 GfxObj (a raw mesh) rather than a 0x02 SetupModel.
++        /// </summary>
++        public static bool IsGfxObjId(uint setupId) => (setupId >> 24) == 0x01;
++
++        /// <summary>
++        /// Reads the SetupModel for a Setup DID. 0x02 ids take the stock path unchanged; 0x01 ids are
++        /// wrapped (allow_gfxobj_setup enabled) or refused inertly (disabled).
++        /// </summary>
++        public static SetupModel GetSetup(uint setupId)
++        {
++            if (!IsGfxObjId(setupId))
++                return DatManager.PortalDat.ReadFromDat<SetupModel>(setupId);
++
++            if (!PropertyManager.GetBool("allow_gfxobj_setup").Item)
++            {
++                // Stock ACE would abort the process here. Refuse the object instead, once per id.
++                if (LoggedRefusals.TryAdd(setupId, true))
++                    log.Error($"SetupResolver.GetSetup(0x{setupId:X8}): Setup DID is a raw 0x01 GfxObj, not a 0x02 SetupModel. Refusing it (the object will be inert). Enable the allow_gfxobj_setup shard property to wrap raw meshes instead.");
++
++                return InertSetup;
++            }
++
++            return GfxObjSetups.GetOrAdd(setupId, id =>
++                SetupModel.CreateSimpleSetup(id, DatManager.PortalDat.ReadFromDat<GfxObj>(id)));
++        }
++    }
++}
+diff --git a/Source/ACE.Server/Factories/ExtendedEyeColors.cs b/Source/ACE.Server/Factories/ExtendedEyeColors.cs
+new file mode 100644
+index 00000000..1f6932cc
+--- /dev/null
++++ b/Source/ACE.Server/Factories/ExtendedEyeColors.cs
+@@ -0,0 +1,146 @@
++using System.Collections.Generic;
++
++using ACE.DatLoader.Entity;
++using ACE.Server.Managers;
++
++namespace ACE.Server.Factories
++{
++    /// <summary>
++    /// (custom, extended_eye_colors shard prop) Full-spectrum eye colors — owner-requested deviation.
++    ///
++    /// The CharacterCreate wire carries an eye-color INDEX into the heritage×gender's dat EyeColorList;
++    /// what every client (including retail) RENDERS is the palette DID this index resolves to, baked into
++    /// the character's appearance (EyesPalette → the @0x20/0x8 ObjDesc subpalette). This class lets a
++    /// custom client send indices BEYOND the dat list length: the overflow maps into a curated table of
++    /// ADDITIONAL AUTHENTIC dat palettes below — full wire compatibility, retail clients render the new
++    /// colors natively, no client-side presentation hacks.
++    ///
++    /// ═══ EXTENDED-EYE-COLOR CONTRACT v2 (mirrored EXACTLY in the native client, Login/CharGenData.cs) ═══
++    ///   • wire EyeColor index i &lt; sex.EyeColorList.Count → stock: sex.EyeColorList[i] (retail path, unchanged).
++    ///   • i &gt;= Count → extended: k = i − Count indexes OFFERED(sex) = Table with the DIDs already present
++    ///     in sex.EyeColorList removed, TABLE ORDER PRESERVED (so the same table yields no duplicate chips
++    ///     and both sides derive the identical per-heritage sub-list from the same dat).
++    ///   • HeritageGroup 6 (Gearknight — the shard's A'nekshay slot) NEVER gets extended colors: its
++    ///     EyeColor wire field is the A'nekshay tint channel (client AnekshayRace encodes tint as
++    ///     EyeColor 0..5) — extended indices there would corrupt the tint decode.
++    ///   • prop OFF, or k out of range, or heritage excluded → resolve i % Count instead. NEVER reject:
++    ///     un-activated shards degrade gracefully (the create succeeds with a stock color).
++    ///   • The table order is FROZEN — append new entries at the END only (existing characters store the
++    ///     resolved DID, but share codes / client offerings depend on stable indices).
++    ///   • v2 (2026-07-15) REPLACED the v1 table wholesale — a clean break, nothing shipped to players.
++    ///     v1 shared every heritage's stock palette with everyone, but the eye subpalette zone 256..319
++    ///     is an interleaved per-index mix of iris and sclera/shading entries — the glow/Lugian/Undead/
++    ///     Gearknight palettes paint both, so on human faces the WHITES of the eyes went red/purple/etc
++    ///     (owner bug). v2 entries are all verified iris-safe on human faces (neutral + luma-matched on
++    ///     the sclera indices). The client's ChargenExtendedEyesCheck sclera-invariance suite enforces
++    ///     this; the client look-code version byte was bumped 1→2 in the same change.
++    /// </summary>
++    public static class ExtendedEyeColors
++    {
++        /// <summary>
++        /// The curated extended palette table (v2, 34 entries) — every DID is an AUTHENTIC portal.dat
++        /// palette (0x04, ≥320 entries) whose eye zone is IRIS-SAFE on human faces: near-neutral and
++        /// luma-matched to the human stock palettes on the sclera/shading indices, colored on the iris
++        /// indices only. [0..7] = the union of the four human heritages' stock EyeColorLists (the only
++        /// stock palettes safe by construction); [8..33] = curated picks from the full 0x04 dat scan,
++        /// chosen for hue coverage. Weighted iris colors (human eye-texel histogram) noted per line.
++        /// </summary>
++        public static readonly uint[] Table =
++        {
++            // ── the human stock union (8) — unchanged from v1 [0..7] ──
++            0x040002BC,   // steel blue        ( 55, 88,114)  human stock
++            0x040004B0,   // blue-violet       ( 51, 50,102)  human stock
++            0x040002BE,   // hazel             ( 86, 89, 50)  human stock
++            0x040002BF,   // olive             ( 48, 47, 24)  human stock
++            0x040002BD,   // green             ( 61, 90, 50)  human stock
++            0x040004AE,   // amber brown       ( 85, 62, 34)  human stock
++            0x040004AF,   // grey              ( 54, 54, 54)  human stock
++            0x040004B1,   // violet            ( 82, 49,100)  human stock
++            // ── curated iris-safe extras (26) ──
++            0x04001F59,   // onyx              ( 35, 35, 37)  black iris, bright whites
++            0x040019A3,   // charcoal          ( 51, 51, 51)
++            0x04000F63,   // light grey        ( 99, 99, 99)
++            0x04000F64,   // silver            (114,114,114)
++            0x04000EB6,   // crimson           (100, 55, 51)  the one true red iris in the dat
++            0x0400142C,   // gold              (109, 99, 41)
++            0x04001F3C,   // emerald           ( 55,108, 32)  vivid green
++            0x0400133E,   // jade              ( 51,100, 57)
++            0x04000403,   // mint              ( 58,106, 72)
++            0x04002040,   // deep teal         ( 37, 41, 41)
++            0x04002041,   // teal              ( 49, 53, 53)
++            0x04002042,   // aqua slate        ( 58, 63, 63)
++            0x04002039,   // midnight blue     ( 39, 39, 41)
++            0x04002047,   // indigo            ( 40, 40, 45)
++            0x04000459,   // navy              ( 40, 41, 79)
++            0x04000474,   // royal blue        ( 60, 60,121)
++            0x0400044E,   // bright blue       ( 65, 65,133)
++            0x04000450,   // sky blue          ( 93, 92,177)
++            0x04000988,   // sapphire          ( 37, 36, 94)
++            0x040005BD,   // deep sapphire     ( 40, 39, 95)
++            0x04001347,   // dark plum         ( 33, 28, 38)
++            0x0400204E,   // plum              ( 40, 36, 42)
++            0x0400204F,   // orchid            ( 55, 51, 57)
++            0x04000EB3,   // vivid violet      ( 83, 49,100)
++            0x04002050,   // lavender          ( 66, 61, 67)
++            0x04000EB9,   // rose              ( 94, 53, 82)
++        };
++
++        /// <summary>HeritageGroup ids whose EyeColor wire channel is repurposed — never extended.</summary>
++        public const uint ExcludedHeritageGearknight = 6;   // A'nekshay tint channel (see contract above)
++
++        /// <summary>
++        /// The extended DIDs OFFERED to a heritage×gender: the table minus the DIDs already in the sex's
++        /// stock EyeColorList, table order preserved. Deterministic from the dat — the client derives the
++        /// identical list. Empty for the Gearknight heritage (caller passes its heritage id).
++        /// </summary>
++        public static List<uint> OfferedFor(SexCG sex, uint heritage)
++        {
++            var offered = new List<uint>();
++            if (sex == null || heritage == ExcludedHeritageGearknight)
++                return offered;
++            foreach (var did in Table)
++                if (!sex.EyeColorList.Contains(did))
++                    offered.Add(did);
++            return offered;
++        }
++
++        /// <summary>
++        /// Resolve a CharacterCreate EyeColor index to the EyesPalette DID per the contract above.
++        /// In-range stock indices behave exactly as stock ACE; overflow maps into the extended table when
++        /// the extended_eye_colors prop is on, and degrades to (index % list length) otherwise — this
++        /// method never throws and never rejects (stock ACE would have thrown IndexOutOfRange here).
++        /// </summary>
++        public static uint Resolve(SexCG sex, uint heritage, uint eyeColorIndex)
++        {
++            if (sex == null || sex.EyeColorList.Count == 0)
++                return 0;
++
++            var count = sex.EyeColorList.Count;
++            if (eyeColorIndex < count)
++                return sex.EyeColorList[(int)eyeColorIndex];   // stock path, byte-for-byte retail behavior
++
++            if (PropertyManager.GetBool("extended_eye_colors").Item)
++            {
++                var offered = OfferedFor(sex, heritage);
++                var k = (int)(eyeColorIndex - count);
++                if (k < offered.Count)
++                    return offered[k];
++            }
++
++            // prop off / out of range / excluded heritage: clamp gracefully, never reject
++            return sex.EyeColorList[(int)(eyeColorIndex % count)];
++        }
++
++        /// <summary>
++        /// Barber (FinishBarber) legality: an extended-eyed character must be able to visit the barber
++        /// without the whole request being rejected. TRUE when the prop is on and the requested DID is one
++        /// of this heritage×gender's offered extended palettes (Gearknight stays stock-only — see contract).
++        /// </summary>
++        public static bool IsBarberLegal(uint requestedEyesPaletteDID, SexCG sex, uint heritage)
++        {
++            if (!PropertyManager.GetBool("extended_eye_colors").Item)
++                return false;
++            return OfferedFor(sex, heritage).Contains(requestedEyesPaletteDID);
++        }
++    }
++}
+diff --git a/Source/ACE.Server/Factories/PlayerFactory.cs b/Source/ACE.Server/Factories/PlayerFactory.cs
+index 7e9c77c9..31f82012 100644
+--- a/Source/ACE.Server/Factories/PlayerFactory.cs
++++ b/Source/ACE.Server/Factories/PlayerFactory.cs
+@@ -1,9 +1,11 @@
+ using System;
+ using System.Collections.Generic;
+ using System.Linq;
++using System.Numerics;
+ 
+ using log4net;
+ 
++using ACE.Common;
+ using ACE.Database;
+ using ACE.DatLoader;
+ using ACE.DatLoader.FileTypes;
+@@ -96,8 +98,11 @@ public static CreateResult Create(CharacterCreateInfo characterCreateInfo, Weeni
+             var hairPalSet = DatManager.PortalDat.ReadFromDat<PaletteSet>(sex.HairColorList[(int)characterCreateInfo.Appearance.HairColor]);
+             player.SetProperty(PropertyDataId.HairPalette, hairPalSet.GetPaletteID(characterCreateInfo.Appearance.HairHue));
+ 
+-            // Eye Color
+-            player.SetProperty(PropertyDataId.EyesPalette, sex.EyeColorList[(int)characterCreateInfo.Appearance.EyeColor]);
++            // Eye Color — indices beyond the dat EyeColorList map into the curated extended table when the
++            // extended_eye_colors shard prop is on (full-spectrum eye colors, owner-requested deviation);
++            // stock indices resolve exactly as before, overflow clamps gracefully when the prop is off.
++            // Contract + table: Factories/ExtendedEyeColors.cs (mirrored in the native client's CharGenData).
++            player.SetProperty(PropertyDataId.EyesPalette, ExtendedEyeColors.Resolve(sex, (uint)characterCreateInfo.Heritage, characterCreateInfo.Appearance.EyeColor));
+ 
+             // skip over this for olthoi, use the weenie defaults
+             if (!player.IsOlthoiPlayer)
+@@ -130,6 +135,16 @@ public static CreateResult Create(CharacterCreateInfo characterCreateInfo, Weeni
+                         player.TryEquipObject(shoes, shoes.ValidLocations ?? 0);
+                     else
+                         player.TryAddToInventory(CreateIOU(sex.GetFootwearWeenie(characterCreateInfo.Appearance.FootwearStyle)));
++
++                    // samurai_starter_loadout (non-retail, custom client): the client sets the
++                    // 0x40 flag on StartArea (stripped in CharacterCreateInfo.Unpack; composes
++                    // with the 0x80 town-spawn flag, 0xC0 = both) when the player picked the
++                    // Samurai creation flavor. Grant + equip the classic Yoroi set as real items,
++                    // layered over the normal starter clothing granted just above. Never fails
++                    // the create: a missing weenie is skipped with a warning, a failed equip
++                    // falls back to the main pack.
++                    if (characterCreateInfo.SamuraiLoadout && PropertyManager.GetBool("samurai_starter_loadout").Item)
++                        GrantSamuraiLoadout(player, characterCreateInfo.Name);
+                 }
+ 
+                 string templateName = heritageGroup.Templates[characterCreateInfo.TemplateOption].Name;
+@@ -357,6 +372,25 @@ public static CreateResult Create(CharacterCreateInfo characterCreateInfo, Weeni
+ 
+             var starterArea = DatManager.PortalDat.CharGen.StarterAreas[(int)startArea];
+ 
++            // starter_towns_override (non-retail): a comma list of up to 4 town names remaps what the
++            // create's StartArea INDEX (0-3, already stripped of the 0x80 academy flag) means on this
++            // shard — e.g. "Holtburg,Eastham,Cragstone,Arwic" replaces the dat's Holtburg/Shoushi/
++            // Yaraq/Sanamar. Only the resolved TOWN changes; the index the client sent is unchanged
++            // and the stock dat lookup above stays the bounds check. Empty prop (default) = stock.
++            var overrideTown = GetStarterTownOverride(startArea);
++            if (overrideTown != null)
++            {
++                // Academy spawns under the override: Training Academies are baked into the dat's
++                // StarterAreas — only Holtburg/Shoushi/Yaraq/Sanamar have one, so an override town
++                // like Eastham/Cragstone/Arwic has NO academy of its own. A town that matches a dat
++                // starter area keeps its authentic academy; every other town resolves to the
++                // HOLTBURG academy (dat StarterAreas[0]) so the academy toggle still works — the
++                // academy's exit then free-rides the character to Holtburg (the switch below).
++                var datMatch = DatManager.PortalDat.CharGen.StarterAreas
++                    .FirstOrDefault(sa => sa.Name.Equals(overrideTown, StringComparison.OrdinalIgnoreCase));
++                starterArea = datMatch ?? DatManager.PortalDat.CharGen.StarterAreas[0];
++            }
++
+             player.Location = new Position(starterArea.Locations[0].ObjCellID,
+                 starterArea.Locations[0].Frame.Origin.X, starterArea.Locations[0].Frame.Origin.Y, starterArea.Locations[0].Frame.Origin.Z,
+                 starterArea.Locations[0].Frame.Orientation.X, starterArea.Locations[0].Frame.Orientation.Y, starterArea.Locations[0].Frame.Orientation.Z, starterArea.Locations[0].Frame.Orientation.W);
+@@ -388,10 +422,37 @@ public static CreateResult Create(CharacterCreateInfo characterCreateInfo, Weeni
+ 
+             player.Instantiation = new Position(instantiation);
+ 
++            // allow_town_spawn (non-retail, custom client): the client sets the 0x80 flag on
++            // StartArea (stripped in CharacterCreateInfo.Unpack) when the player opts out of
++            // the Training Academy. Spawn the new character at the starter town proper,
++            // 1999-style, resolved from the same points_of_interest data @telepoi uses.
++            // Any resolution failure falls back to the normal academy spawn.
++            var townSpawned = false;
++            if (characterCreateInfo.SkipAcademy && PropertyManager.GetBool("allow_town_spawn").Item && !player.IsOlthoiPlayer)
++            {
++                // the override town (when set) IS the town the player picked — the dat starterArea
++                // may have been redirected to the Holtburg academy above, so never use its name here
++                var townName = overrideTown ?? starterArea.Name;
++                var townSpawn = GetTownSpawnPosition(townName);
++                if (townSpawn != null)
++                {
++                    player.Location = townSpawn;
++                    townSpawned = true;
++                    log.Info($"town spawn: {townName} for {characterCreateInfo.Name}");
++                }
++                else
++                    log.Warn($"town spawn: could not resolve POI for '{townName}'; {characterCreateInfo.Name} spawns at the Training Academy");
++            }
++
+             if (!player.IsOlthoiPlayer)
+             {
+                 player.Sanctuary = new Position(player.Location);
+-                player.SetProperty(PropertyBool.RecallsDisabled, true);
++
++                // RecallsDisabled is only ever cleared by the Training Academy exit guards /
++                // newbie portals (world-db emotes, SetBoolStat 107 = 0). A town-spawned character
++                // never passes those, so leaving it set would block recalls forever — skip it.
++                if (!townSpawned)
++                    player.SetProperty(PropertyBool.RecallsDisabled, true);
+ 
+                 if (PropertyManager.GetBool("pk_server").Item)
+                     player.SetProperty(PropertyInt.PlayerKillerStatus, (int)PlayerKillerStatus.PK);
+@@ -417,6 +478,122 @@ public static CreateResult Create(CharacterCreateInfo characterCreateInfo, Weeni
+             return CreateResult.Success;
+         }
+ 
++        /// <summary>
++        /// (custom, for starter_towns_override) Resolves the shard's override town name for a
++        /// character-create StartArea index. The prop is a comma list of up to 4 town names
++        /// ("Holtburg,Eastham,Cragstone,Arwic"); index N (0-3) maps to the Nth entry. Returns null
++        /// (= stock dat behavior) when the prop is empty, the index falls outside the list, or the
++        /// entry is blank — the caller then keeps the dat StarterArea it already resolved.
++        /// </summary>
++        private static string GetStarterTownOverride(uint startArea)
++        {
++            var prop = PropertyManager.GetString("starter_towns_override").Item;
++            if (string.IsNullOrWhiteSpace(prop))
++                return null;
++
++            var towns = prop.Split(',');
++            if (startArea >= towns.Length)
++            {
++                log.Warn($"starter_towns_override: startArea {startArea} is outside the override list ({towns.Length} towns) — using the stock dat starter area");
++                return null;
++            }
++
++            var name = towns[startArea].Trim();
++            return name.Length > 0 ? name : null;
++        }
++
++        /// <summary>
++        /// (custom, for allow_town_spawn; also reused by WorldManager's rescue_invalid_locations
++        /// enter rescue) Resolves a starter town's overworld spawn position from
++        /// the points_of_interest table — the same data and code path @telepoi uses — keyed by the
++        /// StarterArea name from the CharGen dat ("Holtburg" / "Shoushi" / "Yaraq" / "Sanamar").
++        /// Applies a small random ~1.5 unit XY offset so simultaneous new characters never spawn
++        /// stacked on each other. Returns null if the POI is missing or incomplete, in which case
++        /// the caller keeps the Training Academy spawn.
++        /// </summary>
++        internal static Position GetTownSpawnPosition(string townName)
++        {
++            try
++            {
++                var poi = DatabaseManager.World.GetCachedPointOfInterest(townName);
++                if (poi == null)
++                    return null;
++
++                var weenie = DatabaseManager.World.GetCachedWeenie(poi.WeenieClassId);
++                var dest = weenie?.GetPosition(PositionType.Destination);
++                if (dest == null)
++                    return null;
++
++                var pos = new Position(dest);
++                WorldObject.AdjustDungeon(pos);
++
++                // never stack players: nudge ~1.5 units in a random direction (house rule).
++                // outdoor only — SetPosition handles landblock-boundary crossings there, while an
++                // indoor cell offset could land inside geometry, so indoor POIs spawn as-is.
++                if (!pos.Indoors)
++                {
++                    var angle = ThreadSafeRandom.Next(0f, (float)(Math.PI * 2));
++                    pos.SetPosition(new Vector3(
++                        pos.PositionX + (float)Math.Cos(angle) * 1.5f,
++                        pos.PositionY + (float)Math.Sin(angle) * 1.5f,
++                        pos.PositionZ + 0.05f)); // slight bump; physics settles the player on first enter
++                }
++
++                return pos;
++            }
++            catch (Exception ex)
++            {
++                log.Warn($"town spawn: exception resolving POI '{townName}': {ex.Message}");
++                return null;
++            }
++        }
++
++        /// <summary>
++        /// (custom, for samurai_starter_loadout) The classic Yoroi set + Kabuton, granted and
++        /// equipped at creation when the custom client flagged the create with StartArea | 0x40.
++        /// </summary>
++        private static readonly (uint wcid, string name)[] SamuraiLoadout =
++        {
++            (  43, "Yoroi Breastplate" ),
++            (  64, "Yoroi Girth"       ),
++            (  69, "Yoroi Greaves"     ),
++            (  90, "Yoroi Pauldrons"   ),
++            ( 106, "Yoroi Sleeves"     ),
++            ( 113, "Yoroi Tassets"     ),
++            (  77, "Kabuton"           ),
++        };
++
++        /// <summary>
++        /// (custom, for samurai_starter_loadout) Creates and equips each Yoroi piece, mirroring
++        /// the starter-clothing grant in Create. None of these weenies carry wield requirements,
++        /// and the creation-time TryEquipObject only checks slot availability regardless — but if
++        /// an equip does fail (e.g. the create also picked starter headgear, which holds the head
++        /// slot the Kabuton wants), the piece falls back to the main pack instead. A weenie
++        /// missing from the world db is skipped with a warning. The create itself never fails here.
++        /// </summary>
++        private static void GrantSamuraiLoadout(Player player, string charName)
++        {
++            foreach (var (wcid, pieceName) in SamuraiLoadout)
++            {
++                var weenie = DatabaseManager.World.GetCachedWeenie(wcid);
++                if (weenie == null)
++                {
++                    log.Warn($"samurai loadout: weenie {wcid} ({pieceName}) not found in the world db; skipped for {charName}");
++                    continue;
++                }
++
++                var wo = WorldObjectFactory.CreateNewWorldObject(weenie);
++                if (wo == null)
++                {
++                    log.Warn($"samurai loadout: could not instantiate weenie {wcid} ({pieceName}); skipped for {charName}");
++                    continue;
++                }
++
++                if (!player.TryEquipObject(wo, wo.ValidLocations ?? 0) && !player.TryAddToInventory(wo))
++                    log.Warn($"samurai loadout: could not equip or pack {pieceName} ({wcid}) for {charName}");
++            }
++        }
++
+         private static WorldObject GetClothingObject(uint weenieClassId, uint palette, double shade)
+         {
+             var weenie = DatabaseManager.World.GetCachedWeenie(weenieClassId);
+diff --git a/Source/ACE.Server/Managers/MonitorServer.cs b/Source/ACE.Server/Managers/MonitorServer.cs
+new file mode 100644
+index 00000000..45aedaee
+--- /dev/null
++++ b/Source/ACE.Server/Managers/MonitorServer.cs
+@@ -0,0 +1,535 @@
++using System;
++using System.Globalization;
++using System.IO;
++using System.Net;
++using System.Security.Cryptography;
++using System.Text;
++using System.Threading;
++
++using ACE.Database;
++using ACE.Entity;
++using ACE.Entity.Enum;
++using ACE.Entity.Enum.Properties;
++using ACE.Entity.Models;
++using ACE.Server.Entity.Actions;
++using ACE.Server.Managers;
++using ACE.Server.Network;
++using ACE.Server.Network.Enum;
++using ACE.Server.Network.GameMessages.Messages;
++using ACE.Server.Network.Managers;
++using ACE.Server.WorldObjects;
++
++namespace ACE.Server.Managers
++{
++    /// <summary>
++    /// ADDITIVE ACE MOD — preserve across upstream bumps (like the DxtUtil mod).
++    ///
++    /// A tiny HTTP endpoint for external monitoring/admin tooling (tools/server-monitor).
++    ///
++    /// GET /status  — READ-ONLY, UNAUTHENTICATED. Exposes the live in-memory online-player set
++    ///   (PlayerManager, under its own read lock) as JSON so a dashboard can show who is online RIGHT
++    ///   NOW — which the shard DB cannot (it only holds persisted state). Never mutates game state.
++    ///
++    /// POST /admin/*  — AUTHENTICATED (Bearer token). ADMIN ACTIONS v3. Each action routes through
++    ///   ACE's OWN command/PlayerManager APIs (never a raw DB/auth write — matches the read-only,
++    ///   validated posture) and is MARSHALLED onto ACE's world thread via WorldManager.EnqueueAction
++    ///   (HttpListener runs on a foreign thread; ACE world state is NOT free-threaded). The HTTP call
++    ///   returns 202 Accepted immediately; the action applies on the next world tick.
++    ///
++    /// Auth: on Start(), a 32-hex-char bearer token is read from (or generated into)
++    ///   ace-runtime/monitor-token.txt (chmod 600). Every POST must carry
++    ///   "Authorization: Bearer &lt;token&gt;"; missing/wrong → 401, no action. Bind stays loopback only.
++    /// </summary>
++    public static class MonitorServer
++    {
++        private static HttpListener _listener;
++        private static string _token;
++        private static readonly int Port =
++            int.TryParse(Environment.GetEnvironmentVariable("ACE_MONITOR_PORT"), out var p) ? p : 8771;
++
++        public static void Start()
++        {
++            if (_listener != null) return;
++            try
++            {
++                _token = LoadOrCreateToken();
++
++                _listener = new HttpListener();
++                _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
++                _listener.Start();
++                var t = new Thread(Loop) { IsBackground = true, Name = "MonitorServer" };
++                t.Start();
++                Console.WriteLine($"[monitor] status endpoint on http://127.0.0.1:{Port}/status");
++                Console.WriteLine($"[monitor] admin POST endpoints enabled (Bearer token, loopback only): /admin/broadcast /admin/boot /admin/tele /admin/summon");
++            }
++            catch (Exception ex)
++            {
++                Console.WriteLine("[monitor] failed to start (non-fatal): " + ex.Message);
++                _listener = null;
++            }
++        }
++
++        /// <summary>
++        /// Read the admin bearer token from ace-runtime/monitor-token.txt, generating a 32-hex-char one
++        /// (chmod 600) if absent. The runtime dir is resolved relative to the ACE working directory
++        /// (the process runs from bin/Release/... so we walk up to the repo's server/ace-runtime).
++        /// </summary>
++        private static string LoadOrCreateToken()
++        {
++            var path = ResolveTokenPath();
++            try
++            {
++                if (File.Exists(path))
++                {
++                    var existing = File.ReadAllText(path).Trim();
++                    if (existing.Length >= 16)
++                    {
++                        Console.WriteLine($"[monitor] admin token loaded from {path}");
++                        return existing;
++                    }
++                }
++
++                var bytes = new byte[16];
++                using (var rng = RandomNumberGenerator.Create()) rng.GetBytes(bytes);
++                var tok = BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant(); // 32 hex chars
++
++                Directory.CreateDirectory(Path.GetDirectoryName(path));
++                File.WriteAllText(path, tok + "\n");
++                ChmodSixHundred(path);
++                Console.WriteLine($"[monitor] generated new admin token → {path} (chmod 600)");
++                return tok;
++            }
++            catch (Exception ex)
++            {
++                // Fall back to an in-memory ephemeral token so POST is not silently open on a file error.
++                Console.WriteLine("[monitor] token file error (using ephemeral in-memory token): " + ex.Message);
++                var bytes = new byte[16];
++                using (var rng = RandomNumberGenerator.Create()) rng.GetBytes(bytes);
++                return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant();
++            }
++        }
++
++        private static string ResolveTokenPath()
++        {
++            // Allow explicit override for tests / relocated runtimes.
++            var overridePath = Environment.GetEnvironmentVariable("ACE_MONITOR_TOKEN_FILE");
++            if (!string.IsNullOrEmpty(overridePath)) return overridePath;
++
++            // ACE runs from server/_ace_upstream/Source/ACE.Server/bin/Release/net10.0/. Walk up to the
++            // repo's server/ dir and land on server/ace-runtime/monitor-token.txt. If we can't find it,
++            // fall back to a token beside the executable.
++            var dir = new DirectoryInfo(AppContext.BaseDirectory);
++            for (int i = 0; i < 12 && dir != null; i++, dir = dir.Parent)
++            {
++                var candidate = Path.Combine(dir.FullName, "ace-runtime");
++                if (Directory.Exists(candidate))
++                    return Path.Combine(candidate, "monitor-token.txt");
++            }
++            return Path.Combine(AppContext.BaseDirectory, "monitor-token.txt");
++        }
++
++        private static void ChmodSixHundred(string path)
++        {
++            try
++            {
++                var psi = new System.Diagnostics.ProcessStartInfo("chmod", $"600 \"{path}\"")
++                { UseShellExecute = false, CreateNoWindow = true };
++                System.Diagnostics.Process.Start(psi)?.WaitForExit(2000);
++            }
++            catch { /* best effort; Windows / no chmod is fine */ }
++        }
++
++        private static void Loop()
++        {
++            while (_listener != null && _listener.IsListening)
++            {
++                HttpListenerContext ctx;
++                try { ctx = _listener.GetContext(); }
++                catch { break; }
++                try { Handle(ctx); }
++                catch (Exception ex)
++                {
++                    Console.WriteLine("[monitor] request error (non-fatal): " + ex.Message);
++                    try { ctx.Response.StatusCode = 500; ctx.Response.Close(); } catch { }
++                }
++            }
++        }
++
++        private static void Handle(HttpListenerContext ctx)
++        {
++            var path = ctx.Request.Url.AbsolutePath;
++            var method = ctx.Request.HttpMethod;
++
++            // --- READ-ONLY, unauthenticated -------------------------------------------------------
++            if (method == "GET" && path == "/status") { Write(ctx, 200, BuildStatus()); return; }
++
++            // --- ADMIN ACTIONS (POST, Bearer-token) -----------------------------------------------
++            if (method == "POST" && path.StartsWith("/admin/"))
++            {
++                if (!RequireToken(ctx)) { Write(ctx, 401, "{\"ok\":false,\"error\":\"unauthorized\"}"); return; }
++
++                string body = ReadBody(ctx);
++                try
++                {
++                    switch (path)
++                    {
++                        case "/admin/broadcast": Write(ctx, 202, DoBroadcast(body)); return;
++                        case "/admin/boot":      Write(ctx, 202, DoBoot(body));      return;
++                        case "/admin/tele":      Write(ctx, 202, DoTele(body));      return;
++                        case "/admin/summon":    Write(ctx, 202, DoSummon(body));    return;
++                        default: Write(ctx, 404, "{\"ok\":false,\"error\":\"unknown admin endpoint\"}"); return;
++                    }
++                }
++                catch (Exception ex)
++                {
++                    Write(ctx, 400, "{\"ok\":false,\"error\":" + Js(ex.Message) + "}");
++                    return;
++                }
++            }
++
++            Write(ctx, 200,
++                "{\"ok\":true,\"endpoints\":{\"GET\":[\"/status\"],\"POST\":[\"/admin/broadcast\",\"/admin/boot\",\"/admin/tele\",\"/admin/summon\"]}}");
++        }
++
++        // ============================ ADMIN ACTIONS ==============================================
++        //
++        // Every action is enqueued onto ACE's world thread via WorldManager.EnqueueAction(...) and
++        // applied on the next tick (WorldManager.cs: EnqueueAction @308 → ActionQueue.RunActions @368).
++        // We NEVER touch world objects from this HttpListener thread. Target resolution + validation
++        // that only reads immutable/thread-safe state (PlayerManager online snapshot, POI DB cache)
++        // may run inline; the actual mutation always runs inside the enqueued delegate.
++
++        /// <summary>
++        /// /admin/broadcast {"text":"..."} → server-wide WorldBroadcast.
++        /// Mirrors @gamecast: PlayerManager.BroadcastToAll(new GameMessageSystemChat(msg, WorldBroadcast))
++        /// (AdminCommands.cs HandleGamecast:1104-1106).
++        /// </summary>
++        private static string DoBroadcast(string body)
++        {
++            var text = JsonStr(body, "text");
++            if (string.IsNullOrWhiteSpace(text))
++                return "{\"ok\":false,\"error\":\"missing 'text'\"}";
++
++            var msg = $"Broadcast from System> {text}";
++            WorldManager.EnqueueAction(new ActionEventDelegate(() =>
++            {
++                PlayerManager.BroadcastToAll(
++                    new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast));
++            }));
++
++            Console.WriteLine($"[monitor] ADMIN broadcast by token — {text}");
++            return "{\"ok\":true,\"queued\":\"broadcast\"}";
++        }
++
++        /// <summary>
++        /// /admin/boot {"guid":N} or {"account":"x"} or {"name":"x"} → boot that session.
++        /// Mirrors @boot: session.Terminate(SessionTerminationReason.AccountBooted,
++        /// new GameMessageBootAccount(...), null, reason) (SentinelCommands.cs HandleBoot:333).
++        /// </summary>
++        private static string DoBoot(string body)
++        {
++            var reason = JsonStr(body, "reason");
++            var account = JsonStr(body, "account");
++            var name = JsonStr(body, "name");
++            var guid = JsonUInt(body, "guid");
++
++            // Resolve target session. GetOnlinePlayer(...) reads the PlayerManager online snapshot
++            // (its own read lock); NetworkManager.Find(account) reads the session dict — both safe to
++            // read here. The Terminate call itself is enqueued to the world thread.
++            Session target = null;
++            string who;
++            if (guid.HasValue)
++            {
++                target = PlayerManager.GetOnlinePlayer(guid.Value)?.Session;
++                who = $"guid 0x{guid.Value:X8}";
++            }
++            else if (!string.IsNullOrEmpty(account))
++            {
++                target = NetworkManager.Find(account);
++                who = $"account {account}";
++            }
++            else if (!string.IsNullOrEmpty(name))
++            {
++                target = PlayerManager.GetOnlinePlayer(name)?.Session;
++                who = $"char {name}";
++            }
++            else
++            {
++                return "{\"ok\":false,\"error\":\"specify 'guid', 'account', or 'name'\"}";
++            }
++
++            if (target == null)
++                return "{\"ok\":false,\"error\":\"target not online / not found\"}";
++
++            var captured = target;
++            var extra = string.IsNullOrEmpty(reason) ? null : reason;
++            WorldManager.EnqueueAction(new ActionEventDelegate(() =>
++            {
++                captured.Terminate(
++                    SessionTerminationReason.AccountBooted,
++                    new GameMessageBootAccount(extra != null ? $" - {extra}" : null),
++                    null,
++                    extra);
++            }));
++
++            Console.WriteLine($"[monitor] ADMIN boot by token — {who}" + (extra != null ? $" reason: {extra}" : ""));
++            return "{\"ok\":true,\"queued\":\"boot\"}";
++        }
++
++        /// <summary>
++        /// /admin/tele {"guid":N,"dest":"Arwic"} → teleport a player to a named POI, OR
++        /// {"guid":N,"cell":123,"x":..,"y":..,"z":..} → teleport to an explicit cell+xyz.
++        /// POI path mirrors @telepoi (AdminCommands.cs HandleTeleportPoi:898-907):
++        ///   DatabaseManager.World.GetCachedPointOfInterest → weenie.GetPosition(Destination)
++        ///   → WorldObject.AdjustDungeon → player.Teleport(pos).
++        /// Explicit path mirrors @teleloc (Player.Teleport(new Position(cell,x,y,z,...))).
++        /// </summary>
++        private static string DoTele(string body)
++        {
++            var guid = JsonUInt(body, "guid");
++            if (!guid.HasValue) return "{\"ok\":false,\"error\":\"missing 'guid'\"}";
++
++            var player = PlayerManager.GetOnlinePlayer(guid.Value);
++            if (player == null) return "{\"ok\":false,\"error\":\"target not online\"}";
++
++            var dest = JsonStr(body, "dest");
++            Position pos;
++            string detail;
++
++            if (!string.IsNullOrEmpty(dest))
++            {
++                // POI lookup — DB cache read; safe off-thread. Copied from @telepoi.
++                var poi = DatabaseManager.World.GetCachedPointOfInterest(dest);
++                if (poi == null)
++                    return "{\"ok\":false,\"error\":" + Js($"POI '{dest}' not found") + "}";
++                var weenie = DatabaseManager.World.GetCachedWeenie(poi.WeenieClassId);
++                if (weenie == null)
++                    return "{\"ok\":false,\"error\":\"POI weenie missing\"}";
++                pos = new Position(weenie.GetPosition(PositionType.Destination));
++                WorldObject.AdjustDungeon(pos);
++                detail = $"guid 0x{guid.Value:X8} → POI {dest}";
++            }
++            else
++            {
++                var cell = JsonUInt(body, "cell");
++                var x = JsonFloat(body, "x");
++                var y = JsonFloat(body, "y");
++                var z = JsonFloat(body, "z");
++                if (!cell.HasValue || !x.HasValue || !y.HasValue || !z.HasValue)
++                    return "{\"ok\":false,\"error\":\"provide 'dest' OR 'cell'+'x'+'y'+'z'\"}";
++                pos = new Position(cell.Value, x.Value, y.Value, z.Value, 0f, 0f, 0f, 1f);
++                detail = $"guid 0x{guid.Value:X8} → 0x{cell.Value:X8} {x.Value},{y.Value},{z.Value}";
++            }
++
++            var capturedPlayer = player;
++            var capturedPos = pos;
++            WorldManager.EnqueueAction(new ActionEventDelegate(() => capturedPlayer.Teleport(capturedPos)));
++
++            Console.WriteLine($"[monitor] ADMIN tele by token — {detail}");
++            return "{\"ok\":true,\"queued\":\"tele\"}";
++        }
++
++        /// <summary>
++        /// /admin/summon {"guid":N,"to":M} → teleport player N to player M's current location
++        /// (M defaults to nothing — 'to' is required since the mod has no admin avatar). Mirrors the
++        /// per-player leg of @teleallto: player.Teleport(new Position(destinationPlayer.Location))
++        /// (AdminCommands.cs HandleTeleAllTo:866-868).
++        /// </summary>
++        private static string DoSummon(string body)
++        {
++            var guid = JsonUInt(body, "guid");
++            var to = JsonUInt(body, "to");
++            if (!guid.HasValue) return "{\"ok\":false,\"error\":\"missing 'guid' (player to move)\"}";
++            if (!to.HasValue)   return "{\"ok\":false,\"error\":\"missing 'to' (destination player guid)\"}";
++
++            var player = PlayerManager.GetOnlinePlayer(guid.Value);
++            var destPlayer = PlayerManager.GetOnlinePlayer(to.Value);
++            if (player == null)     return "{\"ok\":false,\"error\":\"player to move not online\"}";
++            if (destPlayer == null) return "{\"ok\":false,\"error\":\"destination player not online\"}";
++
++            var capturedPlayer = player;
++            var capturedDest = destPlayer;
++            WorldManager.EnqueueAction(new ActionEventDelegate(() =>
++            {
++                // Save a return position (like @teleto/teleallto) then move.
++                capturedPlayer.SetPosition(PositionType.TeleportedCharacter, new Position(capturedPlayer.Location));
++                capturedPlayer.Teleport(new Position(capturedDest.Location));
++            }));
++
++            Console.WriteLine($"[monitor] ADMIN summon by token — 0x{guid.Value:X8} → 0x{to.Value:X8}");
++            return "{\"ok\":true,\"queued\":\"summon\"}";
++        }
++
++        // ============================ AUTH + HTTP PLUMBING ======================================
++
++        private static bool RequireToken(HttpListenerContext ctx)
++        {
++            var auth = ctx.Request.Headers["Authorization"];
++            if (string.IsNullOrEmpty(auth)) return false;
++            const string prefix = "Bearer ";
++            if (!auth.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
++            var supplied = auth.Substring(prefix.Length).Trim();
++            return ConstantTimeEquals(supplied, _token);
++        }
++
++        private static bool ConstantTimeEquals(string a, string b)
++        {
++            if (a == null || b == null || a.Length != b.Length) return false;
++            int diff = 0;
++            for (int i = 0; i < a.Length; i++) diff |= a[i] ^ b[i];
++            return diff == 0;
++        }
++
++        private static string ReadBody(HttpListenerContext ctx)
++        {
++            if (!ctx.Request.HasEntityBody) return "";
++            using var sr = new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding ?? Encoding.UTF8);
++            return sr.ReadToEnd();
++        }
++
++        private static void Write(HttpListenerContext ctx, int status, string body)
++        {
++            var bytes = Encoding.UTF8.GetBytes(body);
++            ctx.Response.StatusCode = status;
++            ctx.Response.ContentType = "application/json";
++            ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";   // let the local dashboard fetch it
++            ctx.Response.ContentLength64 = bytes.Length;
++            ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
++            ctx.Response.Close();
++        }
++
++        private static string BuildStatus()
++        {
++            var online = PlayerManager.GetAllOnline();   // thread-safe snapshot (PlayerManager read lock)
++            var sb = new StringBuilder(256);
++            sb.Append("{\"online\":").Append(online.Count).Append(",\"players\":[");
++            bool first = true;
++            foreach (var pl in online)
++            {
++                try
++                {
++                    if (!first) sb.Append(',');
++                    first = false;
++                    var loc = pl.Location;
++                    sb.Append("{\"guid\":").Append(pl.Guid.Full)
++                      .Append(",\"name\":").Append(Js(pl.Name))
++                      .Append(",\"level\":").Append(pl.Level ?? 0)
++                      .Append(",\"cell\":").Append(loc != null ? loc.LandblockId.Raw : 0)
++                      .Append(",\"x\":").Append(F(loc?.PositionX ?? 0f))
++                      .Append(",\"y\":").Append(F(loc?.PositionY ?? 0f))
++                      .Append(",\"z\":").Append(F(loc?.PositionZ ?? 0f))
++                      .Append(",\"hp\":[").Append(pl.Health.Current).Append(',').Append(pl.Health.MaxValue).Append(']')
++                      .Append(",\"stam\":[").Append(pl.Stamina.Current).Append(',').Append(pl.Stamina.MaxValue).Append(']')
++                      .Append(",\"mana\":[").Append(pl.Mana.Current).Append(',').Append(pl.Mana.MaxValue).Append(']')
++                      .Append(",\"account\":").Append(Js(pl.Session?.Account ?? ""))
++                      .Append('}');
++                }
++                catch { /* skip a player mid-transition rather than fail the whole response */ }
++            }
++            sb.Append("]}");
++            return sb.ToString();
++        }
++
++        // ---- minimal, dependency-free JSON field extraction (no System.Text.Json contract needed) ----
++        // The admin bodies are tiny flat objects: {"text":"..","guid":123,"dest":".."}. We only need a
++        // few scalar fields, so a targeted scanner avoids pulling in a serializer and matches the mod's
++        // "no new dependencies" rule.
++
++        private static string JsonStr(string json, string key)
++        {
++            if (string.IsNullOrEmpty(json)) return null;
++            int i = FindKey(json, key);
++            if (i < 0) return null;
++            i = SkipToValue(json, i);
++            if (i < 0 || i >= json.Length || json[i] != '"') return null;
++            i++;
++            var sb = new StringBuilder();
++            while (i < json.Length && json[i] != '"')
++            {
++                if (json[i] == '\\' && i + 1 < json.Length)
++                {
++                    i++;
++                    switch (json[i])
++                    {
++                        case 'n': sb.Append('\n'); break;
++                        case 't': sb.Append('\t'); break;
++                        case 'r': sb.Append('\r'); break;
++                        case '"': sb.Append('"'); break;
++                        case '\\': sb.Append('\\'); break;
++                        case '/': sb.Append('/'); break;
++                        default: sb.Append(json[i]); break;
++                    }
++                }
++                else sb.Append(json[i]);
++                i++;
++            }
++            return sb.ToString();
++        }
++
++        private static uint? JsonUInt(string json, string key)
++        {
++            var raw = JsonNumberRaw(json, key);
++            if (raw == null) return null;
++            raw = raw.Trim();
++            if (raw.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
++                return uint.TryParse(raw.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var h) ? h : (uint?)null;
++            // JSON numbers may be large decimals; parse as ulong then narrow.
++            return ulong.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? (uint)v : (uint?)null;
++        }
++
++        private static float? JsonFloat(string json, string key)
++        {
++            var raw = JsonNumberRaw(json, key);
++            if (raw == null) return null;
++            return float.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : (float?)null;
++        }
++
++        private static string JsonNumberRaw(string json, string key)
++        {
++            if (string.IsNullOrEmpty(json)) return null;
++            int i = FindKey(json, key);
++            if (i < 0) return null;
++            i = SkipToValue(json, i);
++            if (i < 0 || i >= json.Length) return null;
++            // Support quoted numbers too (e.g. "guid":"0x51234567").
++            if (json[i] == '"') { i++; int q = json.IndexOf('"', i); return q < 0 ? null : json.Substring(i, q - i); }
++            int start = i;
++            while (i < json.Length && (char.IsLetterOrDigit(json[i]) || json[i] == '.' || json[i] == '-' || json[i] == '+'))
++                i++;
++            return i > start ? json.Substring(start, i - start) : null;
++        }
++
++        // Find `"key"` and return the index just past its closing quote, or -1.
++        private static int FindKey(string json, string key)
++        {
++            var needle = "\"" + key + "\"";
++            int idx = json.IndexOf(needle, StringComparison.Ordinal);
++            return idx < 0 ? -1 : idx + needle.Length;
++        }
++
++        // From just past a key, skip whitespace + the ':' to the first char of the value.
++        private static int SkipToValue(string json, int i)
++        {
++            while (i < json.Length && (json[i] == ' ' || json[i] == '\t' || json[i] == '\r' || json[i] == '\n')) i++;
++            if (i >= json.Length || json[i] != ':') return -1;
++            i++;
++            while (i < json.Length && (json[i] == ' ' || json[i] == '\t' || json[i] == '\r' || json[i] == '\n')) i++;
++            return i;
++        }
++
++        private static string F(float v) => v.ToString("0.###", CultureInfo.InvariantCulture);
++
++        private static string Js(string s)
++        {
++            if (string.IsNullOrEmpty(s)) return "\"\"";
++            var sb = new StringBuilder(s.Length + 2);
++            sb.Append('"');
++            foreach (char c in s)
++            {
++                if (c == '"' || c == '\\') sb.Append('\\').Append(c);
++                else if (c >= 0x20) sb.Append(c);
++            }
++            return sb.Append('"').ToString();
++        }
++    }
++}
+diff --git a/Source/ACE.Server/Managers/PropertyManager.cs b/Source/ACE.Server/Managers/PropertyManager.cs
+index 5480fe50..7e22470f 100644
+--- a/Source/ACE.Server/Managers/PropertyManager.cs
++++ b/Source/ACE.Server/Managers/PropertyManager.cs
+@@ -498,6 +498,7 @@ public static void LoadDefaultProperties()
+ 
+         public static readonly ReadOnlyDictionary<string, Property<bool>> DefaultBooleanProperties =
+             DictOf(
++                ("account_login_boots_existing", new Property<bool>(false, "(non-retail function) if TRUE, a new login with a VERIFIED password for an account that already has a live session gracefully boots the existing (usually stale/zombie) session instead of forcing the player to wait for the idle timeout. the new connection is still rejected for that attempt; the client's automatic retry succeeds once the boot completes. wrong-password attempts never trigger a boot. defaults to disabled")),
+                 ("account_login_boots_in_use", new Property<bool>(true, "if FALSE, oldest connection to account is not booted when new connection occurs")),
+                 ("advanced_combat_pets", new Property<bool>(false, "(non-retail function) If enabled, Combat Pets can cast spells")),
+                 ("advocate_fane_auto_bestow", new Property<bool>(false, "If enabled, Advocate Fane will automatically bestow new advocates to advocate_fane_auto_bestow_level")),
+@@ -511,8 +512,10 @@ public static void LoadDefaultProperties()
+                 ("allow_negative_rating_curve", new Property<bool>(true, "enables retail behavior where negative DRR from void dots didn't switch to the reverse rating formula, resulting in a possibly unintended curve that quickly ramps up as -rating goes down, eventually approaching infinity / divide by 0 for -100 rating. less than -100 rating would produce negative numbers.")),
+                 ("allow_pkl_bump", new Property<bool>(true, "enables retail behavior where /pkl checks for entry collisions, bumping the player position over if standing on another PKLite. This effectively enables /pkl door skipping from retail")),
+                 ("allow_summoning_killtask_multicredit", new Property<bool>(true, "enables retail behavior where a summoner can get multiple killtask credits from a monster")),
++                ("allow_town_spawn", new Property<bool>(false, "(non-retail function) if TRUE, custom clients may flag character creation (StartArea | 0x80) to skip the Training Academy and begin at the chosen starter town proper (Holtburg / Shoushi / Yaraq / Sanamar), 1999-style, resolved via the points_of_interest table. defaults to disabled; retail clients are unaffected either way")),
+                 ("assess_creature_mod", new Property<bool>(false, "(non-retail function) If enabled, re-enables former skill formula, when assess creature skill is not trained or spec'ed")),
+                 ("attribute_augmentation_safety_cap", new Property<bool>(true, "if TRUE players are not able to use attribute augmentations if the innate value of the target attribute is >= 96. All normal restrictions to these augmentations still apply.")),
++                ("broadcast_player_equipment", new Property<bool>(false, "(non-retail function) if TRUE, wield/unwield broadcasts for PLAYER wielders additionally include coverage equipment (armor / clothing / extremity / cloak; jewelry and trinkets excluded), so custom clients can render armor on remote player bodies. defaults to disabled, as in retail, where only selectable items (weapons / shields / ammo) were broadcast")),
+                 ("chat_disable_general", new Property<bool>(false, "disable general global chat channel")),
+                 ("chat_disable_lfg", new Property<bool>(false, "disable lfg global chat channel")),
+                 ("chat_disable_olthoi", new Property<bool>(false, "disable olthoi global chat channel")),
+@@ -539,7 +542,10 @@ public static void LoadDefaultProperties()
+                 ("chat_log_society", new Property<bool>(false, "log society chat")),
+                 ("chat_log_trade", new Property<bool>(false, "log trade chat")),
+                 ("chat_log_townchans", new Property<bool>(false, "log advocate town chat")),
++                ("char_delete_instant_teardown", new Property<bool>(false, "(non-retail function) if TRUE, a deleted character is finalized immediately: it is removed from the refreshed character list the delete handler sends AND any pending-deletion characters are finalized at login, instead of lingering in the list (selectable, restorable) for the full char_delete_time grace window. Disables the restore window (CharacterRestore finds nothing to restore). if FALSE, stock retail behavior: deleted characters remain listed until char_delete_time expires. defaults to disabled")),
+                 ("chat_requires_account_15days", new Property<bool>(false, "global chat privileges requires accounts to be 15 days or older")),
++                ("allow_gfxobj_setup", new Property<bool>(false, "(non-retail function) if TRUE, a weenie's Setup DID (PropertyDataId 1) may be a raw 0x01 GfxObj mesh id instead of a 0x02 SetupModel: the mesh is wrapped in a synthesized single-part setup (the same wrapping the physics layer already applies in Setup.MakeSimpleSetup) and cached, so WorldObject-level consumers of CSetup see a normal setup. PhysicsPolygons/PhysicsBSP ride on the GfxObj, so collision is preserved and the object is solid. This exists because content meshes are overwhelmingly 0x01-only -- of 398 building meshes in client_portal.dat exactly 1 has a 0x02 wrapper -- so without this only a single building model is placeable. Stock ACE parses every Setup DID as a SetupModel, so a 0x01 id reads a garbage part count, runs off the end of the buffer, and throws an uncaught EndOfStreamException on the World Manager thread, ABORTING THE SERVER PROCESS. if FALSE, stock behavior is preserved for 0x02 setups and a 0x01 setup is refused with a logged error and an inert object rather than crashing the shard. defaults to disabled")),
++                ("npc_use_interrupts_emote", new Property<bool>(false, "(non-retail function) if TRUE, a player Using a peaceful NPC interrupts whatever emote set that NPC is currently running: the in-flight emote chain is abandoned, any server-side MoveTo is cancelled, the NPC stops and turns to face the player, and the Use emote set then runs. Stock ACE refuses the Use set outright while EmoteManager.IsBusy is set (EmoteManager.ExecuteEmoteSet), so an NPC on a long patrol/idle chain ignores players for nearly the whole chain. The NPC resumes its route on a later heartbeat once the Use set completes. Only applies to non-attackable, non-targeting NPCs (never players, never monsters, never a creature that is awake/in combat). if FALSE, stock ACE behavior. defaults to disabled")),
+                 ("chess_enabled", new Property<bool>(true, "if FALSE then chess will be disabled")),
+                 ("use_cloak_proc_custom_scale", new Property<bool>(false, "If TRUE, the calculation for cloak procs will be based upon the values set by the server oeprator.")),
+                 ("client_movement_formula", new Property<bool>(false, "If enabled, server uses DoMotion/StopMotion self-client movement methods instead of apply_raw_movement")),
+@@ -549,6 +555,7 @@ public static void LoadDefaultProperties()
+                 ("craft_exact_msg", new Property<bool>(false, "If TRUE, and player has crafting chance of success dialog enabled, shows them an additional message in their chat window with exact %")),
+                 ("creature_name_check", new Property<bool>(true, "if enabled, creature names in world database restricts player names during character creation")),
+                 ("creatures_drop_createlist_wield", new Property<bool>(false, "If FALSE then Wielded items in CreateList will not drop. Retail defaulted to TRUE but there are currently data errors")),
++                ("extended_eye_colors", new Property<bool>(false, "(non-retail function) if TRUE, CharacterCreate eye-color indices beyond the heritage's dat EyeColorList map into the curated extended palette table (Factories/ExtendedEyeColors.cs) — full-spectrum eye colors for custom clients; retail clients render the result natively. barber requests for those palettes become legal too. if FALSE, overflow indices clamp to (index % list length) — never rejected. defaults to disabled")),
+                 ("fastbuff", new Property<bool>(true, "If TRUE, enables the fast buffing trick from retail.")),
+                 ("fellow_busy_no_recruit", new Property<bool>(true, "if FALSE, fellows can be recruited while they are busy, different from retail")),
+                 ("fellow_kt_killer", new Property<bool>(true, "if FALSE, fellowship kill tasks will share with the fellowship, even if the killer doesn't have the quest")),
+@@ -556,6 +563,7 @@ public static void LoadDefaultProperties()
+                 ("fellow_quest_bonus", new Property<bool>(false, "if TRUE, applies EvenShare formula to fellowship quest reward XP (300% max bonus, defaults to false in retail)")),
+                 ("fix_chest_missing_inventory_window", new Property<bool>(false, "Very non-standard fix. This fixes an acclient bug where unlocking a chest, and then quickly opening it before the client has received the Locked=false update from server can result in the chest opening, but with the chest inventory window not displaying. Bug has a higher chance of appearing with more network latency.")),
+                 ("gateway_ties_summonable", new Property<bool>(true, "if disabled, players cannot summon ties from gateways. defaults to enabled, as in retail")),
++                ("gearknight_armor_unrestricted", new Property<bool>(false, "if TRUE, Gear Knight players may wield all normal armor and clothing, in addition to core plating. defaults to disabled, as in retail")),
+                 ("gearknight_core_plating", new Property<bool>(true, "if disabled, Gear Knight players are not required to use core plating devices for armor and clothing. defaults to enabled, as in retail")),
+                 ("house_15day_account", new Property<bool>(true, "if disabled, houses can be purchased with accounts created less than 15 days old")),
+                 ("house_30day_cooldown", new Property<bool>(true, "if disabled, houses can be purchased without waiting 30 days between each purchase")),
+@@ -586,8 +594,11 @@ public static void LoadDefaultProperties()
+                 ("runrate_add_hooks", new Property<bool>(false, "if TRUE, adds some runrate hooks that were missing from retail (exhaustion done, raise skill/attribute")),
+                 ("reportbug_enabled", new Property<bool>(false, "toggles the /reportbug player command")),
+                 ("require_spell_comps", new Property<bool>(true, "if FALSE, spell components are no longer required to be in inventory to cast spells. defaults to enabled, as in retail")),
++                ("rescue_invalid_locations", new Property<bool>(false, "(non-retail function) if TRUE, a character whose saved Location (or LastPortal) is structurally corrupt — e.g. an indoor cell id with coordinates outside every env cell, from a teleport interrupted mid-save — is placed at their lifestone at enter-world instead of login-looping forever (falls back to the heritage starter town, then Holtburg, if the lifestone is also invalid). replaces the old manual-DB-surgery fix. player enter-world only; mid-session teleports are untouched. defaults to disabled")),
+                 ("safe_spell_comps", new Property<bool>(false, "if TRUE, disables spell component burning for everyone")),
+                 ("salvage_handle_overages", new Property<bool>(false, "in retail, if 2 salvage bags were combined beyond 100 structure, the overages would be lost")),
++                ("samurai_starter_loadout", new Property<bool>(false, "(non-retail function) if TRUE, custom clients may flag character creation (StartArea | 0x40, composes with the 0x80 town-spawn flag) to grant and equip the classic Yoroi armor set (Breastplate / Girth / Greaves / Pauldrons / Sleeves / Tassets + Kabuton) as real items layered over the normal starter clothing. missing weenies are skipped with a warning and a failed equip falls back to the main pack — creation itself never fails. defaults to disabled; retail clients are unaffected either way")),
++                ("send_armor_coverage", new Property<bool>(true, "if TRUE, armor and clothing appraisal includes ValidLocations (PropertyInt 9) so the client can render the retail \"Covers the following areas: ...\" body-part line (added to retail in the Atonement patch). Injected only for Armor/Clothing item-types, so weapons / jewelry / held items are unaffected. defaults to enabled, as in retail")),
+                 ("show_ammo_buff", new Property<bool>(false, "shows active enchantments such as blood drinker on equipped missile ammo during appraisal")),
+                 ("show_aura_buff", new Property<bool>(false, "shows active aura enchantments on wielded items during appraisal")),
+                 ("show_dat_warning", new Property<bool>(false, "if TRUE, will alert player (dat_warning_msg) when client attempts to download from server and boot them from game, disabled by default")),
+@@ -648,6 +659,7 @@ public static void LoadDefaultProperties()
+                 ("advocate_fane_auto_bestow_level", new Property<double>(1, "the level that advocates are automatically bestowed by Advocate Fane if advocate_fane_auto_bestow is true")),
+                 ("aetheria_drop_rate", new Property<double>(1.0, "Modifier for Aetheria drop rate, 1 being normal")),
+                 ("chess_ai_start_time", new Property<double>(-1.0, "the number of seconds for the chess ai to start. defaults to -1 (disabled)")),
++                ("container_keep_open_radius", new Property<double>(15.0, "(non-retail function) distance floor, in meters, for the heartbeat check that closes an open landblock container (chest/storage/corpse) when its viewer strays out of UseRadius. Retail relied on the client to send NoLongerViewingContents on walk-away; headless agents and the native client open via server-side activate without the move-to-within-UseRadius step, so tight-radius containers (house Storage = 1.0) get slammed shut on the next heartbeat. The viewer keeps the view open within max(UseRadius, this); walking beyond it still closes. 0 = stock ACE behavior (close outside bare UseRadius).")),
+                 ("encounter_delay", new Property<double>(1800, "the number of seconds a generator profile for regions is delayed from returning to free slots")),
+                 ("encounter_regen_interval", new Property<double>(600, "the number of seconds a generator for regions at which spawns its next set of objects")),
+                 ("fast_missile_modifier", new Property<double>(1.2, "The speed multiplier applied to fast missiles. Defaults to retail value of 1.2")),
+@@ -680,8 +692,10 @@ public static void LoadDefaultProperties()
+                 ("popup_header", new Property<string>("Welcome to Asheron's Call!", "Welcome message displayed when you log in")),
+                 ("popup_welcome", new Property<string>("To begin your training, speak to the Society Greeter. Walk up to the Society Greeter using the 'W' key, then double-click on her to initiate a conversation.", "Welcome message popup in training halls")),
+                 ("popup_welcome_olthoi", new Property<string>("Welcome to the Olthoi hive! Be sure to talk to the Olthoi Queen to receive the Olthoi protections granted by the energies of the hive.", "Welcome message displayed on the first login for an Olthoi Player")),
++                ("popup_welcome_town", new Property<string>("To begin your adventure, seek out the town's Pathwarden Greeter. Give them the Pathwarden Token found in your pack, and they will give you the key to the Pathwarden Supply Chest, which holds your first suit of armor.", "(non-retail function) shown instead of popup_welcome on a town-spawned character's first login (allow_town_spawn + 0x80 create flag skips the Training Academy, so the academy greeter text would mislead). Detected via RecallsDisabled never having been set on the character. Empty string = fall back to popup_welcome. Set via modifystring, read back via fetchstring.")),
+                 ("popup_motd", new Property<string>("", "Popup message of the day")),
+-                ("server_motd", new Property<string>("", "Server message of the day"))
++                ("server_motd", new Property<string>("", "Server message of the day")),
++                ("starter_towns_override", new Property<string>("", "(non-retail function) comma-separated list of up to 4 town names (e.g. \"Holtburg,Eastham,Cragstone,Arwic\") that remaps what the character-create StartArea INDEX (0-3) means on this shard: index N resolves to the Nth listed town instead of the dat's Holtburg/Shoushi/Yaraq/Sanamar. Town spawns (allow_town_spawn + the 0x80 create flag) resolve the listed town via points_of_interest; academy spawns use the town's own dat Training Academy when one exists, else the Holtburg academy. Empty (default) = stock dat starter areas. Set via modifystring, read back via fetchstring."))
+                 );
+     }
+ }
+diff --git a/Source/ACE.Server/Managers/WorldManager.cs b/Source/ACE.Server/Managers/WorldManager.cs
+index 53cd3ab9..52037ed2 100644
+--- a/Source/ACE.Server/Managers/WorldManager.cs
++++ b/Source/ACE.Server/Managers/WorldManager.cs
+@@ -217,6 +217,41 @@ private static void DoPlayerEnterWorld(Session session, Character character, Bio
+             if (olthoiPlayerReturnedToLifestone)
+                 session.Player.Location = new Position(session.Player.Sanctuary);
+ 
++            // rescue_invalid_locations (custom): a character saved with a structurally corrupt
++            // Location (e.g. a teleport interrupted mid-save leaving an indoor cell id with outdoor
++            // coordinates, or Location/LastPortal on mismatched landblocks) login-loops forever —
++            // the enter starts, the world load hangs or the client is kicked, repeat — and the only
++            // historical fix was manual DB surgery (set Location := bind stone). When enabled,
++            // validate the saved position here, before it is ever used to place the player, and
++            // self-rescue to the lifestone (then heritage starter town, then Holtburg). PLAYER
++            // enter-world only; mid-session teleport/portal paths are untouched. The enter is
++            // never rejected.
++            if (PropertyManager.GetBool("rescue_invalid_locations").Item)
++            {
++                if (!IsSaneEnterPosition(session.Player.Location, out var invalidReason))
++                {
++                    var rescue = GetEnterRescuePosition(session.Player, out var rescueSource);
++
++                    log.Warn($"enter rescue: {session.Player.Name} saved location invalid ({invalidReason}) -> {rescueSource}");
++
++                    session.Player.Location = rescue;
++                }
++
++                // A corrupt LastPortal never places the player server-side (it is only read by
++                // recall spells), but it IS sent to the client in the character position table,
++                // and a Location/LastPortal landblock mismatch has hung the retail client at
++                // character load — rescue it through the same fallback chain.
++                var lastPortal = session.Player.LastPortal;
++                if (lastPortal != null && !IsSaneEnterPosition(lastPortal, out var lastPortalReason))
++                {
++                    var rescue = GetEnterRescuePosition(session.Player, out var rescueSource);
++
++                    log.Warn($"enter rescue: {session.Player.Name} saved location invalid (LastPortal: {lastPortalReason}) -> {rescueSource}");
++
++                    session.Player.LastPortal = rescue;
++                }
++            }
++
+             session.Player.PlayerEnterWorld();
+ 
+             var success = LandblockManager.AddObject(session.Player, true);
+@@ -252,6 +287,16 @@ private static void DoPlayerEnterWorld(Session session, Character character, Bio
+             var popup_motd = PropertyManager.GetString("popup_motd").Item;
+             var popup_welcome = player.IsOlthoiPlayer ? PropertyManager.GetString("popup_welcome_olthoi").Item : PropertyManager.GetString("popup_welcome").Item;
+ 
++            // MOD popup_welcome_town: allow_town_spawn creates never get RecallsDisabled (only academy
++            // creates set it, and only academy-exit content clears it), so a first-login player without
++            // it is a town spawn - the academy greeter text would mislead them. Olthoi keep their variant.
++            if (character.TotalLogins <= 1 && !player.IsOlthoiPlayer && player.GetProperty(PropertyBool.RecallsDisabled) != true)
++            {
++                var popup_welcome_town = PropertyManager.GetString("popup_welcome_town").Item;
++                if (!string.IsNullOrEmpty(popup_welcome_town))
++                    popup_welcome = popup_welcome_town;
++            }
++
+             if (character.TotalLogins <= 1)
+             {
+                 if (player.IsOlthoiPlayer)
+@@ -264,7 +309,7 @@ private static void DoPlayerEnterWorld(Session session, Character character, Bio
+                 session.Network.EnqueueSend(new GameEventPopupString(session, AppendLines(popup_header, popup_motd)));
+             }
+ 
+-            var info = "Welcome to Asheron's Call\n  powered by ACEmulator\n\nFor more information on commands supported by this server, type @acehelp\n";
++            var info = "Welcome to Asheron's Call\n";   // MOD: trimmed the ACEmulator/@acehelp lines (was "…powered by ACEmulator…@acehelp")
+             session.Network.EnqueueSend(new GameMessageSystemChat(info, ChatMessageType.Broadcast));
+ 
+             var server_motd = PropertyManager.GetString("server_motd").Item;
+@@ -287,6 +332,126 @@ private static string AppendLines(params string[] lines)
+             return Regex.Replace(result, "\n$", "");
+         }
+ 
++        /// <summary>
++        /// (custom, for rescue_invalid_locations) Structural sanity check for a saved character
++        /// position, used ONLY at player enter-world. Reuses the same dat machinery the
++        /// AdjustDungeon family is built on rather than reinventing geometry math:
++        /// - indoor cell id => the landblock's LandblockInfo must exist and actually contain that
++        ///   env cell, and the coordinates must lie inside SOME env cell of the landblock
++        ///   (AdjustCell.GetCell — catches the classic corruption of an indoor cell id saved with
++        ///   outdoor coordinates by a teleport interrupted mid-save)
++        /// - outdoor cell id => the terrain cell must be derivable (0x01-0x40), the coordinates
++        ///   within landblock bounds, and the landblock loadable from the cell dat
++        /// </summary>
++        private static bool IsSaneEnterPosition(Position pos, out string reason)
++        {
++            reason = null;
++
++            if (pos == null)
++            {
++                reason = "null position";
++                return false;
++            }
++
++            if (float.IsNaN(pos.PositionX) || float.IsNaN(pos.PositionY) || float.IsNaN(pos.PositionZ) ||
++                float.IsInfinity(pos.PositionX) || float.IsInfinity(pos.PositionY) || float.IsInfinity(pos.PositionZ))
++            {
++                reason = $"non-finite coordinates ({pos.PositionX}, {pos.PositionY}, {pos.PositionZ})";
++                return false;
++            }
++
++            var cellId = pos.Cell & 0xFFFF;
++
++            if (pos.Indoors)
++            {
++                // the landblock's LandblockInfo must exist and actually contain this env cell
++                // (same dat read AdjustCell's constructor uses; env cells are 0x100..0x100+NumCells-1)
++                var blockInfo = ACE.DatLoader.DatManager.CellDat.ReadFromDat<ACE.DatLoader.FileTypes.LandblockInfo>(pos.Landblock << 16 | 0xFFFE);
++                var numCells = blockInfo?.NumCells ?? 0;
++
++                if (cellId - 0x100 >= numCells)
++                {
++                    reason = $"indoor cell 0x{pos.Cell:X8} does not exist (landblock has {numCells} env cells)";
++                    return false;
++                }
++
++                // the known corruption signature: a real indoor cell id saved with coordinates that
++                // are not inside ANY env cell of that landblock. Reuse the env-cell walk that
++                // WorldObject.AdjustDungeonCells already uses for every dungeon teleport.
++                var adjustCell = ACE.Server.Physics.Util.AdjustCell.Get(pos.Landblock);
++                if (adjustCell == null || adjustCell.GetCell(pos.Pos) == null)
++                {
++                    reason = $"indoor cell 0x{pos.Cell:X8} but coords [{pos.PositionX:F3} {pos.PositionY:F3} {pos.PositionZ:F3}] are outside every env cell of the landblock";
++                    return false;
++                }
++            }
++            else
++            {
++                // outdoor: cell id must be a derivable terrain cell (1..64)
++                if (cellId == 0 || cellId > 64)
++                {
++                    reason = $"outdoor position with underivable cell id 0x{pos.Cell:X8}";
++                    return false;
++                }
++
++                if (pos.PositionX < 0 || pos.PositionX > Position.BlockLength ||
++                    pos.PositionY < 0 || pos.PositionY > Position.BlockLength)
++                {
++                    reason = $"outdoor coords [{pos.PositionX:F3} {pos.PositionY:F3}] outside landblock bounds (0-{Position.BlockLength})";
++                    return false;
++                }
++
++                // the landblock itself must be loadable from the cell dat
++                var cellLandblock = ACE.DatLoader.DatManager.CellDat.ReadFromDat<ACE.DatLoader.FileTypes.CellLandblock>(pos.Landblock << 16 | 0xFFFF);
++                if (cellLandblock == null)
++                {
++                    reason = $"landblock 0x{pos.Landblock:X4} not found in cell dat";
++                    return false;
++                }
++            }
++
++            return true;
++        }
++
++        /// <summary>
++        /// (custom, for rescue_invalid_locations) Fallback chain for a player whose saved position
++        /// failed IsSaneEnterPosition: lifestone bind (Sanctuary) -> heritage starter town (via the
++        /// same points_of_interest path PlayerFactory's allow_town_spawn uses) -> the PlayerFactory
++        /// ultimate-fallback Holtburg position. Each candidate is itself validated, so this always
++        /// returns a placeable position and the enter is never rejected.
++        /// </summary>
++        private static Position GetEnterRescuePosition(Player player, out string source)
++        {
++            // 1) lifestone bind
++            var sanctuary = player.Sanctuary;
++            if (sanctuary != null && IsSaneEnterPosition(sanctuary, out _))
++            {
++                source = $"sanctuary {sanctuary.ToLOCString()}";
++                return new Position(sanctuary);
++            }
++
++            // 2) heritage starter town
++            var town = (HeritageGroup)(player.Heritage ?? 0) switch
++            {
++                HeritageGroup.Sho => "Shoushi",
++                HeritageGroup.Gharundim => "Yaraq",
++                HeritageGroup.Viamontian => "Sanamar",
++                _ => "Holtburg",
++            };
++
++            var townPos = Factories.PlayerFactory.GetTownSpawnPosition(town);
++            if (townPos != null && IsSaneEnterPosition(townPos, out _))
++            {
++                source = $"starter town {town} {townPos.ToLOCString()}";
++                return townPos;
++            }
++
++            // 3) ultimate fallback — same Holtburg position PlayerFactory and the
++            // null-Location fallback above use
++            source = "ultimate fallback (Holtburg)";
++            return new Position(0xA9B40019, 84, 7.1f, 94, 0, 0, -0.0784591f, 0.996917f);
++        }
++
+         /// <summary>
+         /// ACE allows for multi-threading with thread boundaries based on the "LandblockGroup" concept
+         /// The risk of moving the player immediately is that the player may move onto another LandblockGroup, and thus, cross thread boundaries
+diff --git a/Source/ACE.Server/Network/Handlers/AuthenticationHandler.cs b/Source/ACE.Server/Network/Handlers/AuthenticationHandler.cs
+index 468b53f7..60d7e6fd 100644
+--- a/Source/ACE.Server/Network/Handlers/AuthenticationHandler.cs
++++ b/Source/ACE.Server/Network/Handlers/AuthenticationHandler.cs
+@@ -154,7 +154,9 @@ private static void AccountSelectCallback(Account account, Session session, Pack
+                 return;
+             }
+ 
+-            if (!PropertyManager.GetBool("account_login_boots_in_use").Item)
++            // NOTE: this early reject fires BEFORE the password is verified, so it must never boot anyone --
++            // it only rejects the incoming (unauthenticated) connection when no takeover property is enabled.
++            if (!PropertyManager.GetBool("account_login_boots_in_use").Item && !PropertyManager.GetBool("account_login_boots_existing").Item)
+             {
+                 if (NetworkManager.Find(account.AccountName) != null)
+                 {
+@@ -180,14 +182,26 @@ private static void AccountSelectCallback(Account account, Session session, Pack
+                     return;
+                 }
+ 
+-                if (PropertyManager.GetBool("account_login_boots_in_use").Item)
++                // Session takeover: we only reach this point AFTER PasswordMatches() has verified the incoming
++                // credentials above, so a wrong password can never boot an existing session.
++                if (PropertyManager.GetBool("account_login_boots_in_use").Item || PropertyManager.GetBool("account_login_boots_existing").Item)
+                 {
+                     var previouslyConnectedAccount = NetworkManager.Find(account.AccountName);
+ 
+                     if (previouslyConnectedAccount != null)
+                     {
+-                        // Boot the existing account
+-                        previouslyConnectedAccount.Terminate(SessionTerminationReason.AccountLoggedIn, new GameMessageCharacterError(CharacterError.Logon));
++                        // Anti-flap guard: the client auto-retries every few seconds. Re-calling Terminate would
++                        // replace PendingTermination and re-arm its drain window, so only boot a session that
++                        // hasn't already been marked for termination.
++                        if (previouslyConnectedAccount.PendingTermination == null)
++                        {
++                            log.Info($"login takeover: booting stale session for {account.AccountName}");
++
++                            // Boot the existing account using the same teardown as the @boot admin command:
++                            // Session.Terminate -> (drain window) -> DropSession -> LogOffPlayer, which saves the
++                            // character and runs the normal async Player.LogOut for an in-world player.
++                            previouslyConnectedAccount.Terminate(SessionTerminationReason.AccountLoggedIn, new GameMessageBootAccount(" because this account has been logged in from another location"), null, "superseded by new login for this account");
++                        }
+ 
+                         // We still can't let the new account in. They'll need to retry after the previous account has been successfully booted.
+                         session.Terminate(SessionTerminationReason.AccountInUse, new GameMessageCharacterError(CharacterError.Logon));
+diff --git a/Source/ACE.Server/Network/Handlers/CharacterHandler.cs b/Source/ACE.Server/Network/Handlers/CharacterHandler.cs
+index c3a62b28..f2c1b3ce 100644
+--- a/Source/ACE.Server/Network/Handlers/CharacterHandler.cs
++++ b/Source/ACE.Server/Network/Handlers/CharacterHandler.cs
+@@ -47,7 +47,15 @@ private static void CharacterCreateEx(ClientMessage message, Session session)
+         {
+             var characterCreateInfo = new CharacterCreateInfo();
+             characterCreateInfo.Unpack(message.Payload);
+-            
++
++            // local mod: enforce max_chars_per_account at create (stock ACE only checks it in admin
++            // copychar paths — any client could exceed the cap; empirically confirmed 12/11 pre-fix)
++            if (PlayerManager.IsAccountAtMaxCharacterSlots(session.Account))
++            {
++                SendCharacterCreateResponse(session, CharacterGenerationVerificationResponse.Corrupt);
++                return;
++            }
++
+             if (PropertyManager.GetBool("taboo_table").Item && DatManager.PortalDat.TabooTable.ContainsBadWord(characterCreateInfo.Name.ToLowerInvariant()))
+             {
+                 SendCharacterCreateResponse(session, CharacterGenerationVerificationResponse.NameBanned);
+@@ -319,9 +327,23 @@ public static void CharacterDelete(ClientMessage message, Session session)
+             {
+                 if (result)
+                 {
+-                    session.Network.EnqueueSend(new GameMessageCharacterList(session.Characters, session));
++                    if (PropertyManager.GetBool("char_delete_instant_teardown").Item)
++                    {
++                        // Allegiance/house cleanup must run while the offline player is still in
++                        // PlayerManager's caches; CheckCharactersForDeletion then finalizes the char
++                        // (IsDeleted, cache eviction) and drops it from the list before we send it.
++                        PlayerManager.HandlePlayerDelete(character.Id);
++
++                        session.CheckCharactersForDeletion();
++
++                        session.Network.EnqueueSend(new GameMessageCharacterList(session.Characters, session));
++                    }
++                    else
++                    {
++                        session.Network.EnqueueSend(new GameMessageCharacterList(session.Characters, session));
+ 
+-                    PlayerManager.HandlePlayerDelete(character.Id);
++                        PlayerManager.HandlePlayerDelete(character.Id);
++                    }
+                 }
+                 else
+                     session.SendCharacterError(CharacterError.Delete);
+diff --git a/Source/ACE.Server/Network/Session.cs b/Source/ACE.Server/Network/Session.cs
+index 5d8acd83..7970de80 100644
+--- a/Source/ACE.Server/Network/Session.cs
++++ b/Source/ACE.Server/Network/Session.cs
+@@ -195,9 +195,13 @@ public void UpdateCharacters(IEnumerable<Character> characters)
+ 
+         public void CheckCharactersForDeletion()
+         {
++            // char_delete_instant_teardown (shard mod): finalize pending-deletion characters immediately
++            // instead of waiting out the char_delete_time restore window.
++            var instantTeardown = PropertyManager.GetBool("char_delete_instant_teardown").Item;
++
+             for (int i = Characters.Count - 1; i >= 0; i--)
+             {
+-                if (Characters[i].DeleteTime > 0 && Time.GetUnixTime() > Characters[i].DeleteTime)
++                if (Characters[i].DeleteTime > 0 && (instantTeardown || Time.GetUnixTime() > Characters[i].DeleteTime))
+                 {
+                     Characters[i].IsDeleted = true;
+ 
+diff --git a/Source/ACE.Server/Network/Structure/AppraiseInfo.cs b/Source/ACE.Server/Network/Structure/AppraiseInfo.cs
+index f048bcc9..1160a448 100644
+--- a/Source/ACE.Server/Network/Structure/AppraiseInfo.cs
++++ b/Source/ACE.Server/Network/Structure/AppraiseInfo.cs
+@@ -113,6 +113,21 @@ public void BuildProfile(WorldObject wo, Player examiner, bool success = true)
+             if (wo is Clothing || wo.IsShield)
+                 BuildArmor(wo);
+ 
++            // ACPEDIA AUDIT (Wave B): armor/clothing body-part coverage line ("Covers the following areas: ...").
++            // Retail (Atonement patch) showed exactly which body parts a piece protects in the ID panel. That line is
++            // derived from ValidLocations (PropertyInt 9), which is NOT a global [AssessmentProperty] here — marking it
++            // one would ride the wire on weapons / jewelry / held items too. Instead inject it only for Armor/Clothing
++            // item-types on a successful assess, so there are no side effects on other item classes. The client
++            // (DerethLink FormatAppraise) turns the EquipMask bits into the coverage string and itself skips shield /
++            // weapon / jewelry masks. Gated by shard bool send_armor_coverage (default true = retail).
++            if (Success && PropertyManager.GetBool("send_armor_coverage").Item
++                && (wo.ItemType & (ItemType.Armor | ItemType.Clothing)) != 0
++                && wo.ValidLocations != null && wo.ValidLocations.Value != 0
++                && !PropertiesInt.ContainsKey(PropertyInt.ValidLocations))
++            {
++                PropertiesInt[PropertyInt.ValidLocations] = (int)wo.ValidLocations.Value;
++            }
++
+             if (wo is Creature creature)
+                 BuildCreature(creature);
+ 
+diff --git a/Source/ACE.Server/Physics/Util/AdjustCell.cs b/Source/ACE.Server/Physics/Util/AdjustCell.cs
+index 2ee1c43b..21276e4a 100644
+--- a/Source/ACE.Server/Physics/Util/AdjustCell.cs
++++ b/Source/ACE.Server/Physics/Util/AdjustCell.cs
+@@ -15,7 +15,9 @@ public AdjustCell(uint dungeonID)
+         {
+             uint blockInfoID = dungeonID << 16 | 0xFFFE;
+             var blockinfo = DatManager.CellDat.ReadFromDat<LandblockInfo>(blockInfoID);
+-            var numCells = blockinfo.NumCells;
++            // Guard: a dungeon whose LandblockInfo is missing from the dat would NRE on .NumCells and
++            // crash the whole server during landblock load. Treat as zero cells (no cell adjustment).
++            var numCells = blockinfo?.NumCells ?? 0;
+ 
+             BuildEnv(dungeonID, numCells);
+         }
+@@ -38,9 +40,16 @@ public void BuildEnv(uint dungeonID, uint numCells)
+ 
+         public uint? GetCell(Vector3 point)
+         {
++            if (EnvCells == null) return null;
+             foreach (var envCell in EnvCells)
+-                if (envCell.point_in_cell(point))
+-                    return envCell.ID;
++            {
++                if (envCell == null) continue;
++                // Guard: point_in_cell walks the cell's static geometry, which can be null for a
++                // partially/non-loaded dungeon cell — an NRE here crashed the entire server on the
++                // landblock tick thread. Skip such cells rather than take down the world.
++                try { if (envCell.point_in_cell(point)) return envCell.ID; }
++                catch { }
++            }
+             return null;
+         }
+ 
+diff --git a/Source/ACE.Server/Program.cs b/Source/ACE.Server/Program.cs
+index b8a249c1..efd330d5 100644
+--- a/Source/ACE.Server/Program.cs
++++ b/Source/ACE.Server/Program.cs
+@@ -341,6 +341,10 @@ public static void Main(string[] args)
+             {
+                 WorldManager.Open(null);
+             }
++
++            // ADDITIVE ACE MOD (preserve across bumps): read-only monitoring/status endpoint for external
++            // admin tooling (tools/server-monitor). Loopback-only, never mutates game state. See MonitorServer.cs.
++            MonitorServer.Start();
+         }
+ 
+         private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
+diff --git a/Source/ACE.Server/WorldObjects/Container_Tick.cs b/Source/ACE.Server/WorldObjects/Container_Tick.cs
+index d34180eb..202369b3 100644
+--- a/Source/ACE.Server/WorldObjects/Container_Tick.cs
++++ b/Source/ACE.Server/WorldObjects/Container_Tick.cs
+@@ -1,7 +1,9 @@
++using System;
+ using System.Collections.Generic;
+ using System.Linq;
+ 
+ using ACE.Entity.Enum;
++using ACE.Server.Managers;
+ using ACE.Server.Network.GameMessages.Messages;
+ 
+ namespace ACE.Server.WorldObjects
+@@ -25,9 +27,17 @@ public override void Heartbeat(double currentUnixTime)
+                     Close(null);
+                     return;
+                 }
+-                var withinUseRadius = CurrentLandblock.WithinUseRadius(viewer, Guid, out var targetValid);
++                // MOD container_keep_open_radius: a viewer who opened via server-side activate (agentuse /
++                // native-client parked char) may legitimately sit outside the weenie's tight UseRadius
++                // (house Storage = 1.0) — floor the keep-open check so only actually walking away closes.
++                var keepOpenRadius = PropertyManager.GetDouble("container_keep_open_radius").Item;
++                float? closeRadius = null;
++                if (keepOpenRadius > 0)
++                    closeRadius = Math.Max((float)keepOpenRadius, UseRadius ?? 0.6f);
++                var withinUseRadius = CurrentLandblock.WithinUseRadius(viewer, Guid, out var targetValid, closeRadius);
+                 if (!withinUseRadius)
+                 {
++                    log.Debug($"[CONTAINER] {Name} (0x{Guid}) heartbeat-closing: viewer {viewer.Name}, cylDist {viewer.GetCylinderDistance(this):F2} > closeRadius {(closeRadius ?? UseRadius ?? 0.6f):F2}");
+                     Close(viewer);
+                     return;
+                 }
+diff --git a/Source/ACE.Server/WorldObjects/Creature_Missile.cs b/Source/ACE.Server/WorldObjects/Creature_Missile.cs
+index bdf484c1..bbb4b0c7 100644
+--- a/Source/ACE.Server/WorldObjects/Creature_Missile.cs
++++ b/Source/ACE.Server/WorldObjects/Creature_Missile.cs
+@@ -192,12 +192,13 @@ private static float GetProjectileRadius(uint projectileWcid)
+                 return 0.0f;
+             }
+ 
+-            var setup = DatManager.PortalDat.ReadFromDat<SetupModel>(setupId);
++            var setup = SetupResolver.GetSetup(setupId);
+ 
+             if (!weenie.PropertiesFloat.TryGetValue(PropertyFloat.DefaultScale, out var scale))
+                 scale = 1.0f;
+ 
+-            var result = (float)(setup.Spheres[0].Radius * scale);
++            // a synthesized setup (raw 0x01 mesh) carries no spheres
++            var result = setup.Spheres.Count > 0 ? (float)(setup.Spheres[0].Radius * scale) : 0.0f;
+ 
+             ProjectileRadiusCache.TryAdd(projectileWcid, result);
+ 
+diff --git a/Source/ACE.Server/WorldObjects/Creature_Networking.cs b/Source/ACE.Server/WorldObjects/Creature_Networking.cs
+index d70ebd39..b360e596 100644
+--- a/Source/ACE.Server/WorldObjects/Creature_Networking.cs
++++ b/Source/ACE.Server/WorldObjects/Creature_Networking.cs
+@@ -8,6 +8,7 @@
+ using ACE.DatLoader.FileTypes;
+ using ACE.Entity.Enum;
+ using ACE.Entity.Models;
++using ACE.Server.Entity;
+ using ACE.Server.Entity.Actions;
+ using ACE.Server.Managers;
+ using ACE.Server.Network.GameMessages.Messages;
+@@ -223,11 +224,18 @@ public override ACE.Entity.ObjDesc CalculateObjDesc()
+                 }
+             }
+ 
++            // Dereth-Unity:an equipped item may also name parts directly, via its own
++            // weenie_properties_anim_part rows. Runs after all ClothingBase processing so it wins,
++            // and marks coverage so the pass below does not restore the bare part. See
++            // ApplyOwnAnimParts.
++            foreach (var w in eo)
++                ApplyOwnAnimParts(objDesc, w, coverage);
++
+             // Add the "naked" body parts. These are the ones not already covered.
+             // Note that this is the original SetupTableId, not thisSetupId.
+             if (SetupTableId > 0)
+             {
+-                var baseSetup = DatManager.PortalDat.ReadFromDat<SetupModel>(SetupTableId);
++                var baseSetup = SetupResolver.GetSetup(SetupTableId);
+                 for (byte i = 0; i < baseSetup.Parts.Count; i++)
+                 {
+                     if (!coverage.Contains(i) && i != 0x10) // Don't add body parts for those that are already covered. Also don't add the head, that was already covered by AddCharacterBaseModelData()
+diff --git a/Source/ACE.Server/WorldObjects/Managers/EmoteManager.cs b/Source/ACE.Server/WorldObjects/Managers/EmoteManager.cs
+index cc727018..71fd9498 100644
+--- a/Source/ACE.Server/WorldObjects/Managers/EmoteManager.cs
++++ b/Source/ACE.Server/WorldObjects/Managers/EmoteManager.cs
+@@ -42,6 +42,14 @@ public class EmoteManager
+         public bool IsBusy { get; set; }
+         public int Nested { get; set; }
+ 
++        /// <summary>
++        /// Incremented every time an in-flight emote chain is abandoned (see CancelCurrentEmoteSet).
++        /// Delayed continuations of a chain capture this value and bail out if it has moved on,
++        /// so an abandoned chain can neither keep executing its remaining emotes nor clear IsBusy
++        /// out from under the chain that replaced it.
++        /// </summary>
++        private int emoteEpoch;
++
+         public bool Debug = false;
+ 
+         public EmoteManager(WorldObject worldObject)
+@@ -1631,7 +1639,14 @@ public void Enqueue(PropertiesEmote emoteSet, WorldObject targetObject, int emot
+                 // emote.Delay = pre-delay for current emote
+                 actionChain.AddDelaySeconds(delay + emote.Delay);
+ 
+-                actionChain.AddAction(WorldObject, () => DoEnqueue(emoteSet, targetObject, emoteIdx, emote));
++                var epoch = emoteEpoch;
++                actionChain.AddAction(WorldObject, () =>
++                {
++                    // this chain was abandoned while we were waiting out the delay - drop it
++                    if (emoteEpoch != epoch) return;
++
++                    DoEnqueue(emoteSet, targetObject, emoteIdx, emote);
++                });
+                 actionChain.EnqueueChain();
+             }
+             else
+@@ -1671,10 +1686,15 @@ private void DoEnqueue(PropertiesEmote emoteSet, WorldObject targetObject, int e
+             {
+                 if (nextDelay > 0)
+                 {
++                    var epoch = emoteEpoch;
+                     var delayChain = new ActionChain();
+                     delayChain.AddDelaySeconds(nextDelay);
+                     delayChain.AddAction(WorldObject, () =>
+                     {
++                        // this chain was abandoned - its bookkeeping no longer owns Nested/IsBusy,
++                        // which now belong to whichever chain replaced it
++                        if (emoteEpoch != epoch) return;
++
+                         Nested--;
+ 
+                         if (Nested == 0)
+@@ -1915,9 +1935,77 @@ public void HeartBeat()
+ 
+         public void OnUse(Creature activator)
+         {
++            // stock ACE refuses this set outright if IsBusy, and IsBusy is held for an entire
++            // emote chain - so an NPC running a long patrol/idle chain ignores the player for
++            // nearly the whole chain. OnPortal / OnDeath sidestep the same problem by clearing
++            // IsBusy, but simply clearing it here is not enough: nothing cancels the in-flight
++            // chain, so its queued Move emotes would keep firing and the NPC would answer the
++            // player while jogging away. Abandon the chain AND halt movement together.
++            if (CanInterruptForUse(activator))
++                InterruptForUse(activator);
++
+             ExecuteEmoteSet(EmoteCategory.Use, null, activator);
+         }
+ 
++        /// <summary>
++        /// Deliberately narrow: only peaceful, idle, non-targeting NPCs.
++        /// A monster mid-combat losing its emote state (Taunt / NewEnemy / WoundedTaunt chains)
++        /// on a Use could have side effects, and players are never emote-driven this way.
++        /// </summary>
++        private bool CanInterruptForUse(Creature activator)
++        {
++            if (!PropertyManager.GetBool("npc_use_interrupts_emote").Item)
++                return false;
++
++            if (activator == null || !IsBusy)
++                return false;
++
++            if (!(WorldObject is Creature creature) || creature is Player)
++                return false;
++
++            if (creature.IsDead || creature.IsAwake)
++                return false;
++
++            if (creature.Attackable || creature.TargetingTactic != TargetingTactic.None)
++                return false;
++
++            return true;
++        }
++
++        /// <summary>
++        /// Abandons the in-flight emote chain and brings the NPC to a stop facing the activator,
++        /// so the Use set that follows is delivered by a stationary NPC.
++        /// The NPC resumes its route on a later heartbeat: the HeartBeat set is re-eligible as
++        /// soon as the Use set finishes and clears IsBusy again.
++        /// </summary>
++        private void InterruptForUse(Creature activator)
++        {
++            // invalidate every delayed continuation of the current chain, then reset the
++            // bookkeeping it will no longer be around to reset itself
++            emoteEpoch++;
++            Nested = 0;
++            IsBusy = false;
++
++            var creature = (Creature)WorldObject;
++
++            // cancel the server-side MoveTo the chain had in flight
++            var moveToManager = creature.PhysicsObj?.MovementManager?.MoveToManager;
++            if (moveToManager != null)
++            {
++                moveToManager.CancelMoveTo(WeenieError.ActionCancelled);
++                moveToManager.FailProgressCount = 0;
++
++                // the NPC stops wherever it actually is, not where the route was headed
++                creature.PhysicsObj.update_object();
++                creature.UpdatePosition_SyncLocation();
++                creature.SendUpdatePosition();
++            }
++
++            // drop the run/walk animation, then face the player
++            creature.EnqueueBroadcastMotion(new Motion(creature.CurrentMotionState.Stance, MotionCommand.Ready));
++            creature.TurnToObject(activator);
++        }
++
+         public void OnPortal(Creature activator)
+         {
+             IsBusy = false;
+diff --git a/Source/ACE.Server/WorldObjects/Pet.cs b/Source/ACE.Server/WorldObjects/Pet.cs
+index 3c94bd8b..b3fdc767 100644
+--- a/Source/ACE.Server/WorldObjects/Pet.cs
++++ b/Source/ACE.Server/WorldObjects/Pet.cs
+@@ -306,10 +306,14 @@ private float GetPetRadius()
+             if (PetRadiusCache.TryGetValue(WeenieClassId, out var radius))
+                 return radius;
+ 
+-            var setup = DatManager.PortalDat.ReadFromDat<SetupModel>(SetupTableId);
++            var setup = SetupResolver.GetSetup(SetupTableId);
+ 
+             var scale = ObjScale ?? 1.0f;
+ 
++            // a synthesized setup (raw 0x01 mesh) carries no spheres
++            if (setup.Spheres.Count == 0)
++                return ProjectileRadiusCache[WeenieClassId] = 0.0f;
++
+             return ProjectileRadiusCache[WeenieClassId] = setup.Spheres[0].Radius * scale;
+         }
+     }
+diff --git a/Source/ACE.Server/WorldObjects/Player_Character.cs b/Source/ACE.Server/WorldObjects/Player_Character.cs
+index 2ab82407..2b3f08ed 100644
+--- a/Source/ACE.Server/WorldObjects/Player_Character.cs
++++ b/Source/ACE.Server/WorldObjects/Player_Character.cs
+@@ -468,7 +468,10 @@ public void HandleActionFinishBarber(ClientMessage message)
+ 
+             var validSkinPalette = ValidateSkinPalette(requestedSkinPaletteDID, sex.SkinPalSet);
+ 
+-            var validEyesPalette = ValidateEyesPalette(requestedEyesPaletteDID, sex.EyeColorList);
++            // extended_eye_colors (custom): a character created with an extended eye color must be able to
++            // visit the barber — accept this heritage×gender's offered extended palettes as well as stock.
++            var validEyesPalette = ValidateEyesPalette(requestedEyesPaletteDID, sex.EyeColorList)
++                || Factories.ExtendedEyeColors.IsBarberLegal(requestedEyesPaletteDID, sex, (uint)Heritage);
+ 
+             var validHairPalette = ValidateHairPalette(requestedHairPaletteDID, sex.HairColorList);
+ 
+diff --git a/Source/ACE.Server/WorldObjects/Player_Inventory.cs b/Source/ACE.Server/WorldObjects/Player_Inventory.cs
+index 4c079aff..7a7c3a70 100644
+--- a/Source/ACE.Server/WorldObjects/Player_Inventory.cs
++++ b/Source/ACE.Server/WorldObjects/Player_Inventory.cs
+@@ -2088,7 +2088,7 @@ private WeenieError CheckWieldRequirements(WorldObject item)
+                 if (heritageSpecificArmor == null || (HeritageGroup)heritageSpecificArmor != HeritageGroup)
+                     return WeenieError.HeritageRequiresSpecificArmor;
+             }
+-            else if (IsGearKnightPlayer)
++            else if (IsGearKnightPlayer && !PropertyManager.GetBool("gearknight_armor_unrestricted").Item)
+             {
+                 if (((item.ValidLocations & (EquipMask.Clothing | EquipMask.Armor)) != 0)
+                     && (heritageSpecificArmor == null || (HeritageGroup)heritageSpecificArmor != HeritageGroup))
+@@ -3257,6 +3257,26 @@ public void HandleActionGiveObjectRequest(uint targetGuid, uint itemGuid, int am
+             });    // if player is within UseRadius of moveToTarget, perform rotation?
+         }
+ 
++        // agentgive (headless-agent helper, same family as @agentuse): the give flow of
++        // HandleActionGiveObjectRequest WITHOUT the CreateMoveToChain movement gate — headless bots run
++        // no client-side physics, so the chain never completes and a give hangs silently with no error.
++        // All the REAL give logic still runs (GiveObjectToPlayer/GiveObjectToNPC: emote tables, refusals,
++        // attuned checks) — only the walk-to-target is skipped.
++        public void AgentGiveDirect(uint targetGuid, uint itemGuid, int amount)
++        {
++            var target = FindObject(targetGuid, SearchLocations.Landblock, out _, out _, out _) as Container;
++            var item = FindObject(itemGuid, SearchLocations.MyInventory | SearchLocations.MyEquippedItems, out var itemFoundInContainer, out var itemRootOwner, out var itemWasEquipped);
++            if (target == null || item == null || amount <= 0 || item.StackSize < amount)
++            {
++                Session.Network.EnqueueSend(new GameEventCommunicationTransientString(Session, "agentgive: invalid target/item/amount"));
++                return;
++            }
++            if (target is Player targetAsPlayer)
++                GiveObjectToPlayer(targetAsPlayer, item, itemFoundInContainer, itemRootOwner, itemWasEquipped, amount);
++            else
++                GiveObjectToNPC(target, item, itemFoundInContainer, itemRootOwner, itemWasEquipped, amount);
++        }
++
+         private void GiveObjectToPlayer(Player target, WorldObject item, Container itemFoundInContainer, Container itemRootOwner, bool itemWasEquipped, int amount)
+         {
+             if (item.IsAttunedOrContainsAttuned)
+diff --git a/Source/ACE.Server/WorldObjects/Player_Tracking.cs b/Source/ACE.Server/WorldObjects/Player_Tracking.cs
+index 28712213..de283c70 100644
+--- a/Source/ACE.Server/WorldObjects/Player_Tracking.cs
++++ b/Source/ACE.Server/WorldObjects/Player_Tracking.cs
+@@ -45,6 +45,13 @@ public List<WorldObject> GetKnownObjects()
+             return ObjMaint.GetKnownObjectsValuesWhere(i => i?.WeenieObj.WorldObject != null).Select(o => o.WeenieObj.WorldObject).ToList();
+         }
+ 
++        /// <summary>
++        /// Coverage equipment slots (armor / clothing / extremity / cloak) that are additionally
++        /// broadcast for PLAYER wielders when the 'broadcast_player_equipment' shard property is enabled.
++        /// Jewelry and trinkets are intentionally excluded.
++        /// </summary>
++        private const EquipMask PlayerCoverageEquipMask = EquipMask.Clothing | EquipMask.Armor | EquipMask.Extremity | EquipMask.Cloak;
++
+         /// <summary>
+         /// Sends a network message to player for CreateObject, if applicable
+         /// </summary>
+@@ -66,8 +73,12 @@ public void TrackObject(WorldObject worldObject, bool delay = false)
+             // add creature equipped objects / wielded items
+             if (worldObject is Creature creature)
+             {
++                // optionally also broadcast coverage equipment (armor / clothing) for player wielders,
++                // so custom clients can render armor on remote player bodies. property is read per-call (live-toggleable)
++                var broadcastPlayerEquipment = creature is Player && PropertyManager.GetBool("broadcast_player_equipment").Item;
++
+                 foreach (var wieldedItem in creature.EquippedObjects.Values)
+-                    if (IsInChildLocation(wieldedItem))
++                    if (IsInChildLocation(wieldedItem) || broadcastPlayerEquipment && ((wieldedItem.CurrentWieldedLocation ?? 0) & PlayerCoverageEquipMask) != 0)
+                         TrackEquippedObject(creature, wieldedItem);
+ 
+                 if (creature.IsMoving)
+@@ -117,9 +128,16 @@ public void TrackEquippedObject(Creature wielder, WorldObject wieldedItem)
+         {
+             //Console.WriteLine($"Player {Name} - TrackEquippedObject({wieldedItem.Name}) on Wielder {wielder.Name}");
+ 
++            var wieldedLocation = wieldedItem.CurrentWieldedLocation ?? 0;
++
+             // We make sure the item is actually wielded and selectable
+-            if (((wieldedItem.CurrentWieldedLocation ?? 0) & EquipMask.SelectablePlusAmmo) == 0)
+-                return;
++            if ((wieldedLocation & EquipMask.SelectablePlusAmmo) == 0)
++            {
++                // optionally also broadcast coverage equipment (armor / clothing) worn by players,
++                // gated behind the 'broadcast_player_equipment' shard property (read per-call, live-toggleable)
++                if (!(wielder is Player) || (wieldedLocation & PlayerCoverageEquipMask) == 0 || !PropertyManager.GetBool("broadcast_player_equipment").Item)
++                    return;
++            }
+ 
+             // The wielder already knows about this object
+             if (wielder == this)
+@@ -132,8 +150,16 @@ public void RemoveTrackedEquippedObject(Creature formerWielder, WorldObject worl
+         {
+             //Console.WriteLine($"Player {Name} - RemoveTrackedEquippedObject({worldObject.Name}) on Former Wielder {formerWielder.Name}");
+ 
+-            // We don't need to remove objects that couldn't have been tracked in the first place
+-            if (((worldObject.ValidLocations ?? 0) & EquipMask.SelectablePlusAmmo) == 0)
++            // We don't need to remove objects that couldn't have been tracked in the first place.
++            // For player wielders, the widened coverage mask is accepted here UNCONDITIONALLY (not gated on
++            // broadcast_player_equipment): the observer may have received the create while the property was
++            // enabled, and a DeleteObject for an object the client never saw is safely ignored by the client.
++            // This keeps the delete path symmetric even if the property is toggled off mid-wield.
++            var trackableLocations = EquipMask.SelectablePlusAmmo;
++            if (formerWielder is Player)
++                trackableLocations |= PlayerCoverageEquipMask;
++
++            if (((worldObject.ValidLocations ?? 0) & trackableLocations) == 0)
+                 return;
+ 
+             // The former wielder already knows about this object was removed
+diff --git a/Source/ACE.Server/WorldObjects/WorldObject_Magic.cs b/Source/ACE.Server/WorldObjects/WorldObject_Magic.cs
+index 800df982..77773102 100644
+--- a/Source/ACE.Server/WorldObjects/WorldObject_Magic.cs
++++ b/Source/ACE.Server/WorldObjects/WorldObject_Magic.cs
+@@ -1873,12 +1873,13 @@ private float GetProjectileRadius(Spell spell)
+                 return 0.0f;
+             }
+ 
+-            var setup = DatManager.PortalDat.ReadFromDat<SetupModel>(setupId);
++            var setup = SetupResolver.GetSetup(setupId);
+ 
+             if (!weenie.PropertiesFloat.TryGetValue(PropertyFloat.DefaultScale, out var scale))
+                 scale = 1.0f;
+ 
+-            var result = (float)(setup.Spheres[0].Radius * scale);
++            // a synthesized setup (raw 0x01 mesh) carries no spheres
++            var result = setup.Spheres.Count > 0 ? (float)(setup.Spheres[0].Radius * scale) : 0.0f;
+ 
+             ProjectileRadiusCache.TryAdd(projectileWcid, result);
+ 
+diff --git a/Source/ACE.Server/WorldObjects/WorldObject_Networking.cs b/Source/ACE.Server/WorldObjects/WorldObject_Networking.cs
+index 947d590f..ec4c0190 100644
+--- a/Source/ACE.Server/WorldObjects/WorldObject_Networking.cs
++++ b/Source/ACE.Server/WorldObjects/WorldObject_Networking.cs
+@@ -972,9 +972,54 @@ public virtual ACE.Entity.ObjDesc CalculateObjDesc()
+                 }
+             }
+ 
++            // NO ApplyOwnAnimParts(objDesc, this) here. A part change on the item's own ObjDesc
++            // reaches nothing: DatExtract flattens a setup into one mesh with no part nodes, so the
++            // client cannot swap a part of a dropped item, and the row leaked onto the wearer's
++            // abdomen instead (part 0 is covered by whatever tunic is equipped). A dropped item's
++            // project-authored geometry is keyed by weenie client-side -- ServerLink.HasWeenieModel.
++
+             return objDesc;
+         }
+ 
++        /// <summary>
++        /// Dereth-Unity: overlay an object's own weenie_properties_anim_part rows onto the ObjDesc
++        /// its ClothingBase just built, so a weenie can name a gfxobj that exists in no .dat file.
++        ///
++        /// Only replaces a part the ClothingBase ALREADY changed. That one rule is what lets a
++        /// single row set do double duty. A helmet's ClothingTable touches part 16 on a creature
++        /// setup (head + helm, worn) and part 0 on item setup 0x020000DA (helm alone, dropped);
++        /// each override therefore lands on exactly the object that has that part, and neither
++        /// leaks onto the other. Without it, a part-0 override meant for the dropped model would
++        /// also repaint the wearer's abdomen.
++        ///
++        /// Replaces by INDEX. ObjDesc.AddAnimPartChange only drops an entry when the model id
++        /// matches as well, which would leave two models fighting over one part.
++        /// CopyTo null-checks its source, so an item with no rows costs one empty list.
++        /// </summary>
++        protected static void ApplyOwnAnimParts(ACE.Entity.ObjDesc objDesc, WorldObject wo, List<uint> coverage = null)
++        {
++            var extra = new List<PropertiesAnimPart>();
++            wo.Biota.PropertiesAnimPart.CopyTo(extra, wo.BiotaDatabaseLock);
++
++            foreach (var ap in extra)
++            {
++                var covered = false;
++                for (var i = objDesc.AnimPartChanges.Count - 1; i >= 0; i--)
++                {
++                    if (objDesc.AnimPartChanges[i].Index != ap.Index)
++                        continue;
++                    objDesc.AnimPartChanges.RemoveAt(i);
++                    covered = true;
++                }
++                if (!covered)
++                    continue;
++
++                objDesc.AnimPartChanges.Add(new PropertiesAnimPart { Index = ap.Index, AnimationId = ap.AnimationId });
++                if (coverage != null && !coverage.Contains(ap.Index))
++                    coverage.Add(ap.Index);
++            }
++        }
++
+         protected void AddBaseModelData(ACE.Entity.ObjDesc objDesc)
+         {
+             // Hair/head
+diff --git a/Source/ACE.Server/WorldObjects/WorldObject_Properties.cs b/Source/ACE.Server/WorldObjects/WorldObject_Properties.cs
+index a2270d5f..2c05d069 100644
+--- a/Source/ACE.Server/WorldObjects/WorldObject_Properties.cs
++++ b/Source/ACE.Server/WorldObjects/WorldObject_Properties.cs
+@@ -944,7 +944,9 @@ public float? Translucency
+ 
+         public Vector3 Omega => PhysicsObj?.Omega ?? Vector3.Zero;
+ 
+-        public SetupModel CSetup => DatManager.PortalDat.ReadFromDat<SetupModel>(SetupTableId);
++        // routed through SetupResolver so a raw 0x01 GfxObj Setup DID is wrapped instead of being
++        // parsed as a 0x02 SetupModel (which throws EndOfStreamException and aborts the process)
++        public SetupModel CSetup => SetupResolver.GetSetup(SetupTableId);
+ 
+         public uint? DefaultScriptId
+         {

@@ -1,0 +1,10 @@
+{
+  "Name": "RevivalGuard",
+  "Author": "Asherons Call Revived",
+  "Description": "Anti-cheat guards: movement speed, vendor price overflow, fellowship size race, action flooding. See docs/security/ANTI-CHEAT.md.",
+  "Version": "1.0",
+  "Priority": 0,
+  "Enabled": true,
+  "HotReload": false,
+  "RegisterCommands": false
+}

@@ -337,7 +337,7 @@ namespace RevivalGuard
                 if (cur != null) { WatchRunning(cur, now); return; }
 
                 if (now < s_State.NextAt) return;
-                if (PlayerManager.GetOnlineCount() < Math.Max(0, Minutes(P_MINPLAYERS, 1)))
+                if (Mercenaries.RealOnline() < Math.Max(0, Minutes(P_MINPLAYERS, 1)))
                 {
                     s_State.NextAt = now + 60;   // look again in a minute; nobody to see it
                     return;

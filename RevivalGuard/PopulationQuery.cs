@@ -68,7 +68,7 @@ namespace RevivalGuard
                         if (now - kv.Value > TimeSpan.FromMinutes(1)) s_Last.TryRemove(kv.Key, out _);
                 }
 
-                int n = PlayerManager.GetOnlineCount();
+                int n = Mercenaries.RealOnline();   // sellswords are not people (Mercenaries)
                 var reply = new byte[8];
                 BitConverter.GetBytes(MAGIC_A).CopyTo(reply, 0);
                 BitConverter.GetBytes(n).CopyTo(reply, 4);

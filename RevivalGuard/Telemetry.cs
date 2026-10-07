@@ -116,6 +116,7 @@ namespace RevivalGuard
                     sb.Append(",\"a\":\"").Append(Acct(acct)).Append("\",\"c\":").Append(J(p.Name))
                       .Append(",\"g\":\"").Append(p.Guid.Full.ToString("X8")).Append("\",\"lvl\":").Append(p.Level ?? 1);
                     if ((p.Account?.AccessLevel ?? 0) > 0) sb.Append(",\"staff\":1");
+                    if (Mercenaries.IsMerc(p)) sb.Append(",\"merc\":1");
                     var loc = p.Location;
                     if (loc != null) sb.Append(",\"lb\":\"").Append((loc.Cell >> 16).ToString("X4")).Append('"');
                 }

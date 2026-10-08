@@ -61,6 +61,7 @@ namespace RevivalGuard
             LfgBoard.Register();
             ItemLock.Register();
             RagdollCorpse.Register();
+            Mercenaries.Register();
             Mansions.Register();
             TrophyMounts.Register();
             MonsterAi.Register();

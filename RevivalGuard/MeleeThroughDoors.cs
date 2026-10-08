@@ -103,6 +103,8 @@ namespace RevivalGuard
         // So at the hit: a player's blow needs the target within StickyDistance (4 m) plus PLAYER_SLACK, a
         // monster's within MaxMeleeRange (0.75 m) plus MONSTER_SLACK (a monster's miss reads as an evade).
         const float PLAYER_SLACK = 0.5f, MONSTER_SLACK = 1.25f;
+        const double TELL_EVERY = 2.0;
+        static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, DateTime> s_Told = new System.Collections.Concurrent.ConcurrentDictionary<uint, DateTime>();
 
         static bool OutOfReach(Creature attacker, Creature target, float reach)
         {
@@ -122,6 +124,15 @@ namespace RevivalGuard
                 if (target == null || damageSource?.ProjectileSource != null) return true;   // a projectile: physics decides
                 if (!DoorBetween(__instance, target) && !OutOfReach(__instance, target, Player.StickyDistance + PLAYER_SLACK)) return true;
                 __result = null;                                                              // swung at a door, or at air
+                // SAY SO (PvP sweep 2026-10-08: a blocked blow printed nothing on either client). Once per
+                // TELL_EVERY seconds per attacker, so an auto-repeat chain does not flood the chat.
+                var now = DateTime.UtcNow;
+                if (!s_Told.TryGetValue(__instance.Guid.Full, out var last) || (now - last).TotalSeconds >= TELL_EVERY)
+                {
+                    s_Told[__instance.Guid.Full] = now;
+                    __instance.Session?.Network.EnqueueSend(new ACE.Server.Network.GameMessages.Messages.GameMessageSystemChat(
+                        $"{target.Name} is out of reach.", ACE.Entity.Enum.ChatMessageType.Broadcast));
+                }
                 return false;
             }
         }

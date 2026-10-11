@@ -117,6 +117,8 @@ namespace RevivalGuard
                       .Append(",\"g\":\"").Append(p.Guid.Full.ToString("X8")).Append("\",\"lvl\":").Append(p.Level ?? 1);
                     if ((p.Account?.AccessLevel ?? 0) > 0) sb.Append(",\"staff\":1");
                     if (Mercenaries.IsMerc(p)) sb.Append(",\"merc\":1");
+                    // a browser guest (AcWebGuest: "guest" and ten characters): the web funnel (tools/public-shard/funnel.py)
+                    if ((p.Account?.AccountName ?? "").StartsWith("guest", StringComparison.OrdinalIgnoreCase) && (extra == null || !extra.Contains("\"web\""))) sb.Append(",\"web\":1");
                     var loc = p.Location;
                     if (loc != null) sb.Append(",\"lb\":\"").Append((loc.Cell >> 16).ToString("X4")).Append('"');
                 }
@@ -206,6 +208,9 @@ namespace RevivalGuard
                     if (__result != PlayerFactory.CreateResult.Success || player == null) return;
                     var p = player;
                     var sb = new StringBuilder();
+                    // where it starts (allow_town_spawn: the Academy skipped) and whether a browser guest made it
+                    if (p.GetProperty(PropertyBool.RecallsDisabled) != true) sb.Append(",\"town\":1");
+                    if ((ACE.Database.DatabaseManager.Authentication.GetAccountById(accountId)?.AccountName ?? "").StartsWith("guest", StringComparison.OrdinalIgnoreCase)) sb.Append(",\"web\":1");
                     sb.Append(",\"heritage\":").Append(J(p.HeritageGroup.ToString()))
                       .Append(",\"gender\":").Append(p.Gender ?? 0)
                       .Append(",\"template\":").Append(J(p.GetProperty(PropertyString.Template)));

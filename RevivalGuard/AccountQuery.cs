@@ -69,12 +69,13 @@ namespace RevivalGuard
                 // Ours from here on: never hand it to ACE, answered or not.
                 ours = true;
                 var now = DateTime.UtcNow;
-                string key = endPoint.Address.ToString();
+                var real = Gateway.RealAddress(endPoint);   // a browser player's own address, not the gateway's loopback
+                string key = real.ToString();
                 var seen = s_Seen.GetOrAdd(key, _ => new Seen());
                 byte answer = 255;
                 // The shard's own network is not limited (the owner was told "slow down" on his
                 // first login after a test from the same Mac, 2026-10-01): StaffLoginGate.IsLocal.
-                if (!StaffLoginGate.IsLocal(endPoint.Address))
+                if (!StaffLoginGate.IsLocal(real))
                 lock (seen)
                 {
                     if (now - seen.LastAnswer < PER_ANSWER) return false;
@@ -100,7 +101,7 @@ namespace RevivalGuard
                 {
                     string name = NameOf(buf);
                     answer = name != null && DatabaseManager.Authentication.GetAccountByName(name) != null ? (byte)1
-                           : AccountCreationCap.Reached(endPoint.Address) ? (byte)3 : (byte)0;
+                           : AccountCreationCap.Reached(real) ? (byte)3 : (byte)0;
                 }
                 if (now > s_PruneAt)
                 {

@@ -74,10 +74,13 @@ namespace RevivalGuard
         {
             try
             {
-                if (s_Cap <= 0 || session == null || loginRequest == null) return true;
+                if (session == null || loginRequest == null) return true;
+                // the address the account will be created from, for CreateAccount (Gateway): a browser player's own
+                var addr = Gateway.RealAddress(session.EndPointC2S);
+                Gateway.t_LoginReal = addr;
+                if (s_Cap <= 0) return true;
                 if (!ConfigManager.Config.Server.Accounts.AllowAutoAccountCreation) return true;
                 if (loginRequest.NetAuthType != NetAuthType.AccountPassword || loginRequest.Password == "") return true;
-                var addr = session.EndPointC2S?.Address;
                 if (addr == null || !Reached(addr)) return true;
                 if (DatabaseManager.Authentication.GetAccountByName(loginRequest.Account) != null) return true;
 

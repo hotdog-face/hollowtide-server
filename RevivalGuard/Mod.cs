@@ -47,6 +47,7 @@ namespace RevivalGuard
             SeasonalDrops.Validate();
             LandblockReload.Register();
             Broadcast.Register();
+            KeepCharacter.Register();
             MagicRim.Register();
             PkDeathLoot.Register();
             Keyrings.Register();

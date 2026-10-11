@@ -51,7 +51,7 @@ namespace RevivalGuard
         {
             try
             {
-                var addr = session?.EndPointC2S?.Address;
+                var addr = Gateway.RealAddress(session?.EndPointC2S);   // a browser player's own, not the gateway's loopback
                 if (addr == null) return true;
                 bool local = IsLocal(addr);
                 string key = addr.ToString();

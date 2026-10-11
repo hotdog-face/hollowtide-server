@@ -137,6 +137,22 @@ index 632a7ee4..23a48a34 100644
              IsAdmin = (reader.ReadUInt32() == 1);
              IsSentinel = (reader.ReadUInt32() == 1);
          }
+diff --git a/Source/ACE.Entity/Enum/CharacterTitle.cs b/Source/ACE.Entity/Enum/CharacterTitle.cs
+index f07027b6..aacd792d 100644
+--- a/Source/ACE.Entity/Enum/CharacterTitle.cs
++++ b/Source/ACE.Entity/Enum/CharacterTitle.cs
+@@ -896,6 +896,10 @@ public enum CharacterTitle : uint
+         Illuminated,
+         Transcended,
+         CosmicConscious,
+-        LastManStanding
++        LastManStanding,
++
++        // local mod (Hollowtide, 2026-10-11): the Founders' title, given once per account made by 31 October 2026
++        // (RevivalGuard Founders.cs). Past the client's own title table; our client names it (AcAppraisalText.Title).
++        HollowtideFounder = 9001
+     }
+ }
 diff --git a/Source/ACE.Server/Command/CommandManager.cs b/Source/ACE.Server/Command/CommandManager.cs
 index e2340aee..e501c2de 100644
 --- a/Source/ACE.Server/Command/CommandManager.cs
@@ -1589,7 +1605,7 @@ index 468b53f7..60d7e6fd 100644
                          // We still can't let the new account in. They'll need to retry after the previous account has been successfully booted.
                          session.Terminate(SessionTerminationReason.AccountInUse, new GameMessageCharacterError(CharacterError.Logon));
 diff --git a/Source/ACE.Server/Network/Handlers/CharacterHandler.cs b/Source/ACE.Server/Network/Handlers/CharacterHandler.cs
-index c3a62b28..f2c1b3ce 100644
+index c3a62b28..85f19ad6 100644
 --- a/Source/ACE.Server/Network/Handlers/CharacterHandler.cs
 +++ b/Source/ACE.Server/Network/Handlers/CharacterHandler.cs
 @@ -47,7 +47,15 @@ private static void CharacterCreateEx(ClientMessage message, Session session)
@@ -1609,7 +1625,26 @@ index c3a62b28..f2c1b3ce 100644
              if (PropertyManager.GetBool("taboo_table").Item && DatManager.PortalDat.TabooTable.ContainsBadWord(characterCreateInfo.Name.ToLowerInvariant()))
              {
                  SendCharacterCreateResponse(session, CharacterGenerationVerificationResponse.NameBanned);
-@@ -319,9 +327,23 @@ public static void CharacterDelete(ClientMessage message, Session session)
+@@ -60,14 +68,10 @@ private static void CharacterCreateEx(ClientMessage message, Session session)
+                 return;
+             }
+ 
+-            DatabaseManager.Shard.IsCharacterNameAvailable(characterCreateInfo.Name, isAvailable =>
+-            {
+-                if (!isAvailable)
+-                {
+-                    SendCharacterCreateResponse(session, CharacterGenerationVerificationResponse.NameInUse);
+-                    return;
+-                }
+-            });
++            // local mod: the early IsCharacterNameAvailable check that stood here answered a taken name with
++            // NameInUse and then fell through (its `return` left only the callback), so the name check below
++            // answered it a second time; a client read that second answer as the reply to its NEXT create
++            // (Hollowtide, 2026-10-11). The check below is the one that decides; one answer per create.
+ 
+             if ((characterCreateInfo.Heritage == HeritageGroup.Olthoi || characterCreateInfo.Heritage == HeritageGroup.OlthoiAcid) && PropertyManager.GetBool("olthoi_play_disabled").Item)
+             {
+@@ -319,9 +323,23 @@ public static void CharacterDelete(ClientMessage message, Session session)
              {
                  if (result)
                  {
@@ -1620,7 +1655,8 @@ index c3a62b28..f2c1b3ce 100644
 +                        // PlayerManager's caches; CheckCharactersForDeletion then finalizes the char
 +                        // (IsDeleted, cache eviction) and drops it from the list before we send it.
 +                        PlayerManager.HandlePlayerDelete(character.Id);
-+
+ 
+-                    PlayerManager.HandlePlayerDelete(character.Id);
 +                        session.CheckCharactersForDeletion();
 +
 +                        session.Network.EnqueueSend(new GameMessageCharacterList(session.Characters, session));
@@ -1628,8 +1664,7 @@ index c3a62b28..f2c1b3ce 100644
 +                    else
 +                    {
 +                        session.Network.EnqueueSend(new GameMessageCharacterList(session.Characters, session));
- 
--                    PlayerManager.HandlePlayerDelete(character.Id);
++
 +                        PlayerManager.HandlePlayerDelete(character.Id);
 +                    }
                  }

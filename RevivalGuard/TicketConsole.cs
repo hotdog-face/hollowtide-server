@@ -157,7 +157,11 @@ namespace RevivalGuard
             string id = (go || close) ? (parameters.Length > 1 ? parameters[1] : null) : parameters[0];
             if (string.IsNullOrWhiteSpace(id)) { Say(session, $"@ticket {verb} needs a ticket id."); return; }
 
-            var t = Load().FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
+            // "latest": the newest report a PLAYER filed (not the watchdog's auto ones), for the admin panel's
+            // "report go" button (2026-10-12: tonight's reports were each walked to by hand)
+            var t = id.Equals("latest", StringComparison.OrdinalIgnoreCase)
+                ? Load().FirstOrDefault(x => !string.Equals(x.Kind, "auto", StringComparison.OrdinalIgnoreCase))
+                : Load().FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
             if (t == null) { Say(session, $"No ticket {id}. @tickets lists them."); return; }
 
             if (go)

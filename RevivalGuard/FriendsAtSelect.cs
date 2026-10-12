@@ -68,7 +68,7 @@ namespace RevivalGuard
             if (!s_Capable.Contains(s.AccountId)) return;
             var seen = new HashSet<uint>();
             var mine = new HashSet<uint>(s.Characters.Select(c => c.Id));
-            var rows = new List<(string name, bool on)>();
+            var rows = new List<(string name, bool on, int lvl)>();
             foreach (var c in s.Characters.ToList())
             {
                 if (c.IsDeleted || c.CharacterPropertiesFriendList == null) continue;
@@ -77,14 +77,15 @@ namespace RevivalGuard
                     if (mine.Contains(f.FriendId) || !seen.Add(f.FriendId)) continue;
                     var p = PlayerManager.FindByGuid(new ObjectGuid(f.FriendId));
                     if (p == null) continue;
-                    rows.Add((p.Name, PlayerManager.GetOnlinePlayer(f.FriendId) != null));
+                    rows.Add((p.Name, PlayerManager.GetOnlinePlayer(f.FriendId) != null, p.Level ?? 0));
                 }
             }
             var sb = new StringBuilder("[");
             foreach (var r in rows.OrderByDescending(r => r.on).ThenBy(r => r.name, StringComparer.OrdinalIgnoreCase))
             {
                 if (sb.Length > 1) sb.Append(',');
-                sb.Append("{\"n\":\"").Append(Esc(r.name)).Append("\",\"o\":").Append(r.on ? "true" : "false").Append('}');
+                sb.Append("{\"n\":\"").Append(Esc(r.name)).Append("\",\"o\":").Append(r.on ? "true" : "false")
+                  .Append(",\"l\":").Append(r.lvl).Append('}');   // the level (owner, 2026-10-12: "show player level next to friends")
             }
             sb.Append(']');
             ModChannel.Send(s, "friends", sb.ToString());
@@ -99,7 +100,9 @@ namespace RevivalGuard
             s_NextTick = DateTime.UtcNow.AddSeconds(20);
             if (!(s_SessionMap?.GetValue(null) is Session[] map)) return;
             foreach (var s in map.ToArray())
-                if (s != null && s.Player == null && s.State == ACE.Server.Network.Enum.SessionState.AuthConnected)
+                // at select, and IN THE WORLD too since 2026-10-12: the Friends tab shows each friend's level, which
+                // retail's FriendsListUpdate does not carry
+                if (s != null && (s.Player != null || s.State == ACE.Server.Network.Enum.SessionState.AuthConnected))
                     try { Send(s); } catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] friends at select: {e.Message}"); }
         }
     }

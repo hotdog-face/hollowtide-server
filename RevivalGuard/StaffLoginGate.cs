@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
@@ -44,6 +45,15 @@ namespace RevivalGuard
         sealed class Fails { public readonly Queue<DateTime> At = new Queue<DateTime>(); public DateTime LockedUntil; }
         static readonly ConcurrentDictionary<string, Fails> s_Fails = new ConcurrentDictionary<string, Fails>();
 
+        /// <summary>The addresses locked out now, and until when (AdminOps @lockouts).</summary>
+        internal static List<(string key, DateTime until)> Lockouts() =>
+            s_Fails.Where(kv => kv.Value.LockedUntil > DateTime.UtcNow).Select(kv => (kv.Key, kv.Value.LockedUntil)).ToList();
+
+        /// <summary>Lift every lockout and forget the counted failures (AdminOps @lockouts clear). 2026-10-12: the
+        /// owner's own address was locked out by his client retrying a refused staff login, and only a shard
+        /// restart could clear it.</summary>
+        internal static int ClearLockouts() { int n = Lockouts().Count; s_Fails.Clear(); return n; }
+
         static System.Reflection.MethodBase TargetMethod() =>
             AccessTools.Method("ACE.Server.Network.Handlers.AuthenticationHandler:AccountSelectCallback");
 
@@ -71,7 +81,13 @@ namespace RevivalGuard
                 {
                     Mod.Log.Warn($"[RevivalGuard] staff login refused: account '{account.AccountName}' "
                         + $"(level {account.AccessLevel}) from {key}, outside the shard's network");
-                    Fail(key);
+                    // COUNTED ONLY WHEN THE PASSWORD WAS WRONG TOO (2026-10-12: the owner's client, with the RIGHT
+                    // password, retried a refused staff login every few seconds after a deploy had blanked the allow
+                    // list, and the "failures" locked his whole address out: his browser character as well). A right
+                    // password from the wrong place is still refused, with the same words as a wrong one.
+                    if (loginRequest != null && loginRequest.NetAuthType == NetAuthType.AccountPassword
+                        && !account.PasswordMatches(loginRequest.Password))
+                        Fail(key);
                     session.Terminate(SessionTerminationReason.NotAuthorizedPasswordMismatch,
                         new GameMessageBootAccount(BAD_PASSWORD));
                     return false;

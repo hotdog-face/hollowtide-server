@@ -42,6 +42,7 @@ namespace RevivalGuard
             // The ticket queue is chat commands, not Harmony patches, so it registers itself rather
             // than being found by PatchAll. See TicketConsole for why it is commands and not a panel.
             TicketConsole.Register();
+            AdminOps.Register();
             PresenceWatch.Register();
             SeasonalCalendar.Register();
             SeasonalDrops.Validate();

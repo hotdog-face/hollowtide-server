@@ -79,8 +79,6 @@ namespace RevivalGuard
     [HarmonyPatch(typeof(PlayerCommands), nameof(PlayerCommands.HandlePop))]
     public static class MercenaryPop
     {
-        const int PER_LINE = 12;
-
         static bool Prefix(Session session)
         {
             List<string> names;
@@ -91,9 +89,10 @@ namespace RevivalGuard
                 if (session == null) Console.WriteLine(line);
                 else session.Network?.EnqueueSend(new GameMessageSystemChat(line, ChatMessageType.Broadcast));
             }
-            Say($"Current world population: {names.Count:N0}");
-            for (int i = 0; i < names.Count; i += PER_LINE)
-                Say((i == 0 ? "Online: " : "  ") + string.Join(", ", names.Skip(i).Take(PER_LINE)));
+            // ONE LINE, the names after the count (owner 2026-10-14: "its still spamming"): every client hides the reply
+            // to its own automatic @pop by the "Current world population:" line, so names on a line of their own showed
+            // in chat each poll on any client older than 0.1.41. A name holds no digits, so the count still parses.
+            Say($"Current world population: {names.Count:N0}" + (names.Count > 0 ? " (" + string.Join(", ", names) + ")" : ""));
             return false;
         }
     }

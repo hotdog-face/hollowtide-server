@@ -58,6 +58,9 @@ namespace RevivalGuard
             SetHeritage.Register();
             QuestLog.Register();
             ModChannel.Register();
+            Mail.Register();
+            DiscordBridge.Register();
+            ItemLink.Register();
             AccountCreationCap.Register();
             LoginTokens.Register();
             LfgBoard.Register();

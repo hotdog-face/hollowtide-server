@@ -1,4 +1,5 @@
 using System.Reflection;
+using ACE.Common;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity;
 using ACE.Server.Factories;
@@ -45,6 +46,15 @@ namespace RevivalGuard
             [900200] = BAEL,
         };
 
+        /// <summary>How often a trophy drops, by trophy; not listed = every kill. Tusker Guards and Lugian
+        /// Warlords are common camp monsters, not bosses, and a trophy on every one of their corpses stopped
+        /// being a prize (owner 2026-10-13: "dropping too much to be a rarity"): one kill in 50. The Queens,
+        /// the Overlord and Bael'Zharon stay certain.</summary>
+        static readonly Dictionary<uint, double> s_Chance = new Dictionary<uint, double>
+        {
+            [TUSKER] = 0.02, [LUGIAN] = 0.02,
+        };
+
         static bool s_Hooked;
         static int s_Given;
 
@@ -73,6 +83,7 @@ namespace RevivalGuard
                 var trophy = corpse?.Inventory.Values.FirstOrDefault(i => i.WeenieClassId == wcid)
                              ?? __result?.FirstOrDefault(i => i.WeenieClassId == wcid);
                 bool listed = trophy != null;
+                if (!listed && s_Chance.TryGetValue(wcid, out var chance) && ThreadSafeRandom.Next(0.0f, 1.0f) >= chance) return;
                 if (trophy == null) trophy = WorldObjectFactory.CreateNewWorldObject(wcid);
                 if (trophy == null) { Mod.Log.Warn($"[RevivalGuard] TrophyMounts: weenie {wcid} missing; {__instance.Name} left no trophy"); return; }
                 trophy.SetProperty(PropertyString.LongDesc, Inscription(__instance.Name, player.Name, DateTime.UtcNow));

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using ACE.Entity.Enum;
 using ACE.Server.Command;
@@ -18,7 +19,7 @@ namespace RevivalGuard
     ///   * the login screen's "N online" (PopulationQuery),
     ///   * the world-event director's minimum-players check (EventDirector),
     ///   * the gameplay telemetry (Telemetry marks them "merc":1, and the reports skip them),
-    /// and makes /pop say how many sellswords are about, separately.
+    /// and /pop, which names everyone online but them.
     /// </summary>
     public static class Mercenaries
     {
@@ -72,15 +73,27 @@ namespace RevivalGuard
         }
     }
 
+    /// <summary>/pop: WHO is online, not only how many (owner, 2026-10-13: "make /pop list all players online for all
+    /// players. dont include the mercenaries in that"). Every player's name, sorted, a dozen to a line; the Hollow
+    /// Company is neither counted nor named.</summary>
     [HarmonyPatch(typeof(PlayerCommands), nameof(PlayerCommands.HandlePop))]
     public static class MercenaryPop
     {
+        const int PER_LINE = 12;
+
         static bool Prefix(Session session)
         {
-            int real = Mercenaries.RealOnline(), mercs = Mercenaries.MercsOnline();
-            string line = $"Current world population: {real:N0}"
-                        + (mercs > 0 ? $" (and {mercs} Hollow Company sellsword{(mercs == 1 ? "" : "s")}, who are not players)" : "");
-            session?.Network?.EnqueueSend(new GameMessageSystemChat(line, ChatMessageType.Broadcast));
+            List<string> names;
+            try { names = PlayerManager.GetAllOnline().Where(p => !Mercenaries.IsMerc(p)).Select(p => p.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(); }
+            catch { names = new List<string>(); }
+            void Say(string line)
+            {
+                if (session == null) Console.WriteLine(line);
+                else session.Network?.EnqueueSend(new GameMessageSystemChat(line, ChatMessageType.Broadcast));
+            }
+            Say($"Current world population: {names.Count:N0}");
+            for (int i = 0; i < names.Count; i += PER_LINE)
+                Say((i == 0 ? "Online: " : "  ") + string.Join(", ", names.Skip(i).Take(PER_LINE)));
             return false;
         }
     }

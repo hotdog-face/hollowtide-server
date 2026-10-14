@@ -40,6 +40,7 @@ DELETE FROM weenie_properties_string WHERE object_Id = 901630 AND type = 1; INSE
 DELETE FROM weenie_properties_string WHERE object_Id = 901630 AND type = 16; INSERT INTO weenie_properties_string (object_Id, type, value) VALUES (901630, 16, 'A heap of harvest pumpkins with a spark of magic in it. Use it and it will bless you for the Festival Season.');
 DELETE FROM weenie_properties_string WHERE object_Id = 901630 AND type = 5;
 DELETE FROM weenie_properties_d_i_d WHERE object_Id = 901630 AND type = 6;
+DELETE FROM weenie_properties_int WHERE object_Id = 901630 AND type IN (113, 188);
 DELETE FROM weenie_properties_d_i_d WHERE object_Id = 901630 AND type = 1; INSERT INTO weenie_properties_d_i_d (object_Id, type, value) VALUES (901630, 1, 33559753  /* 0x020014c9 */);
 DELETE FROM weenie_properties_d_i_d WHERE object_Id = 901630 AND type = 2; INSERT INTO weenie_properties_d_i_d (object_Id, type, value) VALUES (901630, 2, 150995073  /* 0x09000081 */);
 DELETE FROM weenie_properties_d_i_d WHERE object_Id = 901630 AND type = 3; INSERT INTO weenie_properties_d_i_d (object_Id, type, value) VALUES (901630, 3, 536871065  /* 0x20000099 */);

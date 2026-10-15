@@ -61,6 +61,7 @@ namespace RevivalGuard
             Mail.Register();
             DiscordBridge.Register();
             ItemLink.Register();
+            PerfStat.Register();
             AccountCreationCap.Register();
             LoginTokens.Register();
             LfgBoard.Register();

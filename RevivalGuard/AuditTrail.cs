@@ -240,6 +240,9 @@ namespace RevivalGuard
 
                 var who = session?.Player?.Name ?? (session != null ? $"account {session.Account}" : "console");
                 var args = parameters != null && parameters.Length > 0 ? " " + string.Join(" ", parameters) : "";
+                // a verb whose last word is a password (AdminOps @resetlogin) is recorded without it
+                if (string.Equals(verb, "resetlogin", StringComparison.OrdinalIgnoreCase) && parameters != null && parameters.Length > 0)
+                    args = (parameters.Length > 1 ? " " + string.Join(" ", parameters.Take(parameters.Length - 1)) : "") + " ***";
                 if (ok)
                     AuditTrail.Record("cmd", who, AuditTrail.WhereOf(session?.Player), $"@{verb}{args}");
                 else

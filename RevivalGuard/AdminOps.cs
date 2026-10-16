@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using ACE.Database;
+using ACE.Database.Models.Auth;
 using ACE.Entity.Enum;
 using ACE.Server.Command;
+using ACE.Server.Managers;
 using ACE.Server.Network;
 using ACE.Server.Network.GameMessages.Messages;
 
@@ -20,6 +23,15 @@ namespace RevivalGuard
     ///                       in that time, which is where the browser's missing content shows up first.
     ///   @lockouts [clear]   the addresses StaffLoginGate has locked out, and with "clear", lift them all. That
     ///                       night the owner's own address was locked out and only a restart cleared it.
+    ///   @resetlogin <character> <password>   RESCUE A LOST GUEST (owner, 2026-10-16: keep players coming back with their
+    ///                       in-game identity). A browser guest who lost their browser data cannot log in as their
+    ///                       account any more; this sets a new password on the account that owns the named character
+    ///                       (online or not), and says which account it was, so the player can log in as it from any
+    ///                       browser (?login=1) or the desktop app. Admin only; staff accounts are refused; the audit
+    ///                       trail gets the character and the account, never the password (AuditTrailCommands hides
+    ///                       the last word of this verb). The password is the LAST word (6 to 64 characters, no
+    ///                       spaces) so a character name with spaces still works. The admin panel's Server tab has
+    ///                       the button (it makes a password when the box is empty).
     /// (The third button, "report go", is @ticket go latest: TicketConsole.)
     /// </summary>
     static class AdminOps
@@ -33,6 +45,45 @@ namespace RevivalGuard
                 "New players of the last day: made, entered, stayed, kept, came back.", "[hours]");
             CommandManager.TryAddCommand(Lockouts, "lockouts", AccessLevel.Admin, CommandHandlerFlag.None,
                 "Addresses locked out of logins; 'clear' lifts them all.", "[clear]");
+            CommandManager.TryAddCommand(ResetLogin, "resetlogin", AccessLevel.Admin, CommandHandlerFlag.None,
+                "Set a new password on the account that owns a character (a player who lost their browser data).",
+                "<character name> <new password>");
+        }
+
+        /// <summary>The answer starts with this so the admin panel can pick it out of the chat.</summary>
+        internal const string RESCUE_REPLY = "[Rescue] ";
+
+        static void ResetLogin(Session session, params string[] p)
+        {
+            string who = session?.Player?.Name ?? "the console";
+            try
+            {
+                if (p == null || p.Length < 2) { Say(session, RESCUE_REPLY + "Usage: @resetlogin <character name> <new password>"); return; }
+                string pw = p[p.Length - 1];
+                string name = string.Join(" ", p.Take(p.Length - 1)).Trim().TrimStart('+');
+                if (pw.Length < 6 || pw.Length > 64) { Say(session, RESCUE_REPLY + "The password must be 6 to 64 characters, no spaces."); return; }
+                var found = PlayerManager.FindByName(name);
+                if (found == null) { Say(session, RESCUE_REPLY + $"No character is named '{name}'."); return; }
+                uint accountId = found.Account?.AccountId ?? 0;
+                var account = accountId != 0 ? DatabaseManager.Authentication.GetAccountById(accountId) : null;
+                if (account == null) { Say(session, RESCUE_REPLY + $"{found.Name}'s account could not be read."); return; }
+                if (account.AccessLevel > 0)
+                {
+                    Say(session, RESCUE_REPLY + $"{found.Name} belongs to a staff account; its password is not reset here.");
+                    AuditTrail.Record("resetlogin", who, "console", $"refused: {found.Name} is on staff account {account.AccountName}");
+                    return;
+                }
+                account.SetPassword(pw);
+                DatabaseManager.Authentication.UpdateAccount(account);
+                AuditTrail.Record("resetlogin", who, "console", $"new password set on account {account.AccountName} (character {found.Name})");
+                Mod.Log.Info($"[RevivalGuard] AdminOps: {who} reset the password of account '{account.AccountName}' (character {found.Name})");
+                Say(session, RESCUE_REPLY + $"OK {found.Name}'s account is \"{account.AccountName}\"; the new password is set.");
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Error("[RevivalGuard] AdminOps: resetlogin: " + e.Message);
+                Say(session, RESCUE_REPLY + "The password could not be reset: " + e.Message);
+            }
         }
 
         static void Say(Session s, string text)

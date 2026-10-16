@@ -48,7 +48,7 @@ namespace RevivalGuard
 
         static Config s_Cfg;
         static HttpClient s_Http;
-        static string s_BotId, s_LastId, s_GuildId;
+        static string s_BotId, s_LastId, s_GuildId, s_OwnerId;
         // THE SERVER NICKNAME, not the account name (owner 2026-10-14: the bridge showed his account name in game, not
         // his nickname on the server). A REST message carries no member, so each author's nickname is looked up once
         // and kept 10 minutes.
@@ -132,6 +132,14 @@ namespace RevivalGuard
                         using var doc = JsonDocument.Parse(await ch.Content.ReadAsStringAsync());
                         if (doc.RootElement.TryGetProperty("guild_id", out var gid)) s_GuildId = gid.GetString();
                     }
+                // THE SERVER'S OWNER is the one Discord member allowed to appear under a protected name (NameGuard)
+                if (s_GuildId != null)
+                    using (var gr = await s_Http.GetAsync($"{API}/guilds/{s_GuildId}", stop))
+                        if (gr.IsSuccessStatusCode)
+                        {
+                            using var doc = JsonDocument.Parse(await gr.Content.ReadAsStringAsync());
+                            if (doc.RootElement.TryGetProperty("owner_id", out var oid)) s_OwnerId = oid.GetString();
+                        }
                 // start from the channel's newest message, so a restart never replays the backlog into the game
                 using (var last = await s_Http.GetAsync($"{API}/channels/{s_Cfg.channelId}/messages?limit=1", stop))
                 {
@@ -189,6 +197,13 @@ namespace RevivalGuard
                 string text = m.TryGetProperty("content", out var c) ? c.GetString() ?? "" : "";
                 if (m.TryGetProperty("attachments", out var at) && at.GetArrayLength() > 0) text = (text + " [picture]").Trim();
                 if (!bot && aid != s_BotId) who = await Nick(aid, stop) ?? who;
+                // NO ONE BUT THE OWNER UNDER THE OWNER'S NAME (owner 2026-10-16, impersonation): a nickname that looks
+                // like a protected name falls back to the Discord username, and to "Discord user" if that does too
+                if (!bot && aid != s_OwnerId && NameGuard.IsLookalike(who))
+                {
+                    string un = author.TryGetProperty("username", out var u) ? u.GetString() : null;
+                    who = !string.IsNullOrEmpty(un) && !NameGuard.IsLookalike(un) ? un : "Discord user";
+                }
                 fresh.Add((id, bot || aid == s_BotId ? null : who, text));
             }
             fresh.Sort((a, b2) => ulong.Parse(a.id).CompareTo(ulong.Parse(b2.id)));   // Discord answers newest first
@@ -253,6 +268,7 @@ namespace RevivalGuard
         static void SayInGame(string who, string text)
         {
             string sender = who + " (Discord)";
+            ChatLog.Write("Discord", who, text);
             WorldManager.EnqueueAction(new ActionEventDelegate(() =>
             {
                 try

@@ -40,6 +40,8 @@ namespace RevivalGuard
             (2624, 5000), (2623, 1000), (2622, 500), (2621, 100),
         };
 
+        internal static bool IsNote(uint wcid) { foreach (var n in NOTES) if (n.Wcid == wcid) return true; return false; }
+
         /// <summary>Set by the validation prefix; only a purchase pays with notes.</summary>
         [ThreadStatic] internal static bool t_InBuy;
 
@@ -138,15 +140,33 @@ namespace RevivalGuard
     [HarmonyPatch(typeof(Vendor), nameof(Vendor.BuyItems_ValidateTransaction))]
     static class NoteChange_Validate
     {
-        static void Prefix(Vendor __instance, Player player, out long __state)
+        static void Prefix(Vendor __instance, List<ACE.Server.Entity.ItemProfile> itemProfiles, Player player, out long __state)
         {
             __state = 0;
             if (__instance.AlternateCurrency != null || player == null) return;
+            // BUYING TRADE NOTES IS PAID IN COIN ONLY (player Lou Sassel, ticket 261016-0042: "i purchased 9 mmd notes but it
+            // kept giving me different value notes and only 2 mmds"). Buying notes is how coin becomes notes; paying for them
+            // with notes broke the MMDs just bought to cover the next one and handed back smaller notes as change, a circle.
+            if (BuysNotes(__instance, itemProfiles)) return;
             long notes = NoteChange.NoteValue(player);
             if (notes <= 0) return;
             __state = notes;
             player.CoinValue = (int)Math.Min(int.MaxValue, (player.CoinValue ?? 0) + notes);
             NoteChange.t_InBuy = true;
+        }
+
+        static bool BuysNotes(Vendor v, List<ACE.Server.Entity.ItemProfile> items)
+        {
+            if (items == null) return false;
+            foreach (var ip in items)
+            {
+                var g = new ACE.Entity.ObjectGuid(ip.ObjectGuid);
+                WorldObject wo = null;
+                if (!v.DefaultItemsForSale.TryGetValue(g, out wo)) v.UniqueItemsForSale.TryGetValue(g, out wo);
+                uint wcid = wo?.WeenieClassId ?? ip.WeenieClassId;
+                if (NoteChange.IsNote(wcid)) return true;
+            }
+            return false;
         }
 
         static void Finalizer(Player player, long __state)

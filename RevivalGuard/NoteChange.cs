@@ -44,20 +44,29 @@ namespace RevivalGuard
 
         /// <summary>Set by the validation prefix; only a purchase pays with notes.</summary>
         [ThreadStatic] internal static bool t_InBuy;
+        /// <summary>While buying trade notes: only notes worth LESS than the cheapest note bought may pay (0: no cap).</summary>
+        [ThreadStatic] internal static int t_NoteCap;
+        /// <summary>Change owed by the payment, handed over only after ACE has put the goods in the pack
+        /// (NoteChange_AfterGoods): paid first, it took the free slot ACE had validated for them and the goods were
+        /// destroyed (currency suite 2026-10-17, "couldn't add ... after validation").</summary>
+        [ThreadStatic] internal static long t_Change;
 
         static int CountOf(Player p, uint wcid) => p.GetInventoryItemsOfWCID(wcid).Sum(s => s.StackSize ?? 1);
 
         internal static long NoteValue(Player p)
         {
             long v = 0;
-            foreach (var n in NOTES) v += (long)CountOf(p, n.Wcid) * n.Value;
+            foreach (var n in NOTES) if (t_NoteCap <= 0 || n.Value < t_NoteCap) v += (long)CountOf(p, n.Wcid) * n.Value;
             return v;
         }
+
+        internal static int NoteFace(uint wcid) { foreach (var n in NOTES) if (n.Wcid == wcid) return n.Value; return 0; }
 
         /// <summary>Which notes to break to cover `need`: (wcid, count) and their total.</summary>
         static List<(uint Wcid, int Value, int Count)> Choose(Player p, long need, out long total)
         {
-            var held = NOTES.Select(n => (n.Wcid, n.Value, Held: CountOf(p, n.Wcid))).Where(n => n.Held > 0).ToList();
+            var held = NOTES.Where(n => t_NoteCap <= 0 || n.Value < t_NoteCap)
+                .Select(n => (n.Wcid, n.Value, Held: CountOf(p, n.Wcid))).Where(n => n.Held > 0).ToList();
             var take = new Dictionary<uint, int>();
             total = 0;
             // One note that covers it all, the smallest such: the least change back.
@@ -85,7 +94,7 @@ namespace RevivalGuard
         }
 
         /// <summary>`amount` back as notes, largest first, and the rest under 100 as coin.</summary>
-        static void GiveChange(Player p, long amount)
+        internal static void GiveChange(Player p, long amount)
         {
             foreach (var n in NOTES)
             {
@@ -107,7 +116,11 @@ namespace RevivalGuard
             wo.Location = new ACE.Entity.Position(p.Location);
             if (LandblockManager.AddObject(wo))
                 p.Session.Network.EnqueueSend(new GameMessageSystemChat($"Your pack is full, so {wo.Name} was set at your feet.", ChatMessageType.Broadcast));
-            else wo.Destroy();
+            else
+            {   // nowhere to put it at all: say so loudly, it is the player's money (currency suite 2026-10-17)
+                Mod.Log.Error($"[RevivalGuard] NoteChange: {count} x {wo.Name} for {p.Name} could not go in the pack or at the feet at {p.Location?.ToLOCString()}; destroyed");
+                wo.Destroy();
+            }
         }
 
         static string Named(int value) => $"{value:N0}";
@@ -124,7 +137,7 @@ namespace RevivalGuard
             if (coins > 0) p.TryConsumeFromInventoryWithNetworking(PYREAL, (int)coins);
             foreach (var n in plan) p.TryConsumeFromInventoryWithNetworking(n.Wcid, n.Count);
             long change = total - shortfall;
-            if (change > 0) GiveChange(p, change);
+            if (change > 0) t_Change += change;   // handed over after the goods (NoteChange_AfterGoods)
             var broke = string.Join(", ", plan.Select(n => n.Count > 1 ? $"{n.Count} x {Named(n.Value)}" : Named(n.Value)));
             p.Session.Network.EnqueueSend(new GameMessageSystemChat(
                 $"You paid with trade notes ({broke})" + (change > 0 ? $"; {change:N0} in change went to your pack." : "."),
@@ -144,37 +157,60 @@ namespace RevivalGuard
         {
             __state = 0;
             if (__instance.AlternateCurrency != null || player == null) return;
-            // BUYING TRADE NOTES IS PAID IN COIN ONLY (player Lou Sassel, ticket 261016-0042: "i purchased 9 mmd notes but it
-            // kept giving me different value notes and only 2 mmds"). Buying notes is how coin becomes notes; paying for them
-            // with notes broke the MMDs just bought to cover the next one and handed back smaller notes as change, a circle.
-            if (BuysNotes(__instance, itemProfiles)) return;
+            // BUYING TRADE NOTES IS PAID IN COIN AND SMALLER NOTES (player Lou Sassel, ticket 261016-0042: "i purchased 9 mmd
+            // notes but it kept giving me different value notes and only 2 mmds"). Paying for MMDs with MMDs broke the ones just
+            // bought and handed back smaller notes, a circle; coin only (0.1.54's fix) then refused a player whose money is in
+            // notes (261017-0007: "I cant purchase mmds"). Only notes worth less than the cheapest note bought may pay, so
+            // small notes become big ones and the change, smaller than one broken note, is smaller notes still.
+            NoteChange.t_NoteCap = SmallestNoteBought(__instance, itemProfiles);
             long notes = NoteChange.NoteValue(player);
-            if (notes <= 0) return;
+            if (notes <= 0) { NoteChange.t_NoteCap = 0; return; }
             __state = notes;
             player.CoinValue = (int)Math.Min(int.MaxValue, (player.CoinValue ?? 0) + notes);
             NoteChange.t_InBuy = true;
         }
 
-        static bool BuysNotes(Vendor v, List<ACE.Server.Entity.ItemProfile> items)
+        /// <summary>The face value of the cheapest trade note in the purchase, or 0 when it buys none.</summary>
+        static int SmallestNoteBought(Vendor v, List<ACE.Server.Entity.ItemProfile> items)
         {
-            if (items == null) return false;
+            if (items == null) return 0;
+            int min = 0;
             foreach (var ip in items)
             {
                 var g = new ACE.Entity.ObjectGuid(ip.ObjectGuid);
                 WorldObject wo = null;
                 if (!v.DefaultItemsForSale.TryGetValue(g, out wo)) v.UniqueItemsForSale.TryGetValue(g, out wo);
-                uint wcid = wo?.WeenieClassId ?? ip.WeenieClassId;
-                if (NoteChange.IsNote(wcid)) return true;
+                int face = NoteChange.NoteFace(wo?.WeenieClassId ?? ip.WeenieClassId);
+                if (face > 0 && (min == 0 || face < min)) min = face;
             }
-            return false;
+            return min;
         }
 
-        static void Finalizer(Player player, long __state)
+        static void Finalizer(Player player, long __state, bool __result)
         {
+            // A NOTE PURCHASE REFUSED BY THE CAP SAID NOTHING (261017-0007, "I cant purchase mmds"): the client counts every
+            // note, so it sends the buy and ACE refuses it silently. Tell the player why.
+            if (!__result && NoteChange.t_NoteCap > 0 && player?.Session != null)
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "Trade notes are bought with coin or with smaller notes, never with notes of the same kind or larger.", ChatMessageType.Broadcast));
+            NoteChange.t_NoteCap = 0;
             if (__state == 0) return;
             NoteChange.t_InBuy = false;
             NoteChange.Recount(player);   // the true coin total, sent to the client
         }
+    }
+
+    /// <summary>The change from a note payment goes into the pack AFTER the goods, which ACE places in the slots it validated.</summary>
+    [HarmonyPatch(typeof(Player), nameof(Player.FinalizeBuyTransaction))]
+    static class NoteChange_AfterGoods
+    {
+        static void Postfix(Player __instance)
+        {
+            long change = NoteChange.t_Change;
+            NoteChange.t_Change = 0;
+            if (change > 0 && __instance != null) NoteChange.GiveChange(__instance, change);
+        }
+        static void Finalizer() => NoteChange.t_Change = 0;   // a throw drops nothing extra: the payment already ran
     }
 
     /// <summary>A purchase's payment: coin first, then notes with change.</summary>

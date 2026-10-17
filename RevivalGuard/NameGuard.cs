@@ -36,6 +36,9 @@ namespace RevivalGuard
         const string FILE = "protected-names.json";
         static string[] s_Folded;
 
+        /// <summary>Read the file now, at mod start, so the log says at once how many names are protected.</summary>
+        internal static void LoadNow() => Folded();
+
         static string[] Folded()
         {
             if (s_Folded != null) return s_Folded;
@@ -49,8 +52,12 @@ namespace RevivalGuard
                 if (File.Exists(path)) names = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(path)) ?? names;
                 else Mod.Log.Warn($"[RevivalGuard] NameGuard: no {FILE}; no names are protected");
             }
-            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] NameGuard: {FILE}: {e.Message}; protecting the default"); }
+            // A BROKEN FILE PROTECTS NOTHING (audit 2026-10-16): say so plainly, as an error, so it is not mistaken for
+            // working protection. There is no built-in default: no name may be in the source.
+            catch (Exception e) { Mod.Log.Error($"[RevivalGuard] NameGuard: {FILE} could not be read ({e.Message}); NO names are protected until it is fixed"); }
             s_Folded = names.Select(Fold).Where(f => f.Length >= 4).Distinct().ToArray();
+            if (s_Folded.Length == 0) Mod.Log.Error($"[RevivalGuard] NameGuard: no names are protected");
+            else Mod.Log.Info($"[RevivalGuard] NameGuard: protecting {s_Folded.Length} name(s)");
             return s_Folded;
         }
 

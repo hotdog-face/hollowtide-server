@@ -300,7 +300,7 @@ namespace RevivalGuard
                         Mod.Log.Info($"[RevivalGuard] PkShrines: shrine boon for {__instance.Name} ({n} held): creature XP {before} -> {amount}");
                     }
                 }
-                catch { }
+                catch (System.Exception e) { Mod.Log.Warn($"[RevivalGuard] PkShrines: shrine boon for {__instance?.Name} failed, base XP given: {e.Message}"); }
             }
         }
 

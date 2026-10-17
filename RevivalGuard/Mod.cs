@@ -80,6 +80,7 @@ namespace RevivalGuard
             PkBoard.Register();
             try { Log.Info($"[RevivalGuard] PK expansion: renown {(PkRenown.On ? "ON" : "off")}, bounties {(PkBounty.On ? "ON" : "off")}, shrines {(PkShrines.On ? "ON" : "off")}"); }
             catch (Exception e) { Log.Warn($"[RevivalGuard] PK expansion: properties not readable yet ({e.Message})"); }
+            try { NameGuard.LoadNow(); } catch (Exception e) { Log.Error($"[RevivalGuard] NameGuard: {e.Message}"); }   // says at start how many names are protected
             Log.Info("[RevivalGuard] loaded: movement, vendor, fellowship, flood and chat guards, "
                 + "the ticket desk (@tickets / @ticket), presence (@who / @stuck), the seasonal "
                 + "calendar (@festival) and its seasonal drops (SeasonalDrops), the teleport watchdog and completion rescue, chess "

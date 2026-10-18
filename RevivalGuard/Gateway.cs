@@ -44,6 +44,9 @@ namespace RevivalGuard
         /// local, so nothing trusts it; shared, so the per-address limits fall on all such sessions together.</summary>
         static readonly IPAddress UNKNOWN = IPAddress.Parse("192.0.2.1");
 
+        /// <summary>Is this the "gateway could not say" marker?</summary>
+        internal static bool IsUnknown(IPAddress a) => a != null && a.Equals(UNKNOWN);
+
         /// <summary>The address to judge this endpoint by.</summary>
         internal static IPAddress RealAddress(IPEndPoint ep)
         {

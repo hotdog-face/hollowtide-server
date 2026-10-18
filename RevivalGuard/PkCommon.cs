@@ -140,8 +140,16 @@ namespace RevivalGuard
         {
             try
             {
-                var x = a.Session?.EndPointC2S?.Address; var y = b.Session?.EndPointC2S?.Address;
-                return x != null && y != null && x.Equals(y);
+                // THE PLAYER'S OWN ADDRESS, NOT THE GATEWAY'S (owner 2026-10-18: the PK board stayed empty). Every browser
+                // player reaches ACE from the WebSocket gateway on this machine's loopback, so comparing the endpoint called
+                // two strangers in browsers "two characters on one connection": 108 of 161 live PK kills were thrown out
+                // for it. Gateway.RealAddress asks the gateway who is behind each port; one it could not answer for (the
+                // unknown marker) never counts as the same connection.
+                var x = Gateway.RealAddress(a.Session?.EndPointC2S); var y = Gateway.RealAddress(b.Session?.EndPointC2S);
+                if (x == null || y == null || Gateway.IsUnknown(x) || Gateway.IsUnknown(y)) return false;
+                if (x.IsIPv4MappedToIPv6) x = x.MapToIPv4();
+                if (y.IsIPv4MappedToIPv6) y = y.MapToIPv4();
+                return x.Equals(y);
             }
             catch { return false; }
         }

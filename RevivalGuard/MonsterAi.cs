@@ -500,6 +500,10 @@ namespace RevivalGuard
 
         static readonly float[] s_TryAngles = { 0f, 35f, -35f, 70f, -70f };
 
+        /// <summary>Pack spread's widest slot either side of the leader's bearing (degrees): the far side of
+        /// the target stays open, so a spread never boxes a player in.</summary>
+        const float SPREAD_ARC = 100f;
+
         /// <summary>Runs directly away from the target (blended towards home for a flee, and whenever the
         /// creature is past half its leash), trying five headings for one that lands in a cell.</summary>
         static bool StepAway(Creature c, St st, Creature target, float metres, Mode mode, double seconds, Cfg cfg, bool towardHome)
@@ -619,7 +623,11 @@ namespace RevivalGuard
             // a mob of more than 8 has no free side to go to: ACE's straight chase (live 2026-09-28, 21 chasers
             // round one bot, re-flanked every 2.5 s and never swung)
             if (n < 2 || n > 8 || !crowded || lower == 0) return false;
-            float spacing = Math.Clamp(360f / n, 40f, 90f);
+            // THE SLOTS STAY IN FRONT: within SPREAD_ARC of the leader's bearing, so the far side of the target is
+            // left open. 360/N round the whole target closed a ring on N >= 4, and a player in a ring of Tusker
+            // Guards (three at 2.9 m, report 261019-0037) cannot step out: creatures are solid to players.
+            int sideSlots = n / 2;   // the most slots on one side (slot k sits at ((k + 1) / 2) x spacing)
+            float spacing = Math.Min(Math.Clamp(360f / n, 40f, 90f), SPREAD_ARC / sideSlots);
             float offset = ((lower + 1) / 2) * spacing * ((lower & 1) == 1 ? 1f : -1f);
             float want = leaderBearing + offset;
             if (Math.Abs(AngleDiff(myBearing, want)) < 25f) return false;

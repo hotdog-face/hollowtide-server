@@ -46,6 +46,9 @@ namespace RevivalGuard
         [ThreadStatic] internal static bool t_InBuy;
         /// <summary>While buying trade notes: only notes worth LESS than the cheapest note bought may pay (0: no cap).</summary>
         [ThreadStatic] internal static int t_NoteCap;
+        /// <summary>This purchase is refused only BECAUSE of the cap: coin and every note would pay, coin and the notes
+        /// allowed would not. The refusal line says so only then.</summary>
+        [ThreadStatic] internal static bool t_CapBlocks;
         /// <summary>Change owed by the payment, handed over only after ACE has put the goods in the pack
         /// (NoteChange_AfterGoods): paid first, it took the free slot ACE had validated for them and the goods were
         /// destroyed (currency suite 2026-10-17, "couldn't add ... after validation").</summary>
@@ -53,10 +56,13 @@ namespace RevivalGuard
 
         static int CountOf(Player p, uint wcid) => p.GetInventoryItemsOfWCID(wcid).Sum(s => s.StackSize ?? 1);
 
-        internal static long NoteValue(Player p)
+        internal static long NoteValue(Player p) => NoteValue(p, t_NoteCap);
+
+        /// <summary>The face value of the notes carried that are worth less than `cap` (every note when cap is 0).</summary>
+        internal static long NoteValue(Player p, int cap)
         {
             long v = 0;
-            foreach (var n in NOTES) if (t_NoteCap <= 0 || n.Value < t_NoteCap) v += (long)CountOf(p, n.Wcid) * n.Value;
+            foreach (var n in NOTES) if (cap <= 0 || n.Value < cap) v += (long)CountOf(p, n.Wcid) * n.Value;
             return v;
         }
 
@@ -164,10 +170,31 @@ namespace RevivalGuard
             // small notes become big ones and the change, smaller than one broken note, is smaller notes still.
             NoteChange.t_NoteCap = SmallestNoteBought(__instance, itemProfiles);
             long notes = NoteChange.NoteValue(player);
+            NoteChange.t_CapBlocks = false;
+            if (NoteChange.t_NoteCap > 0)
+            {
+                long coin = player.CoinValue ?? 0, price = Price(__instance, itemProfiles);
+                NoteChange.t_CapBlocks = coin + notes < price && coin + NoteChange.NoteValue(player, 0) >= price;
+            }
             if (notes <= 0) { NoteChange.t_NoteCap = 0; return; }
             __state = notes;
             player.CoinValue = (int)Math.Min(int.MaxValue, (player.CoinValue ?? 0) + notes);
             NoteChange.t_InBuy = true;
+        }
+
+        /// <summary>What ACE will charge for the purchase: GetSellCost of each stock row times its amount (a note's
+        /// rate is ACE's flat 1.15 and its face a multiple of 100, so per unit and per stack agree).</summary>
+        static long Price(Vendor v, List<ACE.Server.Entity.ItemProfile> items)
+        {
+            long total = 0;
+            if (items == null) return 0;
+            foreach (var ip in items)
+            {
+                var g = new ACE.Entity.ObjectGuid(ip.ObjectGuid);
+                if (v.DefaultItemsForSale.TryGetValue(g, out var wo)) total += (long)v.GetSellCost(wo) * Math.Max(1, ip.Amount);
+                else if (v.UniqueItemsForSale.TryGetValue(g, out wo)) total += v.GetSellCost(wo);
+            }
+            return total;
         }
 
         /// <summary>The face value of the cheapest trade note in the purchase, or 0 when it buys none.</summary>
@@ -189,11 +216,13 @@ namespace RevivalGuard
         static void Finalizer(Player player, long __state, bool __result)
         {
             // A NOTE PURCHASE REFUSED BY THE CAP SAID NOTHING (261017-0007, "I cant purchase mmds"): the client counts every
-            // note, so it sends the buy and ACE refuses it silently. Tell the player why.
-            if (!__result && NoteChange.t_NoteCap > 0 && player?.Session != null)
+            // note, so it sends the buy and ACE refuses it silently. Tell the player why, but only when the cap is why: a note
+            // buy refused for pack space or plain lack of money (an auto-conversion over a full pack) got this line too.
+            if (!__result && NoteChange.t_CapBlocks && player?.Session != null)
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat(
                     "Trade notes are bought with coin or with smaller notes, never with notes of the same kind or larger.", ChatMessageType.Broadcast));
             NoteChange.t_NoteCap = 0;
+            NoteChange.t_CapBlocks = false;
             if (__state == 0) return;
             NoteChange.t_InBuy = false;
             NoteChange.Recount(player);   // the true coin total, sent to the client

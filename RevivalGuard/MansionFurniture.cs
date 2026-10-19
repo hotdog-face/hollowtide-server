@@ -622,10 +622,12 @@ namespace RevivalGuard
         [HarmonyPatch(typeof(Player), nameof(Player.HandleActionGiveObjectRequest))]
         static class GiveTo
         {
-            static bool Prefix(Player __instance, uint targetGuid, uint itemGuid, int amount)
+            [HarmonyPriority(Priority.Low)]     // after ItemLock's refusal of a locked item (HouseRentNotes' rule)
+            static bool Prefix(Player __instance, uint targetGuid, uint itemGuid, int amount, bool __runOriginal)
             {
                 try
                 {
+                    if (!__runOriginal) return false;   // an earlier prefix (ItemLockGive) already refused it
                     var d = DisplayAt(__instance, targetGuid, out var target);
                     if (d == null) return true;
                     __instance.CreateMoveToChain(target, ok =>

@@ -163,6 +163,10 @@ namespace RevivalGuard
             long now = (long)ACE.Common.Time.GetUnixTime();
             if (s_LastMake.TryGetValue(p.Guid.Full, out var last) && now - last < MAKE_GAP_SECONDS)
             { Say(p, "You have made one very recently. Wait a minute and try again."); return; }
+            // One in the pack at a time (hang it, then make the next): no endless free copies to give away or stash.
+            var flag = wcid == BOARD_WCID ? BOARD : PORTAL;
+            if (p.GetInventoryItemsOfWCID(wcid).Any(o => o.GetProperty(flag) == true))
+            { Say(p, $"You already carry an {(wcid == BOARD_WCID ? "Allegiance Hall Board" : "Allegiance Hall Portal")}. Hang that one first."); return; }
 
             var wo = WorldObjectFactory.CreateNewWorldObject(wcid);
             if (wo == null) { Say(p, "That item could not be made."); return; }

@@ -99,12 +99,23 @@ namespace RevivalGuard
                     Tell(p, "You are one of Hollowtide's founders, and gifts are waiting for you: make room for two items in your main pack and log in again.");
                     return;
                 }
+                // Both made and checked (slots AND burden) before either goes in: a shirt given and a banner refused
+                // left the account unstamped, so the shirt came again at every login.
+                var gifts = new List<WorldObject>();
                 foreach (var wcid in new[] { SHIRT, BANNER })
                 {
                     var wo = WorldObjectFactory.CreateNewWorldObject(wcid);
-                    if (wo == null) { Mod.Log.Warn($"[RevivalGuard] founders: no weenie {wcid} (tools/gpubox-ace/founders.sql not applied?)"); return; }
-                    if (!p.TryCreateInInventoryWithNetworking(wo)) { wo.Destroy(); Tell(p, "Your founder's gifts could not be placed in your pack; they will be offered again next time you log in."); return; }
+                    if (wo == null) { gifts.ForEach(g => g.Destroy()); Mod.Log.Warn($"[RevivalGuard] founders: no weenie {wcid} (tools/gpubox-ace/founders.sql not applied?)"); return; }
+                    gifts.Add(wo);
                 }
+                if (!p.CanAddToInventory(gifts))
+                {
+                    gifts.ForEach(g => g.Destroy());
+                    Tell(p, "Your founder's gifts could not be placed in your pack (too full or too heavy); they will be offered again next time you log in.");
+                    return;
+                }
+                foreach (var wo in gifts)
+                    if (!p.TryCreateInInventoryWithNetworking(wo)) { wo.Destroy(); Mod.Log.Warn($"[RevivalGuard] founders: {wo.Name} for {p.Name} refused after the pack check; not offered again"); }
                 p.AddTitle(TITLE, setAsDisplayTitle: true);
                 lock (s_Lock) Stamp(acct);
                 Tell(p, "Thank you for being here from the start. You are one of Hollowtide's founders: the Founder's Shirt, the Founder's Banner and the title Founder are yours for life. No one who arrives after October can ever have them.");

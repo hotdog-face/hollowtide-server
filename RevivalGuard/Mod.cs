@@ -92,7 +92,7 @@ namespace RevivalGuard
                 + "gear at any level and every rare (PkDeathLoot), and keyrings that open their chests and "
                 + "spend a key per unlock (Keyrings), the audit trail on disk and in game (@audit), and character "
                 + "snapshots with a confirmed restore (@snapshot), and bonded items into an offline "
-                + "character's pack (@bestow), and the looking-for-group board (@lfgboard), and locked items (@lockitem / @unlockitem), and cell furniture taken out of the world (HiddenCellStatics), and no house purchase waits for dev accounts (DevHousing), and the allegiance hall: bank, hall board, hall portal, lawn corpses, kill board and raid alarm (/mansion), and ragdoll corpses where the body lands (@ragdollcorpse), and the login screen's population count on the login port (PopulationQuery)");
+                + "character's pack (@bestow), and the looking-for-group board (@lfgboard), and locked items (@lockitem / @unlockitem), and cell furniture taken out of the world (HiddenCellStatics), and no house purchase waits for dev accounts (DevHousing), and the allegiance hall: bank, hall board, hall portal, lawn corpses, kill board and raid alarm (/mansion), and ragdoll corpses where the body lands (@ragdollcorpse), and the login screen's population count on the login port (PopulationQuery), and combat pets that only pick targets in line of sight (PetLos, pet_los_targets), and dyes that take only on clothing whose art has the colour (DyeArt, dye_by_art), and hovering NPCs reported lower than their physics (HoverDrop, hover_drop), and Azimar greeting players by name, level, hour and visit, with paced blessings (AzimarVoice, azimar_voice)");
         }
 
         public void Dispose()
@@ -171,6 +171,18 @@ namespace RevivalGuard
             st.TeleportedAt = DateTime.UtcNow;
         }
 
+        const double SILENCE_MAX = 30.0;   // seconds of silence a report can be credited with as plain running
+
+        /// <summary>Whether plain running (BASE_RUN x rate, no SLACK) for the real seconds since the baseline, at most
+        /// SILENCE_MAX, covers <paramref name="moved"/>. A teleport restarts the count (its destination is the baseline).</summary>
+        internal static bool SilenceAllows(State st, DateTime now, float rate, float moved, out double silent, out float runAllowed)
+        {
+            var since = st.TeleportedAt > st.At ? st.TeleportedAt : st.At;
+            silent = Math.Max(0.0, (now - since).TotalSeconds);
+            runAllowed = (float)(BASE_RUN * rate * Math.Min(silent, SILENCE_MAX));
+            return silent > MAX_DT && moved <= runAllowed;
+        }
+
         static bool Prefix(Player __instance, ACE.Entity.Position newPosition, bool forceUpdate, ref bool __result)
         {
             var p = __instance;
@@ -194,6 +206,22 @@ namespace RevivalGuard
             st.Budget = Math.Min(burst, st.Budget + (float)(speed * dt));
             float allowed = st.Budget + MARGIN;
             float moved = st.Pos.Distance2D(newPosition);
+
+            // A LONG HONEST SILENCE. The client holds its reports while a room's cell is unresolved (pending
+            // room, "outside every room", after a correction), and MAX_DT credits such a silence with 3 s at
+            // most, so the report that ends it looked like a speed hack: Mystic Warrior 2026-10-19 12:17 UTC,
+            // gaps of 17-22 s, 6.6-8.7 m/s against his 10.8 m/s run speed, snapped back five times
+            // (docs/findings/FINDINGS-raise-and-snapback.md). So a report is also accepted if it is within
+            // plain running (no SLACK, no MARGIN) for the real time since the baseline, up to SILENCE_MAX.
+            // A lag switch gains nothing: this is exactly what running the whole silence would have covered.
+            if (moved > allowed && SilenceAllows(st, now, rate, moved, out double silent, out float runAllowed))
+            {
+                Mod.Log.Info($"[RevivalGuard] movement silence: {p.Name} (0x{p.Guid.Full:X8}) moved {moved:F1} m after {silent:F1} s without a report " +
+                             $"(run allowance {runAllowed:F1} m at run rate {rate:F2}, budget {allowed:F1} m); accepted");
+                st.Pos = new ACE.Entity.Position(newPosition);
+                st.At = now;
+                return true;
+            }
 
             if (moved > allowed)
             {

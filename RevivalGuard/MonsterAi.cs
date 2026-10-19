@@ -756,7 +756,7 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] MonsterAi: switches not registered with @modify* ({e.Message}); they are still read"); }
         }
 
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
+        internal static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
         {
             var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
                 .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)

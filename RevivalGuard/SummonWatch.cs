@@ -109,6 +109,7 @@ namespace RevivalGuard
                             Say(session, $"live: {l.Name} ({l.Owner}) {age:0}s{(age > OLD_S ? " OLD" : "")}");
                         }
             if (live == 0) Say(session, "live: no combat pets right now.");
+            Say(session, $"pet line of sight ({PetLos.P_ON}): {PetLos.Counts}.");
         }
     }
 }

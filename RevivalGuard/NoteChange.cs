@@ -249,7 +249,11 @@ namespace RevivalGuard
         static bool Prefix(Player __instance, uint currentWcid, uint amount, bool destroy, ref List<WorldObject> __result)
         {
             if (!NoteChange.t_InBuy || currentWcid != NoteChange.PYREAL || !destroy || amount == 0) return true;
-            NoteChange.Pay(__instance, amount);
+            if (!NoteChange.Pay(__instance, amount))
+            {   // coin and notes fell short (nothing was taken): ACE's own SpendCurrency, never goods for free silently
+                Mod.Log.Warn($"[RevivalGuard] NoteChange: {__instance.Name} could not pay {amount} in coin and notes; ACE's SpendCurrency runs");
+                return true;
+            }
             __result = new List<WorldObject>();
             return false;
         }

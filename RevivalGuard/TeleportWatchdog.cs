@@ -108,11 +108,20 @@ namespace RevivalGuard
 
         static void Postfix()
         {
+            try { Run(); }
+            catch (System.Exception e) { TickGuard.Report("TeleportWatchdog", e); }
+        }
+
+        static void Run()
+        {
             var now = ACE.Common.Time.GetUnixTime();
             // ToList: the logoff arm can take a player out of the online list underneath us.
             foreach (var p in PlayerManager.GetAllOnline().ToList())
             {
                 if (p == null || !p.Teleporting) continue;
+                // Already on the way out (our own logoff arm, or a PK logoff timer): it stays Teleporting and
+                // online until FinalizeLogout, so without this the 90 s arm re-fired and warned every tick.
+                if (p.IsLoggingOut || p.PKLogout) continue;
                 var started = p.LastTeleportStartTimestamp;
                 if (started == null || started <= 0) continue;
                 var stuck = now - started.Value;

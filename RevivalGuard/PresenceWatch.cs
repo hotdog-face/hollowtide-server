@@ -69,6 +69,12 @@ namespace RevivalGuard
 
         static void Postfix()
         {
+            try { Sample(); }
+            catch (Exception e) { TickGuard.Report("PresenceWatch", e); }
+        }
+
+        static void Sample()
+        {
             var now = ACE.Common.Time.GetUnixTime();
             if (now < s_NextSample) return;
             s_NextSample = now + SAMPLE_SECONDS;

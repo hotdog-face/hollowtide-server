@@ -133,7 +133,10 @@ namespace RevivalGuard
                     var p = FilePath();
                     if (p == null) return;
                     var d = s_Deaths.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value);
-                    File.WriteAllText(p, JsonSerializer.Serialize(d));
+                    // temp then move, like the other state files: a crash mid-write cannot leave half a file
+                    var tmp = p + ".tmp";
+                    File.WriteAllText(tmp, JsonSerializer.Serialize(d));
+                    File.Move(tmp, p, true);
                 }
                 catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] WorldBoss: could not write deaths.json: {e.Message}"); }
             }

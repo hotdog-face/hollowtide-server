@@ -390,7 +390,9 @@ namespace RevivalGuard
                 {
                     var list = File.Exists(s_ArchivePath) ? JsonSerializer.Deserialize<List<SeasonArchive>>(File.ReadAllText(s_ArchivePath)) ?? new List<SeasonArchive>() : new List<SeasonArchive>();
                     list.Add(archive);
-                    File.WriteAllText(s_ArchivePath, JsonSerializer.Serialize(list));
+                    var tmp = s_ArchivePath + ".tmp";   // temp then move, like the state file
+                    File.WriteAllText(tmp, JsonSerializer.Serialize(list));
+                    File.Move(tmp, s_ArchivePath, true);
                 }
                 catch (Exception e) { Mod.Log.Error($"[RevivalGuard] PkRenown: season archive: {e.Message}"); }
             }

@@ -192,6 +192,8 @@ namespace RevivalGuard
                 long standing = s_State.Targets.TryGetValue(tg, out var t0) ? t0.Posts.Sum(x => x.Amount) : 0;
                 if (standing + net > max) { PkCommon.Say(p, $"The bounty on {target.Name} is already {PkCommon.Pyreals(standing)}; the most one head can carry is {PkCommon.Pyreals(max)}."); return; }
             }
+            // Not mid-trade: the pyreals could be the ones on the trade window (as house rent refuses them).
+            if (p.IsTrading) { PkCommon.Say(p, "Finish or cancel your trade first. Nothing was posted."); return; }
             if ((p.CoinValue ?? 0) < amount) { PkCommon.Say(p, $"You do not carry {PkCommon.Pyreals(amount)}. Bounties are posted in pyreals from your pack."); return; }
             if (!p.TryConsumeFromInventoryWithNetworking(PYREAL, (int)Math.Min(amount, int.MaxValue)))
             { PkCommon.Say(p, "The pyreals could not be taken from your pack. Nothing was posted."); return; }

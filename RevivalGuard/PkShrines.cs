@@ -169,9 +169,12 @@ namespace RevivalGuard
                 var now = ACE.Common.Time.GetUnixTime();
                 if (now < s_Next) return;
                 s_Next = now + TICK;
-                if (!On) { lock (s_Lock) s_Attempts.Clear(); return; }
-                try { Step(now); }
-                catch (Exception e) { Mod.Log.Error($"[RevivalGuard] PkShrines tick: {e.Message}"); }
+                try
+                {
+                    if (!On) { lock (s_Lock) s_Attempts.Clear(); return; }
+                    Step(now);
+                }
+                catch (Exception e) { TickGuard.Report("PkShrines", e); }
             }
         }
 

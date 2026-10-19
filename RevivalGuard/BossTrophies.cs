@@ -85,8 +85,12 @@ namespace RevivalGuard
                     p.QuestManager.Stamp(s.Taken);
                     if (s.Slain != null && why[g] != "killer") p.QuestManager.Stamp(s.Slain);   // the death emote stamps the killer only
                     p.SendMessage(s.Line, ChatMessageType.Broadcast);
+                    WorldBossSchedule.Grant(g, s.Trophy, s.Why);
                 }
-                WorldBossSchedule.Grant(g, s.Trophy, s.Why);
+                // Offline at the kill (hit and logged out, or a disconnect): still owed, but the pickup timer is
+                // checked and stamped at delivery, so a real disconnect keeps its reward and an alt cannot bank
+                // one per kill.
+                else WorldBossSchedule.Grant(g, s.Trophy, s.Why, s.Taken, s.Slain != null && why[g] != "killer" ? s.Slain : null);
                 given++;
             }
             Mod.Log.Info($"[RevivalGuard] BossTrophies: {s.BossName} 0x{boss.Guid.Full:X8} died; {given} trophy(ies) {s.Trophy} granted "

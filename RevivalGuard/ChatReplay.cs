@@ -82,8 +82,12 @@ namespace RevivalGuard
 
         static void Postfix()
         {
-            if (!s_Registered) Register();
             var now = Now;
+            if (!s_Registered)
+            {
+                try { Register(); }
+                catch (Exception e) { TickGuard.Report("ChatReplay register", e); }
+            }
             if (now < s_NextTick) return;
             s_NextTick = now + 0.5;
             try { lock (s_Lock) Tick(now); }

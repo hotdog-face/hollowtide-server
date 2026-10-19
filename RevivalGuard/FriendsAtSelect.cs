@@ -119,6 +119,11 @@ namespace RevivalGuard
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     static class FriendsAtSelect_Tick
     {
-        static void Postfix() => FriendsAtSelect.Tick();
+        static void Postfix()
+        {
+            // the session-map reflection in Tick sits outside its per-session try
+            try { FriendsAtSelect.Tick(); }
+            catch (Exception e) { TickGuard.Report("FriendsAtSelect", e); }
+        }
     }
 }

@@ -431,7 +431,12 @@ namespace RevivalGuard
     static class CombatArenaTick
     {
         static bool Prepare() { CombatArena.Register(); return true; }
-        static void Postfix() => CombatArena.Tick();
+        static void Postfix()
+        {
+            // `On` (PropertyManager) is read outside Tick's own try
+            try { CombatArena.Tick(); }
+            catch (Exception e) { TickGuard.Report("CombatArena", e); }
+        }
     }
 
     /// <summary>The entrance's use: room for the strip's payment first.</summary>

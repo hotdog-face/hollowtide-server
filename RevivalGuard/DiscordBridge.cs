@@ -49,6 +49,12 @@ namespace RevivalGuard
         static Config s_Cfg;
         static HttpClient s_Http;
         static string s_BotId, s_LastId, s_GuildId, s_OwnerId;
+        // false until the channel's newest message is known: the first poll then only records where it stands, so a
+        // failed startup never replays the channel's last 20 messages into General
+        static bool s_Seeded;
+        // Discord unreachable: the first failure is said, then once per 10 minutes with how many there were
+        static int s_Fails, s_FailsSinceLog;
+        static DateTime s_FailLoggedAt;
         // THE SERVER NICKNAME, not the account name (owner 2026-10-14: the bridge showed his account name in game, not
         // his nickname on the server). A REST message carries no member, so each author's nickname is looked up once
         // and kept 10 minutes.
@@ -147,6 +153,7 @@ namespace RevivalGuard
                     {
                         using var doc = JsonDocument.Parse(await last.Content.ReadAsStringAsync());
                         foreach (var m in doc.RootElement.EnumerateArray()) s_LastId = m.GetProperty("id").GetString();
+                        s_Seeded = true;
                     }
                     else Mod.Log.Warn($"[RevivalGuard] DiscordBridge: cannot read the channel ({(int)last.StatusCode}); check the bot's permissions there");
                 }
@@ -160,9 +167,25 @@ namespace RevivalGuard
                 {
                     await PostQueued(stop);
                     if (DateTime.UtcNow >= nextPoll) { nextPoll = DateTime.UtcNow.AddMilliseconds(POLL_MS); await Poll(stop); }
+                    if (s_Fails > 0)
+                    {
+                        Mod.Log.Info($"[RevivalGuard] DiscordBridge: reachable again after {s_Fails} failed attempts");
+                        s_Fails = s_FailsSinceLog = 0;
+                    }
                 }
                 catch (TaskCanceledException) { }
-                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] DiscordBridge: {e.GetType().Name}: {e.Message}"); await Task.Delay(5000, stop).ContinueWith(_ => { }); }
+                catch (Exception e)
+                {
+                    s_Fails++; s_FailsSinceLog++;
+                    if (s_Fails == 1 || DateTime.UtcNow - s_FailLoggedAt >= TimeSpan.FromMinutes(10))
+                    {
+                        Mod.Log.Warn($"[RevivalGuard] DiscordBridge: {e.GetType().Name}: {e.Message}"
+                            + (s_Fails > 1 ? $" ({s_FailsSinceLog} failures since the last report, {s_Fails} in a row)" : ""));
+                        s_FailLoggedAt = DateTime.UtcNow;
+                        s_FailsSinceLog = 0;
+                    }
+                    await Task.Delay(5000, stop).ContinueWith(_ => { });
+                }
                 await Task.Delay(POST_GAP_MS, stop).ContinueWith(_ => { });
             }
         }
@@ -187,6 +210,17 @@ namespace RevivalGuard
             if ((int)r.StatusCode == 429) { await Task.Delay(RetryAfter(await r.Content.ReadAsStringAsync()), stop); return; }
             if (!r.IsSuccessStatusCode) return;
             using var doc = JsonDocument.Parse(await r.Content.ReadAsStringAsync());
+            if (!s_Seeded)
+            {
+                // the startup read failed: take this answer as the starting point and say none of it in game
+                ulong newest = s_LastId != null ? ulong.Parse(s_LastId) : 0;
+                foreach (var m in doc.RootElement.EnumerateArray())
+                    newest = Math.Max(newest, ulong.Parse(m.GetProperty("id").GetString()));
+                if (newest > 0) s_LastId = newest.ToString();
+                s_Seeded = true;
+                Mod.Log.Info($"[RevivalGuard] DiscordBridge: starting from message {s_LastId ?? "(none)"}; earlier ones are not replayed");
+                return;
+            }
             var fresh = new List<(string id, string who, string text)>();
             foreach (var m in doc.RootElement.EnumerateArray())
             {

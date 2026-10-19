@@ -93,7 +93,9 @@ namespace RevivalGuard
             public double AnnouncedFor;
             public List<int> Announced = new List<int>();
         }
-        internal sealed class Owe { public uint Wcid; public string Why; }
+        /// <summary>Quest/Slain: set for a trophy owed to a character who was offline at the kill (BossTrophies);
+        /// its pickup timer is checked and stamped at delivery, since an offline character has no QuestManager.</summary>
+        internal sealed class Owe { public uint Wcid; public string Why; public string Quest, Slain; }
         sealed class State
         {
             public Dictionary<string, BossState> Bosses = new Dictionary<string, BossState>();
@@ -385,18 +387,19 @@ namespace RevivalGuard
             return table[0].Items[0];
         }
 
-        static void Add(string key, uint wcid, string why)
+        static void Add(string key, uint wcid, string why, string quest = null, string slain = null)
         {
             if (!s_State.Owed.TryGetValue(key, out var l)) s_State.Owed[key] = l = new List<Owe>();
-            l.Add(new Owe { Wcid = wcid, Why = why });
+            l.Add(new Owe { Wcid = wcid, Why = why, Quest = quest, Slain = slain });
         }
 
         /// <summary>Personal loot for another boss (BossTrophies): owed to the character, then into the pack
-        /// if online; a full pack keeps it owed for the next login or @worldboss claim.</summary>
-        internal static void Grant(uint guid, uint wcid, string why)
+        /// if online; a full pack keeps it owed for the next login or @worldboss claim. A quest names the pickup
+        /// timer to check and stamp at delivery (the character was offline at the kill).</summary>
+        internal static void Grant(uint guid, uint wcid, string why, string quest = null, string slain = null)
         {
             Load();
-            lock (s_Lock) { Add(guid.ToString("X8"), wcid, why); Save(); }
+            lock (s_Lock) { Add(guid.ToString("X8"), wcid, why, quest, slain); Save(); }
             var p = PlayerManager.GetOnlinePlayer(guid);
             if (p != null) DeliverLater(p, true);
         }
@@ -431,9 +434,22 @@ namespace RevivalGuard
                 WorldObject wo = null;
                 try
                 {
+                    // Owed while offline: the pickup timer is checked here, so an alt that hits and logs out
+                    // collects one trophy per timer, not one per kill. Stamped only once it is in the pack.
+                    if (o.Quest != null && !p.QuestManager.CanSolve(o.Quest))
+                    {
+                        Say(p, $"You have already taken this reward ({o.Why}) within its time limit, so it is not given again.");
+                        Mod.Log.Info($"[RevivalGuard] WorldBossSchedule: {p.Name} owed {o.Wcid} ({o.Why}) but {o.Quest} is still on its timer; dropped");
+                        continue;
+                    }
                     wo = WorldObjectFactory.CreateNewWorldObject(o.Wcid);
                     if (wo == null) { Mod.Log.Warn($"[RevivalGuard] WorldBossSchedule: wcid {o.Wcid} could not be made for {p.Name}; dropped"); continue; }
-                    if (p.TryCreateInInventoryWithNetworking(wo)) { Say(p, $"You receive {wo.Name}, {o.Why}."); Mod.Log.Info($"[RevivalGuard] WorldBossSchedule: {p.Name} received {wo.Name} ({o.Wcid}), {o.Why}"); }
+                    if (p.TryCreateInInventoryWithNetworking(wo))
+                    {
+                        if (o.Quest != null) p.QuestManager.Stamp(o.Quest);
+                        if (o.Slain != null) p.QuestManager.Stamp(o.Slain);
+                        Say(p, $"You receive {wo.Name}, {o.Why}."); Mod.Log.Info($"[RevivalGuard] WorldBossSchedule: {p.Name} received {wo.Name} ({o.Wcid}), {o.Why}");
+                    }
                     else { heavy |= !p.HasEnoughBurdenToAddToInventory(wo); wo.Destroy(); left.Add(o); }
                 }
                 catch (Exception e) { Mod.Log.Error($"[RevivalGuard] WorldBossSchedule: delivering {o.Wcid} to {p.Name}: {e.Message}"); left.Add(o); }

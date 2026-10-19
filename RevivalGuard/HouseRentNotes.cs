@@ -204,7 +204,11 @@ namespace RevivalGuard
                 var slumlord = __instance.FindObject(slumlord_id, Player.SearchLocations.Landblock) as SlumLord;
                 if (slumlord == null || HouseRentNotes.StockWouldRefuse(__instance, slumlord)) return true;   // stock says why
                 if (__instance.IsTrading) notes.RemoveAll(n => __instance.ItemsInTradeWindow.Contains(n.Guid));
-                var others = items.Where(i => !i.IsTradeNote).ToList();
+                // a locked item is not spent on rent, as the drag route (ItemLockGive) refuses it
+                foreach (var l in items.Where(ItemLock.IsLocked)) ItemLock.Refuse(__instance, l, "spent on rent");
+                notes.RemoveAll(ItemLock.IsLocked);
+                if (notes.Count == 0) return false;
+                var others = items.Where(i => !i.IsTradeNote && !ItemLock.IsLocked(i)).ToList();
                 HouseRentNotes.Pay(__instance, slumlord, others, notes.Select(n => (n, n.StackSize ?? 1)).ToList());
                 return false;
             }

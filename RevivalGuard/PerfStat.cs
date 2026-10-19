@@ -14,7 +14,7 @@ namespace RevivalGuard
     /// </summary>
     public static class PerfStat
     {
-        static readonly HashSet<string> NUMS = new HashSet<string> { "frames", "fps_med", "fps_p5", "slow_pct", "worst_ms" };
+        static readonly HashSet<string> NUMS = new HashSet<string> { "frames", "fps_med", "fps_p5", "slow_pct", "worst_ms", "heap_used_mb", "heap_mb" };
         static readonly HashSet<string> TEXTS = new HashSet<string> { "v", "plat", "gpu", "screen", "arrivals" };
 
         public static void Register() =>

@@ -277,7 +277,9 @@ namespace RevivalGuard
             var now = ACE.Common.Time.GetUnixTime();
             if (now < s_NextCheck) return;
             s_NextCheck = now + CHECK_SECONDS;
-            Apply(announce: true);
+            // Apply reaches EventManager.StartEvent/StopEvent; a throw there must not end the world loop
+            try { Apply(announce: true); }
+            catch (Exception e) { TickGuard.Report("SeasonalCalendar", e); }
         }
 
         /// <summary>The local date the calendar is evaluated against. See RETAIL_UTC_OFFSET_HOURS.</summary>

@@ -392,6 +392,7 @@ namespace RevivalGuard
                     return;
                 case "kill":
                     Say(session, "[ForgeWarden] smiting the Warden (death, loot, trophy and title as a real kill)");
+                    Cleanup(st);                 // the shield zeroes all damage, a smite included (audit second pass item 1)
                     w.Smite(me, true); return;   // through TakeDamage, so the kill is credited like a real one
                 case "pulse":
                     Pulse(w); Say(session, "[ForgeWarden] pulse fired"); return;

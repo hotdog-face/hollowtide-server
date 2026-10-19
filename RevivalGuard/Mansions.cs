@@ -220,6 +220,12 @@ namespace RevivalGuard
             if (MansionIndex.HasHouses(p.Location.LandblockId.Landblock))
             { Say(p, "You cannot tie the hall portal to a place where dwellings stand."); return; }
 
+            // OUTDOORS ONLY (Fable audit 2026-10-19, docs/findings/FINDINGS-server-mod-audit.md item 4): the portal
+            // checks no level, quest or portal restriction, so a destination inside a dungeon handed every visitor the
+            // dungeon's gate for free. Out on the landscape there is no gate to skip.
+            if ((p.Location.Cell & 0xFFFF) >= 0x100)
+            { Say(p, "The hall portal can only be tied to a place out under the sky."); return; }
+
             var pos = new ACE.Entity.Position(p.Location);
             Store.SetPortal(p.Guid.Full, new PortalRec
             {
@@ -260,6 +266,7 @@ namespace RevivalGuard
                 hooker.IsHooked(player, out var hook);
                 uint owner = hook?.House?.RootHouse?.HouseOwner ?? 0;
                 var dest = owner != 0 ? Store.PortalOf(owner) : null;
+                if (dest != null && (dest.Cell & 0xFFFF) >= 0x100) dest = null;   // set indoors before the outdoors rule
                 if (dest == null)
                 {
                     player.Session.Network.EnqueueSend(new GameEventCommunicationTransientString(player.Session, "The portal is dormant. The monarch has not chosen where it leads."));

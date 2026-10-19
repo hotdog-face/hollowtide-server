@@ -78,6 +78,19 @@ namespace RevivalGuard
                 // the address the account will be created from, for CreateAccount (Gateway): a browser player's own
                 var addr = Gateway.RealAddress(session.EndPointC2S);
                 Gateway.t_LoginReal = addr;
+                // THE MERCENARY PREFIX IS RESERVED (Fable audit 2026-10-19, docs/findings/FINDINGS-server-mod-audit.md item 1):
+                // Mercenaries.IsMerc goes by the account name, and an hcmerc* account gets @mercfollow (a teleport to its
+                // fellowship leader), no chat log, no Discord mirror and no population count. Existing accounts keep
+                // working; a new one is refused (make new mercenaries with ACE's own accountcreate on the console).
+                if (loginRequest.NetAuthType == NetAuthType.AccountPassword
+                    && loginRequest.Account != null && loginRequest.Account.StartsWith("hcmerc", StringComparison.OrdinalIgnoreCase)
+                    && DatabaseManager.Authentication.GetAccountByName(loginRequest.Account) == null)
+                {
+                    Mod.Log.Warn($"[RevivalGuard] new account '{loginRequest.Account}' refused: the hcmerc prefix is reserved ({addr})");
+                    session.Terminate(SessionTerminationReason.NotAuthorizedAccountNotFound,
+                        new GameMessageBootAccount(" because that account name is reserved; choose another"));
+                    return false;
+                }
                 if (s_Cap <= 0) return true;
                 if (!ConfigManager.Config.Server.Accounts.AllowAutoAccountCreation) return true;
                 if (loginRequest.NetAuthType != NetAuthType.AccountPassword || loginRequest.Password == "") return true;

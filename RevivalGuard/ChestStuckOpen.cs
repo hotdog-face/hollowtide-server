@@ -1,3 +1,4 @@
+using System;
 using ACE.Server.Entity;
 using ACE.Server.WorldObjects;
 using HarmonyLib;
@@ -50,7 +51,16 @@ namespace RevivalGuard
     [HarmonyPatch(typeof(Container), nameof(Container.Heartbeat))]
     public static class ChestStuckOpen
     {
+        static bool s_Failed;
+
         static void Postfix(Container __instance)
+        {
+            // A throw here would reach the landblock's tick (Fable audit 2026-10-19, second pass item 2): caught, said once.
+            try { Run(__instance); }
+            catch (Exception e) { if (!s_Failed) { s_Failed = true; Mod.Log.Error("[RevivalGuard] ChestStuckOpen: " + e.Message); } }
+        }
+
+        static void Run(Container __instance)
         {
             if (!(__instance is Chest c)) return;
             if (!c.IsOpen || c.CurrentLandblock == null) return;

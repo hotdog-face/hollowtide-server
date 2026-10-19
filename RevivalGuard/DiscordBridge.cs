@@ -172,7 +172,8 @@ namespace RevivalGuard
             if (s_Out.IsEmpty) return;
             var sb = new StringBuilder();
             while (sb.Length < 1600 && s_Out.TryDequeue(out var line)) { if (sb.Length > 0) sb.Append('\n'); sb.Append(line); }
-            var body = JsonSerializer.Serialize(new { content = sb.ToString(), allowed_mentions = new { parse = Array.Empty<string>() } });
+            // flags 4 = SUPPRESS_EMBEDS (Fable audit 2026-10-19, item 5): a link typed in game posts as plain text, never a preview
+            var body = JsonSerializer.Serialize(new { content = sb.ToString(), allowed_mentions = new { parse = Array.Empty<string>() }, flags = 4 });
             using var r = await s_Http.PostAsync($"{API}/channels/{s_Cfg.channelId}/messages", new StringContent(body, Encoding.UTF8, "application/json"), stop);
             if ((int)r.StatusCode == 429) { await Task.Delay(RetryAfter(await r.Content.ReadAsStringAsync()), stop); return; }
             if (!r.IsSuccessStatusCode) Mod.Log.Warn($"[RevivalGuard] DiscordBridge: post refused ({(int)r.StatusCode})");

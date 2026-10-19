@@ -51,6 +51,7 @@ namespace RevivalGuard
             CommandManager.TryAddCommand(FreeHouse, "freehouse", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld,
                 "Admin test aid (ours, not retail): buy the nearest dwelling for sale, free, skipping monarch and rank.", "");
             Mod.Log.Info("[RevivalGuard] AdminHouse: @freehouse (admin only)");
+            AdminCraft.Register();   // @crafttest rides this registration: no Harmony patch of its own
         }
 
         static void FreeHouse(Session session, params string[] parameters)

@@ -184,7 +184,7 @@ namespace RevivalGuard
             uint pm = p.MonarchId ?? p.Guid.Full, tm = target.MonarchId ?? tg;
             if (pm == tm) { PkCommon.Say(p, $"{target.Name} is of your own allegiance."); return; }
             long min = PkCommon.Long(P_MIN_AMOUNT, 10000), max = PkCommon.Long(P_MAX_AMOUNT, 2000000);
-            if (amount < min) { PkCommon.Say(p, $"The smallest bounty is {PkCommon.Pyreals(min)}."); return; }
+            if (amount < min || amount <= 0) { PkCommon.Say(p, $"The smallest bounty is {PkCommon.Pyreals(Math.Max(1, min))}."); return; }   // never a negative amount, whatever the tunable says (audit item 7)
             double fee = Math.Clamp(PkCommon.Dbl(P_FEE, 0.10), 0, 0.9);
             long net = (long)Math.Floor(amount * (1 - fee));
             lock (s_Lock)

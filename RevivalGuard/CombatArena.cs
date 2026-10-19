@@ -438,7 +438,12 @@ namespace RevivalGuard
     [HarmonyPatch(typeof(EmoteManager), nameof(EmoteManager.OnUse))]
     static class CombatArenaEntranceGate
     {
-        static bool Prefix(EmoteManager __instance, Creature activator) => CombatArena.EntranceGate(__instance, activator);
+        // every prefix here catches its own (Fable audit 2026-10-19, second pass item 3): a throw falls back to ACE
+        static bool Prefix(EmoteManager __instance, Creature activator)
+        {
+            try { return CombatArena.EntranceGate(__instance, activator); }
+            catch (Exception e) { Mod.Log.Error($"[RevivalGuard] CombatArena entrance: {e.Message}"); return true; }
+        }
     }
 
     /// <summary>Two emote actions: the entrance's TakeItems of Marks (paid for after), and a
@@ -449,6 +454,12 @@ namespace RevivalGuard
         static bool Prefix(EmoteManager __instance, PropertiesEmoteAction emote, WorldObject targetObject, out int __state, ref float __result)
         {
             __state = -1;
+            try { return Decide(__instance, emote, targetObject, ref __state, ref __result); }
+            catch (Exception e) { Mod.Log.Error($"[RevivalGuard] CombatArena emote prefix: {e.Message}"); __state = -1; return true; }
+        }
+
+        static bool Decide(EmoteManager __instance, PropertiesEmoteAction emote, WorldObject targetObject, ref int __state, ref float __result)
+        {
             if (emote == null) return true;
             if (emote.Type == (uint)EmoteType.TakeItems)
             {
@@ -479,6 +490,10 @@ namespace RevivalGuard
     [HarmonyPatch(typeof(Player), "GiveObjectToNPC")]
     static class CombatArenaMasterTurnIn
     {
-        static bool Prefix(Player __instance, WorldObject target, WorldObject item) => CombatArena.MasterTurnIn(__instance, target, item);
+        static bool Prefix(Player __instance, WorldObject target, WorldObject item)
+        {
+            try { return CombatArena.MasterTurnIn(__instance, target, item); }
+            catch (Exception e) { Mod.Log.Error($"[RevivalGuard] CombatArena turn-in: {e.Message}"); return true; }
+        }
     }
 }

@@ -1,8 +1,10 @@
 using System.Reflection;
 using System.Text.Json;
+using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Server.Command;
 using ACE.Server.Entity;
+using ACE.Server.Factories;
 using ACE.Server.Managers;
 using ACE.Server.Mods;
 using ACE.Server.Network;
@@ -84,8 +86,8 @@ namespace RevivalGuard
             killer.QuestManager.Stamp(s.Flag);
             WorldBossSchedule.Grant(killer.Guid.Full, s.Part, $"for being the first on this server to destroy {s.Label}");
             killer.SendMessage($"You are the first in all of Dereth to destroy {s.Label}! Take the Unique Bronze part to Bhab, "
-                + "Arcanum Tinker, in the Consortium near Xarabydun. The statue he makes weighs 5,000: go with room to carry "
-                + "it, or he takes the part and cannot hand you the statue.", ChatMessageType.Broadcast);
+                + "Arcanum Tinker, in the Consortium near Xarabydun. The statue he makes weighs 5,000; if you cannot carry "
+                + "it, he sets it down at your feet.", ChatMessageType.Broadcast);
             PlayerManager.BroadcastToAll(new GameMessageSystemChat(
                 $"{killer.Name} is the first in Dereth to destroy {s.Label}! The Arcanum Tinker near Xarabydun will cast a "
                 + "commemorative statue for this deed, and only one will ever be made.", ChatMessageType.WorldBroadcast));
@@ -147,6 +149,96 @@ namespace RevivalGuard
                 return true;
             }
             catch (Exception e) { Mod.Log.Error($"[RevivalGuard] ServerFirsts: could not write {path}: {e.Message}; claim not given"); return false; }
+        }
+    }
+
+    /// <summary>
+    /// The Tinker's statue never lost (owner 2026-10-20). ACE's Player.GiveFromEmote returns early with only "tries to give
+    /// you" when ItemsToReceive says the pack is full or too heavy, and TryCreateForGive drops the item on a failed add:
+    /// either way the part is already taken. For Bhab (19354) giving a Commemorative Bronze Statue (19738-19754) this
+    /// prefix does the give itself: ACE's own TryCreateForGive first (same pack rule and messages), and if that fails the
+    /// statue goes on the ground at the player's feet (ACE's drop path), never rotting, saved at once. Exactly one statue
+    /// per call; every other emote give runs ACE's code untouched.
+    /// </summary>
+    [HarmonyPatch]
+    static class ServerFirstsStatueDrop
+    {
+        const uint TINKER = 19354;
+        internal static bool IsStatue(uint wcid) => wcid >= 19738 && wcid <= 19754;   // housestatue*-event, ace_world
+        static readonly MethodInfo s_TryDropItem = AccessTools.Method(typeof(Player), "TryDropItem", new[] { typeof(WorldObject) });
+
+        static MethodBase TargetMethod()
+        {
+            var m = AccessTools.Method(typeof(Player), nameof(Player.GiveFromEmote), new[] { typeof(WorldObject), typeof(uint), typeof(int), typeof(int), typeof(float) });
+            if (m == null) Mod.Log.Error("[RevivalGuard] ServerFirsts: Player.GiveFromEmote not found; a statue that does not fit is lost");
+            return m;
+        }
+        static bool Prepare(MethodBase original) => original != null || TargetMethod() != null;
+
+        static bool Prefix(Player __instance, WorldObject emoter, uint weenieClassId, int amount, int palette, float shade)
+        {
+            if (__instance == null || emoter == null || emoter.WeenieClassId != TINKER || !IsStatue(weenieClassId)) return true;
+            for (int i = 0; i < Math.Max(1, amount); i++)
+            {
+                WorldObject item;
+                try { item = WorldObjectFactory.CreateNewWorldObject(weenieClassId); }
+                catch (Exception e) { Mod.Log.Error($"[RevivalGuard] ServerFirsts: statue {weenieClassId} create failed: {e.Message}"); item = null; }
+                if (item == null) { if (i == 0) return true; break; }   // nothing made yet: ACE logs and handles it
+                if (palette > 0) item.PaletteTemplate = palette;
+                if (shade > 0) item.Shade = shade;
+                bool inPack = false;
+                try { inPack = __instance.Session != null && __instance.TryCreateForGive(emoter, item); }
+                catch (Exception e)
+                {
+                    inPack = item.ContainerId.HasValue;   // added before the throw: it is in the pack, do not drop a second
+                    Mod.Log.Warn($"[RevivalGuard] ServerFirsts: TryCreateForGive {item.Name} for {__instance.Name}: {e.Message}");
+                }
+                if (inPack) Mod.Log.Info($"[RevivalGuard] ServerFirsts: {item.Name} 0x{item.Guid.Full:X8} given to {__instance.Name} 0x{__instance.Guid.Full:X8}");
+                else Drop(__instance, emoter, item);
+            }
+            return false;
+        }
+
+        static void Drop(Player p, WorldObject emoter, WorldObject item)
+        {
+            item.TimeToRot = -1;   // a one-per-server trophy must not rot away on the ground
+            bool placed = false;
+            try
+            {
+                if (p.CurrentLandblock != null && p.Location != null && s_TryDropItem != null)
+                    placed = (bool)s_TryDropItem.Invoke(p, new object[] { item });
+            }
+            catch (Exception e)
+            {
+                placed = item.CurrentLandblock != null;   // thrown after it reached the ground: do not add a second time
+                Mod.Log.Warn($"[RevivalGuard] ServerFirsts: TryDropItem {item.Name}: {e.InnerException?.Message ?? e.Message}");
+            }
+            foreach (var at in new[] { p.Location, emoter.Location })   // no landblock (logged out mid-emote): beside the Tinker
+            {
+                if (placed || at == null) continue;
+                try
+                {
+                    item.Location = new Position(at);
+                    item.Placement = Placement.Resting;
+                    placed = LandblockManager.AddObject(item);
+                }
+                catch (Exception e) { placed = item.CurrentLandblock != null; Mod.Log.Warn($"[RevivalGuard] ServerFirsts: AddObject {item.Name}: {e.Message}"); }
+            }
+            if (placed)
+            {
+                try { item.SaveBiotaToDatabase(); } catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] ServerFirsts: save {item.Name}: {e.Message}"); }
+                p.Session?.Network?.EnqueueSend(new GameMessageSystemChat($"{emoter.Name} cannot fit the {item.Name} in your pack, "
+                    + "so he sets it down at your feet. It will wait there until you pick it up.", ChatMessageType.Broadcast));
+                Mod.Log.Info($"[RevivalGuard] ServerFirsts: {item.Name} 0x{item.Guid.Full:X8} for {p.Name} 0x{p.Guid.Full:X8} did not fit; "
+                    + $"placed on the ground at {item.Location?.ToLOCString()} (never rots)");
+                return;
+            }
+            // No ground either: owe it through the world-boss mailbox (delivered when there is room), never lose it.
+            Mod.Log.Error($"[RevivalGuard] ServerFirsts: {item.Name} for {p.Name} 0x{p.Guid.Full:X8} could not be placed at "
+                + $"{p.Location?.ToLOCString()}; owed instead");
+            var wcid = item.WeenieClassId;
+            item.Destroy();
+            WorldBossSchedule.Grant(p.Guid.Full, wcid, "from Bhab, Arcanum Tinker, who could not hand it to you");
         }
     }
 

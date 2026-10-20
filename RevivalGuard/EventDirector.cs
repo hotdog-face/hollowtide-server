@@ -491,7 +491,9 @@ namespace RevivalGuard
             }
         }
 
-        static bool AnyoneNear(Entry e)
+        static bool AnyoneNear(Entry e) => PlayersNear(e).Any();
+
+        static IEnumerable<Player> PlayersNear(Entry e)
         {
             const int MARGIN = 2;   // landblocks either side of the box
             foreach (var p in PlayerManager.GetAllOnline())
@@ -499,9 +501,8 @@ namespace RevivalGuard
                 var loc = p?.Location;
                 if (loc == null) continue;
                 int x = (int)loc.LandblockX, y = (int)loc.LandblockY;
-                if (x >= e.Box.x0 - MARGIN && x <= e.Box.x1 + MARGIN && y >= e.Box.y0 - MARGIN && y <= e.Box.y1 + MARGIN) return true;
+                if (x >= e.Box.x0 - MARGIN && x <= e.Box.x1 + MARGIN && y >= e.Box.y0 - MARGIN && y <= e.Box.y1 + MARGIN) yield return p;
             }
-            return false;
         }
 
         static void End(Entry cur, double now, string why, bool announce, bool victory)
@@ -511,6 +512,7 @@ namespace RevivalGuard
             s_State.NextAt = now + Math.Max(0.1, Minutes(P_GAP, 90)) * 60;
             Save();
             if (announce) WorldBroadcast(victory ? cur.Victory : cur.Withdraw);
+            if (victory) JokeScrollRewards.EventWon(cur.Key, PlayersNear(cur).ToList());   // off unless rg_joke_scroll_rewards
             Mod.Log.Info($"[RevivalGuard] EventDirector: ENDED {cur.Key} ({why}); next {Stamp(s_State.NextAt)}");
         }
 

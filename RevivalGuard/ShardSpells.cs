@@ -18,13 +18,12 @@ namespace RevivalGuard
 
         internal static readonly (uint lo, uint hi, string what)[] UNLOCKED =
         {
-            (4078, 4078, "Egg"),
             (2366, 2366, "Bovine Intervention"),
             (4267, 4267, "Cow"), (4269, 4269, "Present"), (4270, 4270, "Table"),   // the Jester's gag bolts (JokeSpells)
             (3902, 3902, "Ring around the Rabbit"),
             (2815, 2926, "fireworks, OUT and UP"),
             (4375, 4390, "Incantation fireworks"),
-            (2927, 2927, "Old School Fireworks"),   // Tumble sells it (gen_joke_spells.py)
+            (2927, 2927, "Old School Fireworks"),   // a joke scroll (gen_joke_spells.py)
         };
 
         /// <summary>Every id above that the loaded spell table holds, ours first.</summary>

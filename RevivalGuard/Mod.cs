@@ -157,7 +157,12 @@ namespace RevivalGuard
         // change: every report is still held to what could have been run since the last report.
         // The baseline is re-taken from the server after a teleport or a forced position, and after
         // a refusal, so a refused jump cannot become the new starting point.
-        internal sealed class State { public DateTime At; public ACE.Entity.Position Pos; public float Budget = -1f; public ACE.Entity.Position StaleFrom; public DateTime TeleportedAt; }
+        internal sealed class State
+        {
+            public DateTime At; public ACE.Entity.Position Pos; public float Budget = float.NaN; public ACE.Entity.Position StaleFrom; public DateTime TeleportedAt;
+            public ushort SnapStamp; public DateTime SnapAt; public int StaleDrops;   // the last snap-back's ForcePosition sequence
+            public ACE.Entity.Position ReqPos; public ushort ReqStamp;               // the newest AutonomousPosition and its echoed sequence
+        }
         internal static readonly ConditionalWeakTable<Player, State> s_State = new ConditionalWeakTable<Player, State>();
 
         internal static void Rebaseline(Player p) { if (s_State.TryGetValue(p, out var st)) st.Pos = null; }
@@ -184,6 +189,26 @@ namespace RevivalGuard
             return silent > MAX_DT && moved <= runAllowed;
         }
 
+        const double STALE_WINDOW = 3.0;   // seconds after a snap a report from before it can still be in flight
+
+        /// <summary>A report the client sent before our snap-back reached it (its echoed ForcePosition sequence is older than
+        /// the snap's): dropped quietly. The stamp comes from the AutonomousPosition that stored this very Position object,
+        /// or from the MoveToState that did.</summary>
+        static bool StaleAfterSnap(Player p, State st, ACE.Entity.Position pos, DateTime now)
+        {
+            if (st.SnapAt == default) return false;
+            int stamp = -1;
+            if (ReferenceEquals(st.ReqPos, pos)) stamp = st.ReqStamp;
+            else if (p.CurrentMoveToState != null && ReferenceEquals(p.CurrentMoveToState.Position, pos)) stamp = p.CurrentMoveToState.ForcePositionSequence;
+            if (stamp < 0) return false;
+            double since = (now - st.SnapAt).TotalSeconds;
+            if (!MovementBudget.StaleAfterSnap((ushort)stamp, st.SnapStamp, since, STALE_WINDOW)) return false;
+            if (st.StaleDrops++ == 0)
+                Mod.Log.Info($"[RevivalGuard] movement: {p.Name} (0x{p.Guid.Full:X8}) report from before the snap-back dropped " +
+                             $"(sequence {stamp}, snap {st.SnapStamp}, {since:F2} s after)");
+            return true;
+        }
+
         static bool Prefix(Player __instance, ACE.Entity.Position newPosition, bool forceUpdate, ref bool __result)
         {
             var p = __instance;
@@ -191,6 +216,7 @@ namespace RevivalGuard
             var now = DateTime.UtcNow;
             if (forceUpdate || p.Teleporting || p.Location == null || newPosition == null)
             { st.Pos = null; st.At = now; return true; }
+            if (StaleAfterSnap(p, st, newPosition, now)) { __result = false; return false; }   // no offence, no new snap
             if (st.Pos == null || st.At == default)
             {
                 // first report after login, a teleport or a forced move: measure from the server's copy
@@ -201,12 +227,9 @@ namespace RevivalGuard
             double dt = Math.Min(MAX_DT, Math.Max(0.0, (now - st.At).TotalSeconds));
             float rate = 1f;
             try { rate = Math.Max(1f, p.GetRunRate()); } catch { }
-            float speed = BASE_RUN * rate * SLACK;
-            float burst = (float)(speed * BURST_SECONDS);
-            if (st.Budget < 0f) st.Budget = burst;
-            st.Budget = Math.Min(burst, st.Budget + (float)(speed * dt));
-            float allowed = st.Budget + MARGIN;
             float moved = st.Pos.Distance2D(newPosition);
+            float budget = st.Budget;
+            bool fits = MovementBudget.Judge(ref budget, dt, rate, moved, (float)SLACK, (float)MARGIN, (float)BURST_SECONDS, out float allowed);
 
             // A LONG HONEST SILENCE. The client holds its reports while a room's cell is unresolved (pending
             // room, "outside every room", after a correction), and MAX_DT credits such a silence with 3 s at
@@ -215,7 +238,8 @@ namespace RevivalGuard
             // (docs/findings/FINDINGS-raise-and-snapback.md). So a report is also accepted if it is within
             // plain running (no SLACK, no MARGIN) for the real time since the baseline, up to SILENCE_MAX.
             // A lag switch gains nothing: this is exactly what running the whole silence would have covered.
-            if (moved > allowed && SilenceAllows(st, now, rate, moved, out double silent, out float runAllowed))
+            st.Budget = budget;
+            if (!fits && SilenceAllows(st, now, rate, moved, out double silent, out float runAllowed))
             {
                 Mod.Log.Info($"[RevivalGuard] movement silence: {p.Name} (0x{p.Guid.Full:X8}) moved {moved:F1} m after {silent:F1} s without a report " +
                              $"(run allowance {runAllowed:F1} m at run rate {rate:F2}, budget {allowed:F1} m); accepted");
@@ -224,9 +248,11 @@ namespace RevivalGuard
                 return true;
             }
 
-            if (moved > allowed)
+            if (!fits)
             {
-                st.Budget = 0f;
+                // THE BUDGET IS KEPT (2026-10-20 triage: 43 snapbacks for 7 players). It used to be zeroed here, so the
+                // next honest report (Lou: 0.12 s later) failed too and one refusal became a chain. Keeping it gives a
+                // cheater nothing: the budget only ever holds real elapsed time at the capped rate (Judge).
                 // A STALE REPORT FROM BEFORE A TELEPORT is refused the same way but is not an offence:
                 // a sweep bot "moved 40915.0 m in 1.52 s" (2026-09-19) was the client's last position
                 // report from the old landblock, arriving after the teleport. Refusing it keeps the
@@ -235,7 +261,8 @@ namespace RevivalGuard
                              && st.StaleFrom.Distance2D(newPosition) < 50f;
                 if (!stale)
                 Offences.Add(p, "movement", $"moved {moved:F1} m in {dt:F2} s (budget allowed {allowed:F1} m at run rate {rate:F2}); snapped back to {p.Location.ToLOCString()}");
-                p.Sequences.GetNextSequence(SequenceType.ObjectForcePosition);
+                var seq = p.Sequences.GetNextSequence(SequenceType.ObjectForcePosition);
+                if (seq != null && seq.Length >= 2) { st.SnapStamp = BitConverter.ToUInt16(seq, 0); st.SnapAt = now; st.StaleDrops = 0; }
                 p.SendUpdatePosition();
                 // The server's position stands AS OF NOW: measuring the next attempt from the last
                 // accepted update instead would let a cheater who keeps trying earn a longer and longer
@@ -245,11 +272,85 @@ namespace RevivalGuard
                 __result = false;
                 return false;   // ACE's UpdatePlayerPosition is skipped: the server keeps its position
             }
-            st.Budget = Math.Max(0f, st.Budget - moved);
             st.Pos = new ACE.Entity.Position(newPosition);
             st.At = now;
             return true;
         }
+    }
+
+    /// <summary>
+    /// The movement budget's arithmetic, pure so tools/modcheck can test it without a server.
+    /// </summary>
+    public static class MovementBudget
+    {
+        public const float BASE_RUN = 4.0f;   // m/s at run rate 1 (retail RunForward)
+
+        /// <summary>Refill <paramref name="budget"/> (NaN = new: full) by <paramref name="dt"/> seconds at run speed x
+        /// slack, capped at burstSeconds of it; a move fits within budget + margin. A fitting move spends the budget, down
+        /// to -margin: MARGIN is borrowed and paid back by time, not given again with every report (before, each report at
+        /// an empty budget got the whole margin free, so a client sending reports fast enough moved as fast as it liked).
+        /// A refused move spends nothing, so a refusal does not cost the next honest report its time.</summary>
+        public static bool Judge(ref float budget, double dt, float rate, float moved, float slack, float margin, float burstSeconds, out float allowed)
+        {
+            float speed = BASE_RUN * rate * slack;
+            float burst = speed * burstSeconds;
+            if (float.IsNaN(budget)) budget = burst;
+            budget = Math.Min(burst, budget + (float)(speed * Math.Max(0.0, dt)));
+            allowed = budget + margin;
+            if (moved > allowed) return false;
+            budget = Math.Max(-margin, budget - moved);
+            return true;
+        }
+
+        /// <summary>A position report sent before the client saw the snap-back: its ForcePosition sequence is older than the
+        /// one the snap carried (16-bit, wrapping). Only within <paramref name="window"/> seconds of the snap, so a client
+        /// that never echoes the sequence is judged normally again after that.</summary>
+        public static bool StaleAfterSnap(ushort reportStamp, ushort snapStamp, double sinceSnap, double window)
+        {
+            if (sinceSnap < 0 || sinceSnap > window) return false;
+            ushort behind = (ushort)(snapStamp - reportStamp);
+            return behind != 0 && behind < 0x8000;
+        }
+    }
+
+    /// <summary>
+    /// IN-FLIGHT REPORTS AFTER A SNAP-BACK. A position report the client sent before the snap reached it still carries the
+    /// old spot, so it failed the guard again (the second offence 0.12 s after the first, 2026-10-20 triage) and earned a
+    /// second snap. Each report echoes the newest ForcePosition sequence the client has seen (MoveStamps; ACE reads it and
+    /// ignores it): one older than our snap's is dropped quietly, no offence and no new snap. Dropping gives a cheater
+    /// nothing; a stamp from the future is judged as usual.
+    /// </summary>
+    [HarmonyPatch(typeof(ACE.Server.Network.GameAction.Actions.GameActionAutonomousPosition), nameof(ACE.Server.Network.GameAction.Actions.GameActionAutonomousPosition.Handle))]
+    static class AutonomousStamp
+    {
+        [ThreadStatic] static int t_Stamp;   // the report's ForcePosition sequence + 1 while its handler runs; 0 = none
+
+        static void Prefix(ClientMessage message)
+        {
+            t_Stamp = 0;
+            try
+            {
+                var st = message.Payload.BaseStream; long pos = st.Position;
+                _ = new ACE.Entity.Position(message.Payload);
+                message.Payload.ReadUInt16(); message.Payload.ReadUInt16(); message.Payload.ReadUInt16();
+                t_Stamp = message.Payload.ReadUInt16() + 1;
+                st.Position = pos;   // the real handler reads it again
+            }
+            catch { t_Stamp = 0; }
+        }
+
+        // The stamp is kept beside the very Position object the handler stored as RequestedLocation, and judged when the
+        // tick hands that object to UpdatePlayerPosition (MovementGuard). Not a patch on SetRequestedLocation: two field
+        // stores, so the JIT may inline it into its callers past any patch.
+        static void Postfix(Session session)
+        {
+            var p = session?.Player;
+            if (p == null || t_Stamp == 0) return;
+            var st = MovementGuard.s_State.GetOrCreateValue(p);
+            st.ReqPos = p.RequestedLocation; st.ReqStamp = (ushort)(t_Stamp - 1);
+        }
+
+        static Exception Finalizer(Exception __exception) { t_Stamp = 0; return __exception; }
     }
 
     /// <summary>A teleport (portal, recall, admin, death) moves the player without a client report:

@@ -42,7 +42,7 @@ INSERT INTO weenie_properties_body_part (object_Id, `key`, d_Type, d_Val, d_Var,
 DELETE FROM weenie_properties_d_i_d WHERE object_Id = 901660 AND type IN (1, 2, 3, 6, 7, 8, 22);
 INSERT INTO weenie_properties_d_i_d (object_Id, type, value) SELECT 901660, type, value FROM weenie_properties_d_i_d WHERE object_Id = 37289 AND type IN (1, 2, 3, 6, 7, 8, 22);
 DELETE FROM weenie_properties_string WHERE object_Id = 901660 AND type IN (1, 3, 4, 5, 16, 24);
-INSERT INTO weenie_properties_string (object_Id, type, value) VALUES (901660, 1, 'Tumble, the Jester''s Apprentice'), (901660, 5, 'Novelty Peddler'), (901660, 16, 'The Jester''s apprentice sells the old master''s gags: spells that throw cows, presents and tables, fireworks for a celebration, and a very nervous hen. Buys nothing.');
+INSERT INTO weenie_properties_string (object_Id, type, value) VALUES (901660, 1, 'Tumble, the Jester''s Apprentice'), (901660, 5, 'Novelty Peddler'), (901660, 16, 'The Jester''s apprentice sells the old master''s gags: spells that throw cows, presents and tables, and fireworks for a celebration. Buys nothing.');
 DELETE FROM weenie_properties_int WHERE object_Id = 901660 AND type IN (2, 113, 188);
 DELETE FROM weenie_properties_int WHERE object_Id = 901660 AND type = 2; INSERT INTO weenie_properties_int (object_Id, type, value) VALUES (901660, 2, 51);
 DELETE FROM weenie_properties_int WHERE object_Id = 901660 AND type = 74; INSERT INTO weenie_properties_int (object_Id, type, value) VALUES (901660, 74, 0);
@@ -50,7 +50,6 @@ DELETE FROM weenie_properties_float WHERE object_Id = 901660 AND type = 38; INSE
 DELETE FROM weenie_properties_float WHERE object_Id = 901660 AND type = 39; INSERT INTO weenie_properties_float (object_Id, type, value) VALUES (901660, 39, 1.1);
 INSERT INTO weenie_properties_create_list (object_Id, destination_Type, weenie_Class_Id, stack_Size, palette, shade, try_To_Bond) VALUES (901660, 2, 37540, 0, 0, 0, 0);
 INSERT INTO weenie_properties_create_list (object_Id, destination_Type, weenie_Class_Id, stack_Size, palette, shade, try_To_Bond) VALUES
-  (901660, 4, 35188, -1, 0, 0, 0),
   (901660, 4, 901661, -1, 0, 0, 0),
   (901660, 4, 901662, -1, 0, 0, 0),
   (901660, 4, 901663, -1, 0, 0, 0),
@@ -313,6 +312,4 @@ UPDATE spell SET wcid = 22282, base_Intensity = 0, variance = 0 WHERE id = 2920;
 -- Bovine Intervention: a real cow (the Jester's Cow projectile), falling at an angle so it lands
 UPDATE spell SET wcid = 72679, create_Offset_Origin_X = 0, create_Offset_Origin_Y = -10, create_Offset_Origin_Z = 30 WHERE id = 2366;
 
-INSERT INTO landblock_instance (guid, weenie_Class_Id, obj_Cell_Id, origin_X, origin_Y, origin_Z, angles_W, angles_X, angles_Y, angles_Z, is_Link_Child) VALUES
-  (0x7a9b4f60, 901660, 0xa9b40019, 89.0, 16.0, 94.005, 0.707107, 0, 0, 0.707107, 0);  -- Holtburg square, east of the life stone
 COMMIT;

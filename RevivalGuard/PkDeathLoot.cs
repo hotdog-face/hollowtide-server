@@ -183,20 +183,62 @@ namespace RevivalGuard
     /// docs/LOOT-RESEARCH-2026-10-17.md). Turbine's Throne of Destiny FAQ: NPK deaths moved to floor(level/20) + 0..2, but PK
     /// deaths kept the old count, floor(effective level / 10) + 0..2 with the effective level capped at 126 (12 to 14 items
     /// at the cap). ACE's GetNumItemsDropped uses /20 for every death (its own comment quotes the /10 rule), so a level 100
-    /// PK lost 5 to 7 items where retail took 10 to 12. A PK death now takes retail's count; a normal death is untouched.
+    /// PK lost 5 to 7 items where retail took 10 to 12. A PK death takes retail's count.
+    ///
+    /// AN NPK DEATH (owner 2026-10-20 "Match retail"; docs/findings/death-item-count-2026-10-20.md). The same FAQ: levels
+    /// 11-20 drop 1 non-wielded item (ACE: 0 or 1), above 20 floor(level/20) + 0..2 "for a maximum of 15 items" (ACE caps
+    /// at 14, so levels 260+ lost one fewer). The count covers the value-sorted items only: pkt_2017-1-30_1485769877, a
+    /// level 200 NPK killed twice by a Ravenous Eater, lost 10 and 11 sorted items plus all 8 rare gems both times, which
+    /// ACE already drops outside the count (BondedStatus.Slippery). ACE's Clutch of the Miser step (-5 per augmentation,
+    /// NPK only) is kept. Switch retail_npk_death_count (default on; off = ACE's NPK count).
     /// </summary>
     [HarmonyPatch(typeof(Player), nameof(Player.GetNumItemsDropped))]
     static class PkDeathItemCount
     {
+        const string P_NPK = "retail_npk_death_count";
+        const int RETAIL_NPK_MAX = 15;
+        static int s_Registered;
+
+        static bool Prepare()
+        {
+            if (Interlocked.Exchange(ref s_Registered, 1) == 0)
+            {
+                try
+                {
+                    var b = MonsterAi.Inner(ACE.Server.Managers.DefaultPropertyManager.DefaultBooleanProperties);
+                    if (!b.ContainsKey(P_NPK)) b[P_NPK] = new ACE.Server.Managers.Property<bool>(true, "RevivalGuard: NPK death item count as retail (11-20: 1 item; 21+: level/20 + 0..2, up to 15); off = ACE (0-1, cap 14)");
+                }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] PkDeathItemCount: {P_NPK} not registered with @modifybool ({e.Message}); it reads its default (on)"); }
+            }
+            return true;
+        }
+
+        /// <summary>Retail's NPK count before Clutch of the Miser.</summary>
+        internal static int RetailNpkCount(int level, int roll)
+        {
+            if (level <= 10) return 0;
+            if (level <= 20) return 1;
+            return Math.Min(level / 20 + roll, RETAIL_NPK_MAX);
+        }
+
         static void Postfix(Player __instance, Corpse corpse, ref int __result)
         {
             try
             {
-                if (__instance == null || corpse == null || !__instance.IsPKDeath(corpse.KillerId)) return;
-                int level = System.Math.Min(__instance.Level ?? 1, 126);
-                __result = System.Math.Min(level / 10 + ACE.Common.ThreadSafeRandom.Next(0, 2), Player.MaxItemsDropped);
+                if (__instance == null || corpse == null) return;
+                if (__instance.IsPKDeath(corpse.KillerId))
+                {
+                    int level = Math.Min(__instance.Level ?? 1, 126);
+                    __result = Math.Min(level / 10 + ACE.Common.ThreadSafeRandom.Next(0, 2), Player.MaxItemsDropped);
+                    return;
+                }
+                if (!ACE.Server.Managers.PropertyManager.GetBool(P_NPK, true).Item) return;
+                int n = RetailNpkCount(__instance.Level ?? 1, ACE.Common.ThreadSafeRandom.Next(0, 2));
+                int miser = __instance.AugmentationLessDeathItemLoss;
+                if (miser > 0) n = Math.Max(0, n - miser * 5);
+                __result = n;
             }
-            catch (System.Exception e) { Mod.Log.Warn($"[RevivalGuard] PkDeathItemCount: {e.Message}; ACE's count stands"); }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] PkDeathItemCount: {e.Message}; ACE's count stands"); }
         }
     }
 }

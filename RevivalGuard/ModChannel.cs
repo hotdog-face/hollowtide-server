@@ -67,6 +67,7 @@ namespace RevivalGuard
             FriendsAtSelect.NoteCapable(session);   // this account may be sent the select-screen friends
             RagdollCorpse.Hello(session);           // this shard places ragdoll corpses for opted-in clients
             WorldBossSchedule.Hello(session);       // the world bosses' schedule and state, for the map
+            SmallHitbox.Hello(session);             // weenies that collide smaller than their spheres (Azimar)
         }
 
         /// <summary>The client version this connection announced ("" for a client older than 0.1.68, or one that has not

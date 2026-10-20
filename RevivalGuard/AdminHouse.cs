@@ -52,6 +52,7 @@ namespace RevivalGuard
                 "Admin test aid (ours, not retail): buy the nearest dwelling for sale, free, skipping monarch and rank.", "");
             Mod.Log.Info("[RevivalGuard] AdminHouse: @freehouse (admin only)");
             AdminCraft.Register();   // @crafttest rides this registration: no Harmony patch of its own
+            AdminVoid.Register();    // @voidtest likewise
         }
 
         static void FreeHouse(Session session, params string[] parameters)

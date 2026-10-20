@@ -70,6 +70,7 @@ namespace RevivalGuard
             Mercenaries.Register();
             Mansions.Register();
             TrophyMounts.Register();
+            ServerFirsts.Register();
             MonsterAi.Register();
             EventDirector.Register();
             // The PK expansion (docs/PK-EXPANSION.md): every part off until its property is set.

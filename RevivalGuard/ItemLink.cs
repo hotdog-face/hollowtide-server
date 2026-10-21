@@ -30,7 +30,10 @@ namespace RevivalGuard
         static readonly Dictionary<int, Snap> s_Snaps = new Dictionary<int, Snap>();
         static readonly Queue<int> s_Order = new Queue<int>();
         static readonly object s_Lock = new object();
-        static int s_Next = 1;
+        // RANDOM IDS, NOT A COUNTER (security audit 2026-10-20): a counter let anyone walk every link ever made. Seven
+        // digits because every released client's tag reads at most seven (ChatHud.ITEM_TAG); clients from 0.1.74 read
+        // ten, so a later server can widen ID_MAX once the older clients are gone.
+        const int ID_MIN = 1_000_000, ID_MAX = 9_999_999;
 
         public static void Register()
         {
@@ -55,7 +58,8 @@ namespace RevivalGuard
                 int id;
                 lock (s_Lock)
                 {
-                    id = s_Next++;
+                    do id = System.Security.Cryptography.RandomNumberGenerator.GetInt32(ID_MIN, ID_MAX + 1);
+                    while (s_Snaps.ContainsKey(id));
                     s_Snaps[id] = snap; s_Order.Enqueue(id);
                     while (s_Order.Count > KEEP) s_Snaps.Remove(s_Order.Dequeue());
                 }

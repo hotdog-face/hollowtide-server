@@ -17,6 +17,13 @@ namespace RevivalGuard
         static readonly HashSet<string> NUMS = new HashSet<string> { "frames", "fps_med", "fps_p5", "slow_pct", "worst_ms", "heap_used_mb", "heap_mb" };
         static readonly HashSet<string> TEXTS = new HashSet<string> { "v", "plat", "gpu", "screen", "arrivals" };
 
+        // ONE SAMPLE PER SESSION PER 5 MINUTES (security audit 2026-10-20): the client sends one every 10 minutes, and a
+        // typed or scripted flood must not fill the event log. Weak keys: a session that ends takes its entry with it.
+        static readonly TimeSpan MIN_GAP = TimeSpan.FromMinutes(5);
+        sealed class Last { public DateTime At; }
+        static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Session, Last> s_Last =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<Session, Last>();
+
         public static void Register() =>
             CommandManager.TryAddCommand(Handle, "perfstat", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
                 "Client performance sample (sent by the client itself).", "");
@@ -25,6 +32,13 @@ namespace RevivalGuard
         {
             var p = session?.Player;
             if (p == null || parameters == null) return;
+            var last = s_Last.GetValue(session, _ => new Last { At = DateTime.MinValue });
+            lock (last)
+            {
+                var now = DateTime.UtcNow;
+                if (now - last.At < MIN_GAP) return;   // silent, as the command always is
+                last.At = now;
+            }
             var fields = new Dictionary<string, object>();
             foreach (var tok in parameters)
             {

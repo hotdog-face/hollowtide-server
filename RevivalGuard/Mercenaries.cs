@@ -25,8 +25,43 @@ namespace RevivalGuard
     {
         const string PREFIX = "hcmerc";
 
-        public static bool IsMerc(Player p) =>
-            p?.Account?.AccountName != null && p.Account.AccountName.StartsWith(PREFIX, StringComparison.OrdinalIgnoreCase);
+        /// <summary>Account-name prefixes no player may take (AccountCreationCap at login, KeepCharacter at @keep).</summary>
+        public static bool IsReservedName(string accountName) =>
+            accountName != null && accountName.StartsWith(PREFIX, StringComparison.OrdinalIgnoreCase);
+
+        // THE MERCENARIES ARE AN ALLOWLIST, NOT A PREFIX (security audit 2026-10-20): a name alone once granted
+        // @mercfollow and hid the account from chat logs and the population. The two accounts made on the console
+        // (docs/MERCENARIES.md) are built in; another one goes in mercenaries.txt beside the dll, one account name per
+        // line, read at startup. The prefix is still required, so the file cannot mark an ordinary player.
+        static readonly string[] BUILT_IN = { "hcmerc1", "hcmerc2" };
+        static HashSet<string> s_Allow;
+
+        static HashSet<string> Allow()
+        {
+            if (s_Allow != null) return s_Allow;
+            var set = new HashSet<string>(BUILT_IN, StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                string path = System.IO.Path.Combine(ModFolder.Path(), "mercenaries.txt");
+                if (System.IO.File.Exists(path))
+                    foreach (var raw in System.IO.File.ReadAllLines(path))
+                    {
+                        string n = raw.Trim();
+                        if (n.Length == 0 || n.StartsWith("#")) continue;
+                        if (IsReservedName(n)) set.Add(n);
+                        else Mod.Log.Warn($"[RevivalGuard] Mercenaries: mercenaries.txt names '{n}', not an {PREFIX}* account; ignored");
+                    }
+            }
+            catch (Exception e) { Mod.Log.Warn("[RevivalGuard] Mercenaries: mercenaries.txt: " + e.Message); }
+            Mod.Log.Info("[RevivalGuard] Mercenaries: " + string.Join(", ", set.OrderBy(n => n, StringComparer.OrdinalIgnoreCase)));
+            return s_Allow = set;
+        }
+
+        public static bool IsMerc(Player p)
+        {
+            string name = p?.Account?.AccountName;
+            return name != null && IsReservedName(name) && Allow().Contains(name);
+        }
 
         public static int RealOnline()
         {

@@ -62,7 +62,14 @@ namespace RevivalGuard
             try
             {
                 var addr = Gateway.RealAddress(session?.EndPointC2S);   // a browser player's own, not the gateway's loopback
-                if (addr == null) return true;
+                if (addr == null)
+                {
+                    // FAIL CLOSED FOR STAFF (security audit 2026-10-20): no address means nobody can say it is local
+                    if (s_GateOn && account != null && account.AccessLevel > 0)
+                        return Refuse(session, $"staff login refused: account '{account.AccountName}' "
+                                             + $"(level {account.AccessLevel}): its address could not be read");
+                    return true;
+                }
                 bool local = IsLocal(addr);
                 string key = addr.ToString();
 
@@ -97,8 +104,27 @@ namespace RevivalGuard
                     && !account.PasswordMatches(loginRequest.Password))
                     Fail(key);                       // ACE boots it on its own; this only counts
             }
-            catch (Exception e) { Mod.Log.Error("[RevivalGuard] StaffLoginGate: " + e.Message); }
+            catch (Exception e)
+            {
+                Mod.Log.Error("[RevivalGuard] StaffLoginGate: " + e.Message);
+                // FAIL CLOSED FOR STAFF (security audit 2026-10-20): a gate that throws must not let a staff login through
+                if (s_GateOn && account != null && account.AccessLevel > 0)
+                    return Refuse(session, $"staff login refused: account '{account.AccountName}' "
+                                         + $"(level {account.AccessLevel}): the gate failed ({e.GetType().Name})");
+            }
             return true;
+        }
+
+        /// <summary>Refuse with the same words as a wrong password, and log why.</summary>
+        static bool Refuse(Session session, string why)
+        {
+            Mod.Log.Warn("[RevivalGuard] " + why);
+            try
+            {
+                session?.Terminate(SessionTerminationReason.NotAuthorizedPasswordMismatch, new GameMessageBootAccount(BAD_PASSWORD));
+            }
+            catch (Exception e) { Mod.Log.Error("[RevivalGuard] StaffLoginGate: could not end the session: " + e.Message); }
+            return false;
         }
 
         static void Fail(string key)

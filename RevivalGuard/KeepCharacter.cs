@@ -61,6 +61,13 @@ namespace RevivalGuard
                 if (!account.AccountName.StartsWith("guest", StringComparison.OrdinalIgnoreCase)) { Say(session, "This account is already yours to keep; nothing to do."); return; }
                 if (!NAME.IsMatch(name)) { Say(session, "Choose 3 to 24 letters and digits, starting with a letter."); return; }
                 if (name.StartsWith("guest")) { Say(session, "Choose a name that does not start with \"guest\"."); return; }
+                // the reserved prefixes (AccountCreationCap refuses them at login; a kept guest must not slip one in)
+                if (Mercenaries.IsReservedName(name))
+                {
+                    Mod.Log.Warn($"[RevivalGuard] KeepCharacter: '{account.AccountName}' asked for the reserved name '{name}'; refused");
+                    Say(session, "That account name is reserved; choose another.");
+                    return;
+                }
                 if (pw.Length < 6 || pw.Length > 64) { Say(session, "Choose a password of 6 to 64 characters, no spaces."); return; }
                 if (DatabaseManager.Authentication.GetAccountByName(name) != null) { Say(session, "That account name is taken; choose another."); return; }
 

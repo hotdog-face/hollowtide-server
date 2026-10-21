@@ -83,7 +83,7 @@ namespace RevivalGuard
                 // fellowship leader), no chat log, no Discord mirror and no population count. Existing accounts keep
                 // working; a new one is refused (make new mercenaries with ACE's own accountcreate on the console).
                 if (loginRequest.NetAuthType == NetAuthType.AccountPassword
-                    && loginRequest.Account != null && loginRequest.Account.StartsWith("hcmerc", StringComparison.OrdinalIgnoreCase)
+                    && Mercenaries.IsReservedName(loginRequest.Account)
                     && DatabaseManager.Authentication.GetAccountByName(loginRequest.Account) == null)
                 {
                     Mod.Log.Warn($"[RevivalGuard] new account '{loginRequest.Account}' refused: the hcmerc prefix is reserved ({addr})");

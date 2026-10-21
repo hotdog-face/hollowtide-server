@@ -31,12 +31,14 @@ namespace RevivalGuard
         static double XP_LIMIT_FRACTION => Tunables.D("economy.xp_limit_fraction", 4.0); // windows' worth of the next level's cost, below level 126
         static long XP_LIMIT_FLOOR => Tunables.L("economy.xp_limit_floor", 100_000_000);
 
-        sealed class Sample { public DateTime At; public long Coin, Xp; public DateTime LastFlag; }
-        sealed class History { public readonly Queue<Sample> Samples = new Queue<Sample>(); }
+        sealed class Sample { public DateTime At; public long Coin, Xp; }
+        // The flag gate lives on the character's history: one flag per window per character (EconomyFlags.cs).
+        sealed class History { public readonly Queue<Sample> Samples = new Queue<Sample>(); public readonly FlagGate Gate = new FlagGate(); }
         static readonly ConditionalWeakTable<Player, History> s_History = new ConditionalWeakTable<Player, History>();
 
         static readonly string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ace", "reports", "economy");
-        static readonly object s_FileLock = new object();
+        // The report file is written off the landblock thread (it used to be a synchronous append every heartbeat).
+        static readonly BackgroundAppender s_Writer = new BackgroundAppender(m => Mod.Log.Warn($"[RevivalGuard] economy watch: {m}"));
 
         static void Postfix(Player __instance)
         {
@@ -70,17 +72,11 @@ namespace RevivalGuard
                            : xpGain > xpLimit ? $"experience +{xpGain:N0} in {WINDOW_MINUTES} min (limit {xpLimit:N0})"
                            : null;
                 if (why == null) return;
-                var last = h.Samples.Count > 0 ? h.Samples.Peek() : cur;
-                if ((now - cur.LastFlag).TotalMinutes < WINDOW_MINUTES && cur.LastFlag != default) return;
-                foreach (var s in h.Samples) s.LastFlag = now;   // one flag per window per character
+                if (!h.Gate.TryFlag(now, WINDOW_MINUTES)) return;   // one flag per window per character
 
                 string line = $"{now:o}\t{p.Name}\t0x{p.Guid.Full:X8}\t{p.Session.Account}\tlevel {p.Level}\t{why}\t{p.Location?.ToLOCString()}";
                 Mod.Log.Warn($"[RevivalGuard] economy: {p.Name} {why}");
-                lock (s_FileLock)
-                {
-                    Directory.CreateDirectory(Dir);
-                    File.AppendAllText(Path.Combine(Dir, now.ToString("yyyy-MM-dd") + ".log"), line + Environment.NewLine);
-                }
+                s_Writer.Enqueue(Path.Combine(Dir, now.ToString("yyyy-MM-dd") + ".log"), line);
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] economy watch: {e.Message}"); }
         }

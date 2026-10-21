@@ -73,6 +73,7 @@ namespace RevivalGuard
             ServerFirsts.Register();
             MonsterAi.Register();
             EventDirector.Register();
+            ExtraDeathLines.Register();
             // The PK expansion (docs/PK-EXPANSION.md): every part off until its property is set.
             PkCommon.RegisterProperties();
             PkRenown.Register();

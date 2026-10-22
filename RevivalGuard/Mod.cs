@@ -510,8 +510,8 @@ namespace RevivalGuard
             try
             {
                 var st = message.Payload.BaseStream; long pos = st.Position;
-                if (opcode != GameActionType.TalkDirect) text = message.Payload.ReadString16L();
-                st.Position = pos;   // the real handler reads it again
+                try { text = ChatRepeatKey.Of((uint)opcode, message.Payload); }   // ChatChannel: channel first
+                finally { st.Position = pos; }   // the real handler reads it again
             }
             catch { }
 

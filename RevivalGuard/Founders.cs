@@ -22,7 +22,9 @@ namespace RevivalGuard
     ///   * the Founder's Shirt (901913): retail's anniversary-shirt tradition, in a gold no other item has;
     ///   * the Founder's Banner (901914): a wall-hook banner for a house;
     ///   * the title "Founder" (ACE CharacterTitle.HollowtideFounder, 9001), made the displayed title.
-    /// Both items are Attuned and Bonded (tools/gpubox-ace/founders.sql): never traded, sold, dropped or lost. An
+    /// Both items are Bonded (tools/gpubox-ace/founders.sql): never lost on death. The shirt is also Attuned (never
+    /// traded, sold or dropped); the banner is not, because ACE will not hang an attuned item on a hook (report
+    /// 261021-0046). An
     /// account made after the cutoff never qualifies, so nobody can come by them later. Hollow Company accounts are
     /// left out. A pack too full for the gifts is told so, and the gifts wait for the next login.
     ///

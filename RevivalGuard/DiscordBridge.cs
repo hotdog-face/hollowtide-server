@@ -35,6 +35,10 @@ namespace RevivalGuard
     ///
     /// CONFIG: discord-bridge.json beside the mod, {"token": "...", "channelId": "..."}. No file, no bridge. The file
     /// is never published (the public source takes only the .cs files).
+    ///
+    /// ANNOUNCEMENTS (FestivalNotices, 2026-10-21): an optional "announceChannelId" (#announcements) takes one-way
+    /// posts from the shard, festival starts and ends. The same bot posts there; it needs View Channel and Send
+    /// Messages in that channel. Without the field nothing is announced (the General channel never gets them).
     /// </summary>
     [HarmonyPatch]
     static class DiscordBridge
@@ -44,7 +48,7 @@ namespace RevivalGuard
         const int OUT_MAX = 400, IN_MAX = 240;
         const int POLL_MS = 2000, POST_GAP_MS = 700;   // Discord allows 5 posts in 5 s per channel
 
-        sealed class Config { public string token { get; set; } public string channelId { get; set; } }
+        sealed class Config { public string token { get; set; } public string channelId { get; set; } public string announceChannelId { get; set; } }
 
         static Config s_Cfg;
         static HttpClient s_Http;
@@ -60,6 +64,8 @@ namespace RevivalGuard
         // and kept 10 minutes.
         static readonly Dictionary<string, (string nick, DateTime at)> s_Nicks = new Dictionary<string, (string, DateTime)>();
         static readonly ConcurrentQueue<string> s_Out = new ConcurrentQueue<string>();
+        static readonly ConcurrentQueue<string> s_Announce = new ConcurrentQueue<string>();
+        static int s_Announced;
         static CancellationTokenSource s_Stop;
         static int s_Sent, s_Received;
 
@@ -80,7 +86,8 @@ namespace RevivalGuard
                 s_Http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "DiscordBot (https://github.com/an admin account-face/hollowtide-server, 1)");
                 s_Stop = new CancellationTokenSource();
                 Task.Run(() => Run(s_Stop.Token));
-                Mod.Log.Info($"[RevivalGuard] DiscordBridge: on, channel {cfg.channelId}");
+                Mod.Log.Info($"[RevivalGuard] DiscordBridge: on, channel {cfg.channelId}"
+                    + (string.IsNullOrWhiteSpace(cfg.announceChannelId) ? "; no announceChannelId, festival posts off" : $", announcements to {cfg.announceChannelId}"));
             }
             catch (Exception e) { Mod.Log.Error($"[RevivalGuard] DiscordBridge: off ({e.GetType().Name}: {e.Message})"); s_Cfg = null; }
         }
@@ -166,6 +173,7 @@ namespace RevivalGuard
                 try
                 {
                     await PostQueued(stop);
+                    await PostAnnouncements(stop);
                     if (DateTime.UtcNow >= nextPoll) { nextPoll = DateTime.UtcNow.AddMilliseconds(POLL_MS); await Poll(stop); }
                     if (s_Fails > 0)
                     {
@@ -201,6 +209,41 @@ namespace RevivalGuard
             if ((int)r.StatusCode == 429) { await Task.Delay(RetryAfter(await r.Content.ReadAsStringAsync()), stop); return; }
             if (!r.IsSuccessStatusCode) Mod.Log.Warn($"[RevivalGuard] DiscordBridge: post refused ({(int)r.StatusCode})");
             else s_Sent++;
+        }
+
+        /// <summary>
+        /// Queue a post for the announcements channel (Discord markdown allowed, mentions never ping). False when
+        /// there is no bridge or no announceChannelId; the caller logs the text instead.
+        /// </summary>
+        public static bool Announce(string text)
+        {
+            if (s_Cfg == null || string.IsNullOrWhiteSpace(s_Cfg.announceChannelId) || string.IsNullOrWhiteSpace(text)) return false;
+            s_Announce.Enqueue(text.Length > 1800 ? text.Substring(0, 1800) + "..." : text);
+            return true;
+        }
+
+        static async Task PostAnnouncements(CancellationToken stop)
+        {
+            if (s_Announce.IsEmpty || s_Cfg == null) return;
+            // several at once (Festival Season ends as the Anniversary and the Night Club begin) go as one post
+            var sb = new StringBuilder();
+            while (sb.Length < 1600 && s_Announce.TryPeek(out var next) && (sb.Length == 0 || sb.Length + next.Length < 1950))
+            {
+                s_Announce.TryDequeue(out var line);
+                if (sb.Length > 0) sb.Append("\n\n");
+                sb.Append(line);
+            }
+            var body = JsonSerializer.Serialize(new { content = sb.ToString(), allowed_mentions = new { parse = Array.Empty<string>() }, flags = 4 });
+            using var r = await s_Http.PostAsync($"{API}/channels/{s_Cfg.announceChannelId.Trim()}/messages", new StringContent(body, Encoding.UTF8, "application/json"), stop);
+            if ((int)r.StatusCode == 429)
+            {
+                // put it back: an announcement is worth the wait, unlike a chat line
+                foreach (var part in sb.ToString().Split("\n\n")) s_Announce.Enqueue(part);
+                await Task.Delay(RetryAfter(await r.Content.ReadAsStringAsync()), stop);
+                return;
+            }
+            if (!r.IsSuccessStatusCode) Mod.Log.Warn($"[RevivalGuard] DiscordBridge: announcement refused ({(int)r.StatusCode}); does the bot have Send Messages in {s_Cfg.announceChannelId}? Text: {sb}");
+            else { s_Announced++; Mod.Log.Info($"[RevivalGuard] DiscordBridge: announced ({sb.Length} chars)"); }
         }
 
         static async Task Poll(CancellationToken stop)
@@ -323,6 +366,7 @@ namespace RevivalGuard
             }));
         }
 
-        public static string Status() => s_Cfg == null ? "off" : $"on, channel {s_Cfg.channelId}, {s_Sent} posts out, {s_Received} lines in";
+        public static string Status() => s_Cfg == null ? "off" : $"on, channel {s_Cfg.channelId}, {s_Sent} posts out, {s_Received} lines in"
+            + (string.IsNullOrWhiteSpace(s_Cfg.announceChannelId) ? ", no announcements channel" : $", {s_Announced} announcements to {s_Cfg.announceChannelId}");
     }
 }

@@ -437,6 +437,8 @@ DELETE FROM weenie_properties_string WHERE object_Id = 900813 AND type = 16; INS
 DELETE FROM weenie_properties_int WHERE object_Id = 900813 AND type = 19; INSERT INTO weenie_properties_int (object_Id, type, value) VALUES (900813, 19, 1000);
 DELETE FROM weenie_properties_int WHERE object_Id = 900813 AND type = 33; INSERT INTO weenie_properties_int (object_Id, type, value) VALUES (900813, 33, 1);
 DELETE FROM weenie_properties_int WHERE object_Id = 900813 AND type = 114; INSERT INTO weenie_properties_int (object_Id, type, value) VALUES (900813, 114, 1);
+DELETE FROM weenie_properties_int WHERE object_Id = 900813 AND type = 150;
+DELETE FROM weenie_properties_int WHERE object_Id = 900813 AND type = 151;
 DELETE FROM weenie_properties_string WHERE object_Id = 900813 AND type = 33; INSERT INTO weenie_properties_string (object_Id, type, value) VALUES (900813, 33, 'UnboundQueenCrownTaken');
 DELETE FROM weenie_properties_string WHERE object_Id = 900813 AND type = 15; INSERT INTO weenie_properties_string (object_Id, type, value) VALUES (900813, 15, 'A horn plate from the crown of the Unbound Queen.');
 

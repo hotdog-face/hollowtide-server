@@ -68,6 +68,7 @@ namespace RevivalGuard
     ///   @festival on &lt;key&gt;         force one on, regardless of the date
     ///   @festival off &lt;key&gt;        force one off, regardless of the date
     ///   @festival auto &lt;key|all&gt;   hand it back to the calendar
+    ///   @festival say [&lt;key&gt; start|end|remind|login]   preview what players are told (FestivalNotices)
     ///
     /// OVERRIDES SURVIVE A RESTART. The first version held them in memory on the theory that a
     /// forgotten override was a silent lie and a restart was the cheapest way to be sure. The
@@ -92,7 +93,7 @@ namespace RevivalGuard
         /// one-minute margins at each end are dropped here; a festival that starts at midnight
         /// rather than 00:01 is not a fidelity question anyone can observe.)
         /// </summary>
-        const int RETAIL_UTC_OFFSET_HOURS = -5;
+        internal const int RETAIL_UTC_OFFSET_HOURS = -5;
 
         /// <summary>How often the calendar is re-asserted. A festival boundary is a date, so a
         /// minute of latency is invisible, and this runs on the world loop where cheap matters.</summary>
@@ -101,14 +102,17 @@ namespace RevivalGuard
         /// <summary>The override file, beside the mod dll. See OverridePath.</summary>
         const string OVERRIDE_FILE = "SeasonalOverrides.json";
 
-        sealed class Festival
+        /// <summary>A row of the table. tools/seasons/export_calendar.py parses these literals into
+        /// Assets/StreamingAssets/seasons.json for the client's calendar: keep each field a plain literal.</summary>
+        internal sealed class Festival
         {
             public string Key;              // what @festival takes
             public string Name;             // what a player is told
             public int StartMonth, StartDay, EndMonth, EndDay;   // inclusive both ends, local to UTC-5
             public string[] On = Array.Empty<string>();          // ace_world.event rows to start
             public string[] Off = Array.Empty<string>();         // rows to stop for the duration
-            public string Announce;         // the world broadcast when it opens
+            public string Announce;         // the world broadcast when it opens (seasons.json "about")
+            public string Hint = "";        // where to find it, on the login line (FestivalNotices); placements checked on OVH 2026-10-21
             public string Evidence;         // the weenie this was read off, shown by @festival list
 
             public string Window => $"{StartMonth:00}-{StartDay:00} to {EndMonth:00}-{EndDay:00}";
@@ -129,7 +133,7 @@ namespace RevivalGuard
         ///    80223 under the New Year's Day gen). That is why desired state is computed as a union
         ///    over active festivals rather than per festival: two windows can want the same row.
         /// </summary>
-        static readonly Festival[] Calendar =
+        internal static readonly Festival[] Calendar =
         {
             new Festival
             {
@@ -140,6 +144,7 @@ namespace RevivalGuard
                 Announce = "The harvest has turned. Pumpkin Lords and Harvest Reapers walk the "
                          + "landscape, the dead are stirring in Al-Jalima, and the Majestic Pumpkin "
                          + "is waiting in Glenden Wood.",
+                Hint = "Pumpkins line Holtburg, the Festival Costumer is in Glenden Wood, and the dead walk in Al-Jalima.",
                 Evidence = "ace80069-fallfestivaleventsstopgapgen, Oct 1 to Nov 1",
             },
             new Festival
@@ -151,6 +156,7 @@ namespace RevivalGuard
                 Announce = "Winter has come to Dereth. Presents are hidden across the towns, Frost "
                          + "Haven is under assault, and something wearing a red suit has been seen "
                          + "in the desert.",
+                Hint = "Look for hidden presents in the towns, and the Frostfell Costumer in Holtburg.",
                 Evidence = "ace80018-holidayeventsstopgapgen, Dec 4 to Jan 1",
             },
             new Festival
@@ -160,6 +166,7 @@ namespace RevivalGuard
                 On  = new[] { "springbabies", "springbunnyevent", "SpringEasterEggs", "IHOPopen" },
                 Announce = "Spring has come to Dereth. Young creatures are on the landscape, "
                          + "coloured eggs are turning up, and the House of Pancakes has opened.",
+                Hint = "Look for eggs and young creatures on the landscape, the House of Pancakes in Shoushi, and the Spring Costumer in Holtburg.",
                 Evidence = "ace87093-springeventsstopgapgen, Apr 1 to May 1",
             },
             new Festival
@@ -173,6 +180,7 @@ namespace RevivalGuard
                 StartMonth = 4, StartDay = 1, EndMonth = 4, EndDay = 1,
                 On  = new[] { "AprilFoolsMadCows" },
                 Announce = "It is raining cows. They are not happy about it.",
+                Hint = "Look up, and mind the cows.",
                 Evidence = "ace23631 April 2003 Raining Mad Cows Gen's own window, Apr 1 only",
             },
             new Festival
@@ -182,6 +190,7 @@ namespace RevivalGuard
                 On  = new[] { "ReceptionGames" },
                 Announce = "The Royal Wedding anniversary is being kept. The reception games have "
                          + "begun again.",
+                Hint = "",
                 Evidence = "ace80228-royalweddinganniversarystopgapgen, May 1 to Jun 1",
             },
             new Festival
@@ -195,6 +204,7 @@ namespace RevivalGuard
                 On  = new[] { "Fireworks", "AnniversaryFestivalStones" },
                 Announce = "Another year of Dereth. There are fireworks over the towns, and the Festival "
                          + "Stones have risen again.",
+                Hint = "Look for fireworks over the towns, the Festival Stones across Dereth, and the Anniversary Costumer in Cragstone.",
                 Evidence = "ace69999-fireworksstopgapgen, Nov 2 to Nov 5 (and the Festival Stones' own window)",
             },
             new Festival
@@ -210,6 +220,7 @@ namespace RevivalGuard
                 On  = new[] { "AnniversaryNightClub" },
                 Announce = "The Night Club is open for the anniversary. Its attendants are waiting in "
                          + "Cragstone, Hebian-To, Sanamar and Zaikhal.",
+                Hint = "Its attendants are in Cragstone, Hebian-To, Sanamar and Zaikhal.",
                 Evidence = "ace69997-nightclubattendantgenerator's own window, Nov 2 to Dec 1",
             },
             new Festival
@@ -218,6 +229,7 @@ namespace RevivalGuard
                 StartMonth = 1, StartDay = 1, EndMonth = 2, EndDay = 1,
                 On  = new[] { "EventNewYear" },
                 Announce = "A new year begins in Dereth.",
+                Hint = "",
                 Evidence = "ace80222-newyeareventsstopgapgen, Jan 1 to Feb 1",
             },
             new Festival
@@ -226,6 +238,7 @@ namespace RevivalGuard
                 StartMonth = 1, StartDay = 1, EndMonth = 1, EndDay = 1,
                 On  = new[] { "Fireworks" },
                 Announce = "Fireworks over Dereth for the new year.",
+                Hint = "Look up for fireworks over the towns.",
                 Evidence = "ace80224-newyearsdayeventsstopgapgen, Jan 1 only",
             },
         };
@@ -245,10 +258,6 @@ namespace RevivalGuard
         static readonly Dictionary<string, Override> s_Forced =
             new Dictionary<string, Override>(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>Which festivals we last saw as running, so a transition can be announced once
-        /// rather than every minute.</summary>
-        static readonly HashSet<string> s_Running = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
         static readonly object s_Lock = new object();
         static double s_NextCheck;
 
@@ -256,7 +265,6 @@ namespace RevivalGuard
         /// calendar re-asserts them every minute and would fight it.</summary>
         internal static HashSet<string> OwnedRows() =>
             new HashSet<string>(Calendar.SelectMany(f => f.On.Concat(f.Off)), StringComparer.OrdinalIgnoreCase);
-        static bool s_FirstPass = true;
 
         internal static void Register()
         {
@@ -266,7 +274,7 @@ namespace RevivalGuard
             // are. CommandManager.TryAddCommand checks access on every invocation itself.
             CommandManager.TryAddCommand(FestivalCmd, "festival", AccessLevel.Player,
                 CommandHandlerFlag.None, "What festival is running, and force one on or off.",
-                "[list | on <key> | off <key> | auto <key|all>]");
+                "[list | on <key> | off <key> | auto <key|all> | say <key> start|end|remind|login]");
 
             LoadOverrides();
             LogStartupState();
@@ -278,19 +286,31 @@ namespace RevivalGuard
             if (now < s_NextCheck) return;
             s_NextCheck = now + CHECK_SECONDS;
             // Apply reaches EventManager.StartEvent/StopEvent; a throw there must not end the world loop
-            try { Apply(announce: true); }
+            try { Apply(); }
             catch (Exception e) { TickGuard.Report("SeasonalCalendar", e); }
+            // The start/end/reminder broadcasts and Discord posts, remembered across restarts (FestivalNotices)
+            try { FestivalNotices.Tick(); }
+            catch (Exception e) { TickGuard.Report("FestivalNotices", e); }
         }
 
         /// <summary>The local date the calendar is evaluated against. See RETAIL_UTC_OFFSET_HOURS.</summary>
         static DateTime RetailNow() => DateTime.UtcNow.AddHours(RETAIL_UTC_OFFSET_HOURS);
+
+        /// <summary>A forced state for the notices: true forced on, false forced off, null the calendar's.</summary>
+        internal static bool? ForcedOn(Festival f)
+        {
+            lock (s_Lock) return s_Forced.TryGetValue(f.Key, out var o) ? o.On : (bool?)null;
+        }
+
+        /// <summary>A file beside the dll, next to SeasonalOverrides.json (FestivalNotices keeps its state there).</summary>
+        internal static string FileBeside(string name) => Path.Combine(Path.GetDirectoryName(OverridePath()), name);
 
         /// <summary>
         /// Is this (month, day) inside the festival's window? Both ends are inclusive days, and the
         /// comparison is on MMDD so that Frostfell, which starts in December and ends in January,
         /// works without knowing which year either end is in.
         /// </summary>
-        static bool InWindow(Festival f, DateTime local)
+        internal static bool InWindow(Festival f, DateTime local)
         {
             int cur = local.Month * 100 + local.Day;
             int start = f.StartMonth * 100 + f.StartDay;
@@ -436,7 +456,7 @@ namespace RevivalGuard
         /// else on the shard can turn these rows (a stopgap object dying, an admin's @setevent), and
         /// re-asserting means the calendar wins within a minute instead of silently losing.
         /// </summary>
-        static void Apply(bool announce)
+        static void Apply()
         {
             var local = RetailNow();
             var active = Calendar.Where(f => IsActive(f, local)).ToList();
@@ -466,37 +486,8 @@ namespace RevivalGuard
 
             foreach (var name in wantOn) Set(name, true);
             foreach (var name in wantOff) Set(name, false);
-
-            if (!announce) return;
-
-            lock (s_Lock)
-            {
-                foreach (var f in active)
-                {
-                    if (!s_Running.Add(f.Key)) continue;
-                    // The first pass after a restart is not a festival starting, it is the server
-                    // catching up with the date (or with a persisted override). Announcing it would
-                    // tell everyone online that Festival Season had just begun every time the shard
-                    // bounced.
-                    if (s_FirstPass)
-                    {
-                        Mod.Log.Info($"[RevivalGuard] seasonal: {f.Name} rows asserted"
-                            + (s_Forced.ContainsKey(f.Key) ? " (forced)" : $" (in its window, {f.Evidence})"));
-                        continue;
-                    }
-                    Broadcast($"{f.Name} has begun. {f.Announce}");
-                    Mod.Log.Info($"[RevivalGuard] seasonal: {f.Name} started");
-                }
-                foreach (var key in s_Running.Where(k => active.All(f => !f.Key.Equals(k, StringComparison.OrdinalIgnoreCase))).ToList())
-                {
-                    s_Running.Remove(key);
-                    var f = Calendar.FirstOrDefault(x => x.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
-                    if (f == null || s_FirstPass) continue;
-                    Broadcast($"{f.Name} has ended for this year.");
-                    Mod.Log.Info($"[RevivalGuard] seasonal: {f.Name} ended");
-                }
-                s_FirstPass = false;
-            }
+            // Telling players (start, end, reminder, login) is FestivalNotices, which remembers what it
+            // last said in SeasonalAnnounced.json so a restart neither repeats nor misses a transition.
         }
 
         /// <summary>
@@ -522,14 +513,11 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] seasonal: {name} -> {(on ? "On" : "Off")}");
         }
 
-        static void Broadcast(string text) =>
-            PlayerManager.BroadcastToAll(new GameMessageSystemChat(text, ChatMessageType.WorldBroadcast));
-
         static void Say(Session s, string text) =>
             s?.Network?.EnqueueSend(new GameMessageSystemChat(text, ChatMessageType.Broadcast));
 
         /// <summary>Days until this festival's window next opens, for the "what is next" line.</summary>
-        static int DaysUntil(Festival f, DateTime local)
+        internal static int DaysUntil(Festival f, DateTime local)
         {
             for (int i = 0; i <= 366; i++)
                 if (InWindow(f, local.AddDays(i))) return i;
@@ -547,6 +535,17 @@ namespace RevivalGuard
             var local = RetailNow();
             string verb = parameters.Length > 0 ? parameters[0].ToLowerInvariant() : "";
             string who = session?.Player?.Name ?? "console";
+
+            if (verb == "say")
+            {
+                if (session != null && session.AccessLevel < AccessLevel.Developer)
+                {
+                    Say(session, "@festival say needs Developer access.");
+                    return;
+                }
+                FestivalNotices.Preview(session, parameters.Skip(1).ToArray());
+                return;
+            }
 
             if (verb == "on" || verb == "off" || verb == "auto")
             {
@@ -567,7 +566,7 @@ namespace RevivalGuard
                 {
                     lock (s_Lock) s_Forced.Clear();
                     SaveOverrides();
-                    Apply(announce: false);
+                    Apply();
                     Say(session, "Every festival is back on the calendar.");
                     Mod.Log.Info($"[RevivalGuard] seasonal: all overrides cleared by {who}");
                     return;
@@ -591,8 +590,7 @@ namespace RevivalGuard
                 SaveOverrides();
                 // Forcing is for testing, so it does not broadcast: an admin proving the spawns work
                 // in March should not tell every player that Festival Season has begun.
-                Apply(announce: false);
-                lock (s_Lock) { if (verb == "on") s_Running.Add(f.Key); else s_Running.Remove(f.Key); }
+                Apply();
                 Say(session, verb == "auto"
                     ? $"{f.Name} follows the calendar again, and is currently {(IsActive(f, local) ? "on" : "off")}."
                     : $"{f.Name} forced {verb}. This survives a restart; @festival auto {f.Key} hands it back to the calendar.");
@@ -636,7 +634,8 @@ namespace RevivalGuard
                 }
             }
             if (session == null || session.AccessLevel >= AccessLevel.Developer)
-                Say(session, "@festival list for all of them, @festival on <key> to force one for testing.");
+                Say(session, "@festival list for all of them, @festival on <key> to force one for testing, "
+                    + "@festival say <key> start|end|remind|login to preview what players are told.");
         }
     }
 }

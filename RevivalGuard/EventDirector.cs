@@ -43,7 +43,12 @@ namespace RevivalGuard
     /// shutdown is cancelled.
     ///
     ///   @events                        players: what is running now and what is next
-    ///   @eventdirector                 admins/bots: status (list | on | off | next | stop | start key)
+    ///   @eventdirector                 admins/bots: status (list | on | off | next | skip | stop | start key)
+    ///
+    /// LIVE SWITCH. rg_event_director, default off: a shard runs no live events until staff say
+    /// `@eventdirector on`. FESTIVAL EVENTS (Festivals set) run only while SeasonalCalendar has one of
+    /// their festivals on, and get one slot after every event_director_festival_every (3) year-round events (EventDirectorRules.Choose). The rotation holds
+    /// during Anniversary Night and keeps clear of a world boss's window in his region.
     /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class EventDirector
@@ -55,9 +60,11 @@ namespace RevivalGuard
             public string[] Start;                 // rows started at the beginning
             public string[] Stop;                  // rows stopped at the end: Start plus whatever the event's own emotes chain into
             public (string ev, string text)[] Stages = Array.Empty<(string, string)>();   // announced when that row turns On mid-event
-            public int[] Months;                   // null: all year
+            public string[] Festivals;             // SeasonalCalendar keys: in the rotation only while one is on; null: all year
+            public double? Minutes;                // how long it runs; null: event_director_duration_min
             public (int x0, int y0, int x1, int y1) Box;   // landblock X/Y rectangle for "is anyone there"
             public string Announce, Victory, Withdraw;
+            public bool IsFestival => Festivals != null && Festivals.Length > 0;
         }
 
         const string LEAD = "Attention Citizens of Dereth! ";
@@ -179,7 +186,7 @@ namespace RevivalGuard
             new Entry
             {
                 Key = "presents-tufa", Title = "Gurogs Raid the Presents at Tufa", Where = "14.9S, 5.6E", Levels = "220 to 300",
-                Regions = new[] { "tufa", "presentraids" }, Box = (0x85, 0x6B, 0x87, 0x6D), Months = new[] { 12, 1 },
+                Regions = new[] { "tufa", "presentraids" }, Box = (0x85, 0x6B, 0x87, 0x6D), Festivals = new[] { "frostfell", "newyear" },
                 Start = new[] { "PresentRaidsTufa" },
                 Stop = new[] { "PresentRaidsTufa", "PresentRaidsDead" },
                 Stages = new[] { ("PresentRaidsDead", "The Holiday Present at Tufa has been destroyed!") },
@@ -191,7 +198,7 @@ namespace RevivalGuard
             new Entry
             {
                 Key = "presents-yaraq", Title = "Drudges Raid the Presents at Yaraq", Where = "21.7S, 1.3W", Levels = "200",
-                Regions = new[] { "yaraq", "presentraids" }, Box = (0x7C, 0x63, 0x7E, 0x65), Months = new[] { 12, 1 },
+                Regions = new[] { "yaraq", "presentraids" }, Box = (0x7C, 0x63, 0x7E, 0x65), Festivals = new[] { "frostfell", "newyear" },
                 Start = new[] { "PresentRaidsYaraq" },
                 Stop = new[] { "PresentRaidsYaraq", "PresentRaidsDead" },
                 Stages = new[] { ("PresentRaidsDead", "The Holiday Presents at Yaraq have been stolen!") },
@@ -199,6 +206,71 @@ namespace RevivalGuard
                 Victory = "The Drudge raid on Yaraq is over.",
                 Withdraw = "The Drudges have left Yaraq.",
                 Evidence = "ace73230-presentraidsyaraqgen at 0x7D64; Drudge Pilferers 200; Frostfell content (wiki: Drudge Present Raids)",
+            },
+            // FESTIVAL EVENTS (owner 2026-10-22, "Seasonal Event Director runs"; docs/EVENT-DIRECTOR.md "Festival events").
+            // Retail festival creatures on rows of the director's own (Director*), from
+            // tools/public-shard/datafixes/2026-10-22-festival-director-events.sql. The festivals' own rows
+            // (EventFallFestival, springbunnyevent ...) stay SeasonalCalendar's: those creatures keep spawning all month
+            // where retail put them, and these entries only ever start and stop rows the calendar never turns.
+            new Entry
+            {
+                Key = "fs-pumpkin-glenden", Title = "Pumpkin Lords March on Glenden Wood", Where = "29.7N, 27.2E", Levels = "15 to 60",
+                Regions = new[] { "glenden" }, Box = (0xA0, 0xA3, 0xA2, 0xA5), Festivals = new[] { "festivalseason" }, Minutes = 60,
+                Start = new[] { "DirectorPumpkinLordsGlenden" }, Stop = new[] { "DirectorPumpkinLordsGlenden" },
+                Announce = LEAD + "Pumpkin Lords are marching on Glenden Wood, near 29.7N, 27.2E, each with a crowd of Pumpkin Kin at his heels. Young adventurers can thin the Kin; the Lords want a seasoned hand. Who will heed the call?",
+                Victory = "The Pumpkin Lords have been driven from Glenden Wood. Well fought!",
+                Withdraw = "The Pumpkin Lords have wandered back into the fields around Glenden Wood.",
+                Evidence = "902400, a copy of retail's Pumpkin Lord Generator 87048 (EventFallFestival, nested in the landscape tables), x5 around Glenden Wood; Pumpkin Lord 32186 L60 with 5 Pumpkin Kin 32203 L15",
+            },
+            new Entry
+            {
+                Key = "fs-dead-zaikhal", Title = "The Dead March on Zaikhal", Where = "13.7N, 0.6E", Levels = "60",
+                Regions = new[] { "zaikhal" }, Box = (0x7F, 0x8F, 0x81, 0x91), Festivals = new[] { "festivalseason" }, Minutes = 60,
+                Start = new[] { "DirectorRisenDeadZaikhal" }, Stop = new[] { "DirectorRisenDeadZaikhal" },
+                Announce = LEAD + "The festival season has stirred the old graves north of Al-Jalima. The dead are clawing their way up around Zaikhal, near 13.7N, 0.6E. Who will heed the call?",
+                Victory = "The dead around Zaikhal have been put back to rest. Well fought!",
+                Withdraw = "The dead around Zaikhal have sunk back into their graves.",
+                Evidence = "902401, a copy of retail's Low Old Gravestone Gen 73187 (EventFallFestival), x4 around Zaikhal; each Old Gravestone raises 10 Old Zombies 34102 L60",
+            },
+            new Entry
+            {
+                Key = "fs-incursion-hebian", Title = "Undead Incursion at Hebian-To", Where = "39.1S, 83.2E", Levels = "110 to 160",
+                Regions = new[] { "hebian" }, Box = (0xE6, 0x4D, 0xE8, 0x4F), Festivals = new[] { "festivalseason" }, Minutes = 60,
+                Start = new[] { "DirectorUndeadIncursionHebian" }, Stop = new[] { "DirectorUndeadIncursionHebian" },
+                Announce = LEAD + "An undead incursion has reached Hebian-To! Lich Oppressors, Dark Guardians and Shambling Adherents are closing on the town near 39.1S, 83.2E, and a Harvest Reaper walks with them. Who will heed the call?",
+                Victory = "The undead incursion at Hebian-To has been broken. Well fought!",
+                Withdraw = "The undead have withdrawn from Hebian-To.",
+                Evidence = "902402, a copy of retail's Zombie Incursion Gen 73176 (EventFallFestival, the Al-Jalima incursion, placed x11 there), x5 around Hebian-To: Old Zombie 73181 L110, Shambling Adherent / Lich Oppressor / Dark Guardian L160; 902403, a copy of the Harvest Reaper Generator 87049 (36443 L160), x1",
+            },
+            new Entry
+            {
+                Key = "ff-snowmen-holtburg", Title = "Unhappy Snowmen in Holtburg", Where = "42.3N, 33.6E", Levels = "8 to 15",
+                Regions = new[] { "holtburg" }, Box = (0xA8, 0xB3, 0xAA, 0xB5), Festivals = new[] { "frostfell" }, Minutes = 60,
+                Start = new[] { "DirectorSnowmenHoltburg" }, Stop = new[] { "DirectorSnowmenHoltburg" },
+                Announce = LEAD + "The snowmen around Holtburg are very unhappy about something, and some of them have grown a second head. Young adventurers are needed near 42.3N, 33.6E. Who will heed the call?",
+                Victory = "The snowmen around Holtburg have been calmed. Well fought!",
+                Withdraw = "The snowmen around Holtburg have settled down... for now.",
+                Evidence = "902404, a copy of retail's Unhappy Snowman Generator 5859 (unplaced), x6 around Holtburg, 3 each: Snowman 5766 L8, Two Headed Snowman 14466 L15",
+            },
+            new Entry
+            {
+                Key = "ff-scold-stonehold", Title = "The Scold Descend on Stonehold", Where = "68.8N, 21.6W", Levels = "40 to 80",
+                Regions = new[] { "stonehold" }, Box = (0x63, 0xD4, 0x65, 0xD6), Festivals = new[] { "frostfell" }, Minutes = 60,
+                Start = new[] { "DirectorScoldStonehold" }, Stop = new[] { "DirectorScoldStonehold" },
+                Announce = LEAD + "Scold Lumps, Scold Chunks and a great Scold have come down out of the ice around Stonehold, near 68.8N, 21.6W. Who will heed the call?",
+                Victory = "The Scold around Stonehold have been broken up. Well fought!",
+                Withdraw = "The Scold have drifted back into the snow around Stonehold.",
+                Evidence = "902405-902407, copies of the Assault on Frost Haven's Scold generators 87127/87125/87123, around Stonehold: Scold Lump 87126 L40 (x2 gens of 8), Scold Chunk 87124 L60 (x2 of 4), Scold 87122 L80 (x1)",
+            },
+            new Entry
+            {
+                Key = "sp-rabbits-eastham", Title = "Black Rabbits Loose near Eastham", Where = "17.6N, 63.4E", Levels = "2 to 115",
+                Regions = new[] { "eastham" }, Box = (0xCD, 0x94, 0xCF, 0x96), Festivals = new[] { "spring" }, Minutes = 60,
+                Start = new[] { "DirectorBlackRabbitsEastham" }, Stop = new[] { "DirectorBlackRabbitsEastham" },
+                Announce = LEAD + "Black Rabbits are loose in the fields around Eastham, near 17.6N, 63.4E, and their Black Bunnies are everywhere. Every Black Bunny counts for Spring Cleaning, but mind what hops out when one falls. Who will heed the call?",
+                Victory = "The Black Rabbits around Eastham have been rounded up. Well fought!",
+                Withdraw = "The Black Rabbits have hopped away from Eastham.",
+                Evidence = "902408, the Black Rabbit half of retail's Asheron's Island Harmless Gen 87091, x5 around Eastham, 2 each: Black Rabbit 87089 L4 (its Black Bunnies 87090 L2 come only while springbunnyevent is on); a Black Bunny's death leaves a Hulking Bunny 87088 L115 (3 xp), 1 in 12 a White Rabbit 87094 L666",
             },
             // Season 1 beat 1, "Omens" (docs/SEASON-THE-SHADOW-RETURNS.md, docs/MONSTERS-LORE-FACTIONS.md): Aerbax's
             // Umbral Legion raids three towns. Ours, not retail: rows and gens from tools/gpubox-ace/lore-factions.sql.
@@ -237,10 +309,17 @@ namespace RevivalGuard
 
         // ---- switches (ordinary ACE server properties; @modifybool / @modifydouble / @modifystring) ----
 
-        const string P_ENABLED = "event_director_enabled", P_DURATION = "event_director_duration_min",
+        // The master switch is rg_event_director, default OFF (2026-10-22, before the first live run). It replaced
+        // event_director_enabled (default on), which is no longer read: a fresh name cannot inherit a stored value, so
+        // a deploy never starts the rotation on a shard where nobody turned it on.
+        const string P_ENABLED = "rg_event_director", P_DURATION = "event_director_duration_min",
                      P_GAP = "event_director_gap_min", P_IDLE = "event_director_idle_end_min",
                      P_MINPLAYERS = "event_director_min_players", P_SKIP = "event_director_skip",
-                     P_OMENS = "event_director_omens";
+                     P_OMENS = "event_director_omens", P_FESTIVALS = "event_director_festivals",
+                     P_FEST_EVERY = "event_director_festival_every";
+
+        /// <summary>Landblocks around an event's box that a world boss's lair must stay clear of during his window.</summary>
+        const int BOSS_MARGIN = 4;
 
         static readonly (string key, double def, string desc)[] s_Doubles =
         {
@@ -248,6 +327,7 @@ namespace RevivalGuard
             (P_GAP, 90, "EventDirector: quiet minutes between one live event and the next"),
             (P_IDLE, 60, "EventDirector: end an event early after this many minutes with nobody near it (0 = never)"),
             (P_MINPLAYERS, 1, "EventDirector: players that must be online before an event starts"),
+            (P_FEST_EVERY, 3, "EventDirector: in season, a festival event after every N year-round events (1 alternates; 3 is about 2 a day)"),
         };
 
         // ---- state (persisted) ----------------------------------------------------------------
@@ -259,6 +339,9 @@ namespace RevivalGuard
             [JsonPropertyName("endsAt")] public double EndsAt { get; set; }
             [JsonPropertyName("nextAt")] public double NextAt { get; set; }
             [JsonPropertyName("rotation")] public int Rotation { get; set; }
+            [JsonPropertyName("festRotation")] public int FestRotation { get; set; }
+            [JsonPropertyName("sinceFest")] public int SinceFest { get; set; } = 1000;   // year-round events since the last festival one
+            [JsonPropertyName("manual")] public bool Manual { get; set; }   // the current event was started by staff: it runs out even with the rotation off
             [JsonPropertyName("lastRun")] public Dictionary<string, double> LastRun { get; set; } = new Dictionary<string, double>();
         }
 
@@ -270,6 +353,8 @@ namespace RevivalGuard
         // runtime-only
         static bool s_Booted;
         static bool s_Suspended;             // stopped for a shutdown countdown
+        static bool s_PartyHold;             // held for Anniversary Night (@anniversary start)
+        static bool? s_WasEnabled;
         static double s_NextTick, s_LastSeenAt, s_NextPresence;
         static int s_AllOffChecks;
         static readonly HashSet<string> s_StagesSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -282,15 +367,19 @@ namespace RevivalGuard
             CommandManager.TryAddCommand(EventsCmd, "events", AccessLevel.Player, CommandHandlerFlag.None,
                 "What live event is running in Dereth, and what is next.", "");
             CommandManager.TryAddCommand(DirectorCmd, "eventdirector", AccessLevel.Admin, CommandHandlerFlag.None,
-                "Live event director (RevivalGuard): status, or list | on | off | next | stop | start <key>.",
-                "[list | on | off | next | stop | start <key>]");
+                "Live event director (RevivalGuard): status, or list | on | off | next | skip | stop | start <key>.",
+                "[list | on | off | next | skip | stop | start <key>]");
             LoadState();
-            Mod.Log.Info($"[RevivalGuard] EventDirector: {Catalogue.Length} live events in the rotation (@events, @eventdirector; event_director_* server properties)");
+            Mod.Log.Info($"[RevivalGuard] EventDirector: {Catalogue.Length} live events in the catalogue, {Catalogue.Count(e => e.IsFestival)} of them festival-only (@events, @eventdirector; {P_ENABLED} default off)");
         }
 
-        static bool Enabled => PropertyManager.GetBool(P_ENABLED, true).Item;
+        static bool Enabled => PropertyManager.GetBool(P_ENABLED, false).Item;
+        static bool FestivalsOn => PropertyManager.GetBool(P_FESTIVALS, true).Item;
+        static int FestEvery => (int)Math.Clamp(Math.Round(Minutes(P_FEST_EVERY, 3)), 1, 50);
         static double Minutes(string key, double def) => PropertyManager.GetDouble(key, def).Item;
         static double Now => Time.GetUnixTime();
+        static double Duration(Entry e) => Math.Max(0.1, e.Minutes ?? Minutes(P_DURATION, 120));
+        static double Gap => Math.Max(0.1, Minutes(P_GAP, 90));
 
         static void Postfix()
         {
@@ -328,10 +417,40 @@ namespace RevivalGuard
                     if (cur != null) { StartRows(cur); Mod.Log.Info($"[RevivalGuard] EventDirector: shutdown cancelled; {cur.Key} restarted"); }
                 }
 
-                if (!Enabled)
+                bool enabled = Enabled;
+                if (s_WasEnabled != enabled)
                 {
-                    if (cur != null) End(cur, now, "director turned off", announce: true, victory: false);
+                    // Switched on (by @eventdirector on or @modifybool): the first event comes in ten minutes, not at
+                    // once from a schedule that fell due while it was off; time enough to switch it off again.
+                    if (enabled && s_WasEnabled == false && s_State.NextAt < now + 600) { s_State.NextAt = now + 600; Save(); }
+                    if (s_WasEnabled != null) Mod.Log.Info($"[RevivalGuard] EventDirector: switched {(enabled ? "ON" : "OFF")}; next {(enabled ? Stamp(s_State.NextAt) : "none")}");
+                    s_WasEnabled = enabled;
+                }
+
+                if (!enabled)
+                {
+                    // Off: the rotation stops and its event ends; one an admin started by hand runs out its time.
+                    if (cur != null && !s_State.Manual) End(cur, now, "director turned off", announce: true, victory: false);
+                    else if (cur != null) WatchRunning(cur, now);
                     return;
+                }
+
+                // Anniversary Night (@anniversary start): the party has the world's attention. The rotation holds, an
+                // event it started closes with its withdraw line, and the next one comes a full gap after the party.
+                if (AnniversaryNight.On)
+                {
+                    if (!s_PartyHold) { s_PartyHold = true; Mod.Log.Info("[RevivalGuard] EventDirector: holding for Anniversary Night"); }
+                    if (cur != null && !s_State.Manual) End(cur, now, "Anniversary Night began", announce: true, victory: false);
+                    else if (cur != null) WatchRunning(cur, now);
+                    s_State.NextAt = Math.Max(s_State.NextAt, now + Gap * 60);
+                    return;
+                }
+                if (s_PartyHold)
+                {
+                    s_PartyHold = false;
+                    s_State.NextAt = Math.Max(s_State.NextAt, now + Gap * 60);
+                    Save();
+                    Mod.Log.Info($"[RevivalGuard] EventDirector: Anniversary Night is over; next live event {Stamp(s_State.NextAt)}");
                 }
 
                 if (cur != null) { WatchRunning(cur, now); return; }
@@ -342,9 +461,9 @@ namespace RevivalGuard
                     s_State.NextAt = now + 60;   // look again in a minute; nobody to see it
                     return;
                 }
-                var next = PickNext(out _);
+                var next = PickNext(now);
                 if (next == null) { s_State.NextAt = now + 600; Save(); return; }
-                Begin(next, now);
+                Begin(next, now, manual: false);
             }
         }
 
@@ -362,13 +481,14 @@ namespace RevivalGuard
             {
                 Mod.Log.Info($"[RevivalGuard] EventDirector: {cur.Key} ran out while the shard was down");
                 s_State.Current = null;
+                s_State.Manual = false;
             }
             // A deploy or restart never fires an event straight away: at least one gap first, and a
             // schedule that fell due while the shard was down waits five minutes for the world to settle.
-            if (s_State.NextAt <= 0) s_State.NextAt = now + Minutes(P_GAP, 90) * 60;
+            if (s_State.NextAt <= 0) s_State.NextAt = now + Gap * 60;
             else if (s_State.NextAt < now + 300) s_State.NextAt = now + 300;
             Save();
-            Mod.Log.Info($"[RevivalGuard] EventDirector: {(Enabled ? "on" : "OFF")}; next live event {Stamp(s_State.NextAt)}");
+            Mod.Log.Info($"[RevivalGuard] EventDirector: {(Enabled ? "ON" : $"OFF ({P_ENABLED})")}; next live event {Stamp(s_State.NextAt)}");
         }
 
         // ---- choosing ---------------------------------------------------------------------------
@@ -378,9 +498,21 @@ namespace RevivalGuard
 
         static bool IsOn(string ev) => EventManager.GetEventStatus(ev) == GameEventState.On;
 
+        static string FestivalNames(Entry e) => string.Join(" or ", e.Festivals);
+
+        /// <summary>A world boss whose window (warning included) meets [from, to) with his lair near this event, or null.</summary>
+        static string BossInTheWay(Entry e, double from, double to)
+        {
+            foreach (var (name, lair, wFrom, wTo) in WorldBossSchedule.WindowsBetween(from, to))
+                if (EventDirectorRules.LairNear(e.Box, lair, BOSS_MARGIN) && EventDirectorRules.Overlaps(from, to, wFrom, wTo))
+                    return $"{name}'s window ({Stamp(wFrom)} to {Stamp(wTo)}) is in its region";
+            return null;
+        }
+
         /// <summary>Why this entry cannot start right now, or null if it can. `ignore` is the entry being
-        /// replaced (its rows are about to stop, so they do not count as busy).</summary>
-        static string Blocked(Entry e, Entry ignore, bool manual)
+        /// replaced (its rows are about to stop, so they do not count as busy). `manual` (an admin's start)
+        /// ignores the season, the skip list and the opt-in switches, never a busy region or a boss's window.</summary>
+        static string Blocked(Entry e, Entry ignore, bool manual, double now)
         {
             foreach (var ev in e.Start)
             {
@@ -392,7 +524,8 @@ namespace RevivalGuard
                 if (seasonal.Contains(ev)) return $"'{ev}' belongs to the seasonal calendar";
             if (!manual)
             {
-                if (e.Months != null && !e.Months.Contains(DateTime.UtcNow.Month)) return "out of season";
+                if (!EventDirectorRules.FestivalOpen(e.Festivals, SeasonalCalendar.IsFestivalActive)) return $"out of season ({FestivalNames(e)} is not on)";
+                if (e.IsFestival && !FestivalsOn) return $"{P_FESTIVALS} is off";
                 var skip = (PropertyManager.GetString(P_SKIP, "").Item ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 if (skip.Any(s => s.Equals(e.Key, StringComparison.OrdinalIgnoreCase))) return $"listed in {P_SKIP}";
                 if (e.Key.StartsWith("omens-", StringComparison.OrdinalIgnoreCase) && !PropertyManager.GetBool(P_OMENS, false).Item)
@@ -409,58 +542,59 @@ namespace RevivalGuard
                 if (other.Regions.Intersect(e.Regions, StringComparer.OrdinalIgnoreCase).Any()) return $"its region is busy with {other.Key}";
                 if (other.Stop.Intersect(e.Stop, StringComparer.OrdinalIgnoreCase).Any()) return $"shares rows with {other.Key}, which is running";
             }
-            return null;
+            // A world boss rising nearby while it runs: his fight is the region's event.
+            return BossInTheWay(e, now, now + Duration(e) * 60);
         }
 
-        /// <summary>Round robin through the catalogue from the saved position, so every entry gets its
-        /// turn in a fixed order however often the shard restarts.</summary>
-        static Entry PickNext(out string why)
+        static EventDirectorRules.Pick Plan(double now, Entry ignore, Entry exclude = null)
         {
-            why = null;
-            var reasons = new List<string>();
-            for (int i = 0; i < Catalogue.Length; i++)
+            var fest = Catalogue.Select(c => c.IsFestival).ToArray();
+            var ok = Catalogue.Select(c => c != exclude && Blocked(c, ignore, manual: false, now) == null).ToArray();
+            return EventDirectorRules.Choose(fest, ok, s_State.Rotation, s_State.FestRotation, s_State.SinceFest, FestEvery);
+        }
+
+        /// <summary>The next entry by the two round robins (EventDirectorRules.Choose), moving the rotation.</summary>
+        static Entry PickNext(double now)
+        {
+            var p = Plan(now, Find(s_State.Current));
+            if (p.Index < 0)
             {
-                int idx = (s_State.Rotation + i) % Catalogue.Length;
-                var e = Catalogue[idx];
-                var b = Blocked(e, Find(s_State.Current), manual: false);
-                if (b == null) { s_State.Rotation = (idx + 1) % Catalogue.Length; return e; }
-                reasons.Add($"{e.Key}: {b}");
+                var why = string.Join("; ", Catalogue.Select(e => $"{e.Key}: {Blocked(e, null, manual: false, now)}"));
+                Mod.Log.Info($"[RevivalGuard] EventDirector: nothing can start ({why})");
+                return null;
             }
-            why = string.Join("; ", reasons);
-            Mod.Log.Info($"[RevivalGuard] EventDirector: nothing can start ({why})");
-            return null;
+            return Catalogue[p.Index];
         }
 
         /// <summary>What would start next, without moving the rotation.</summary>
-        static Entry PeekNext()
+        static Entry PeekNext(double now)
         {
-            for (int i = 0; i < Catalogue.Length; i++)
-            {
-                var e = Catalogue[(s_State.Rotation + i) % Catalogue.Length];
-                if (Blocked(e, Find(s_State.Current), manual: false) == null) return e;
-            }
-            return null;
+            var p = Plan(now, Find(s_State.Current));
+            return p.Index < 0 ? null : Catalogue[p.Index];
         }
 
         // ---- running ------------------------------------------------------------------------------
 
-        static void Begin(Entry e, double now)
+        static void Begin(Entry e, double now, bool manual)
         {
             StartRows(e);
             s_State.Current = e.Key;
+            s_State.Manual = manual;
             s_State.StartedAt = now;
-            s_State.EndsAt = now + Math.Max(0.1, Minutes(P_DURATION, 120)) * 60;
+            s_State.EndsAt = now + Duration(e) * 60;
             s_State.LastRun[e.Key] = now;
             // The rotation moves past whatever just started, however it was started (a manual
             // `start witshire` left the pointer on witshire and the next pick ran it again).
-            s_State.Rotation = (Array.IndexOf(Catalogue, e) + 1) % Catalogue.Length;
+            var p = new EventDirectorRules.Pick { Rotation = s_State.Rotation, FestRotation = s_State.FestRotation, SinceFest = s_State.SinceFest };
+            EventDirectorRules.Advance(ref p, Array.IndexOf(Catalogue, e), e.IsFestival, Catalogue.Length);
+            s_State.Rotation = p.Rotation; s_State.FestRotation = p.FestRotation; s_State.SinceFest = p.SinceFest;
             s_LastSeenAt = now;
             s_NextPresence = 0;
             s_AllOffChecks = 0;
             s_StagesSeen.Clear();
             Save();
             WorldBroadcast(e.Announce);
-            Mod.Log.Info($"[RevivalGuard] EventDirector: STARTED {e.Key} ({string.Join(", ", e.Start)}) until {Stamp(s_State.EndsAt)}");
+            Mod.Log.Info($"[RevivalGuard] EventDirector: STARTED {e.Key} ({string.Join(", ", e.Start)}) until {Stamp(s_State.EndsAt)}{(manual ? " (by hand)" : "")}");
         }
 
         static void WatchRunning(Entry cur, double now)
@@ -482,12 +616,21 @@ namespace RevivalGuard
 
             if (now >= s_State.EndsAt) { End(cur, now, "time is up", announce: true, victory: false); return; }
 
-            double idle = Minutes(P_IDLE, 60);
-            if (idle > 0 && now >= s_NextPresence)
+            if (now >= s_NextPresence)
             {
                 s_NextPresence = now + 60;
-                if (AnyoneNear(cur)) s_LastSeenAt = now;
-                else if (now - s_LastSeenAt >= idle * 60) End(cur, now, $"nobody near it for {idle:0.##} min", announce: true, victory: false);
+                // Its festival ended (the calendar's last day, or an admin's @festival off): a festival entry goes with it.
+                if (!s_State.Manual && !EventDirectorRules.FestivalOpen(cur.Festivals, SeasonalCalendar.IsFestivalActive))
+                { End(cur, now, $"{FestivalNames(cur)} is over", announce: true, victory: false); return; }
+                // A boss window opened nearby after the start (an admin's @worldboss spawn, a changed rhythm): make way.
+                var boss = BossInTheWay(cur, now, now + 1);
+                if (boss != null) { End(cur, now, $"making way: {boss}", announce: true, victory: false); return; }
+                double idle = Minutes(P_IDLE, 60);
+                if (idle > 0)
+                {
+                    if (AnyoneNear(cur)) s_LastSeenAt = now;
+                    else if (now - s_LastSeenAt >= idle * 60) End(cur, now, $"nobody near it for {idle:0.##} min", announce: true, victory: false);
+                }
             }
         }
 
@@ -509,7 +652,8 @@ namespace RevivalGuard
         {
             StopRows(cur, now);
             s_State.Current = null;
-            s_State.NextAt = now + Math.Max(0.1, Minutes(P_GAP, 90)) * 60;
+            s_State.Manual = false;
+            s_State.NextAt = now + Gap * 60;
             Save();
             if (announce) WorldBroadcast(victory ? cur.Victory : cur.Withdraw);
             if (victory) JokeScrollRewards.EventWon(cur.Key, PlayersNear(cur).ToList());   // off unless rg_joke_scroll_rewards
@@ -611,6 +755,7 @@ namespace RevivalGuard
                 st.LastRun ??= new Dictionary<string, double>();
                 if (st.Current != null && Find(st.Current) == null) st.Current = null;   // renamed/removed entry
                 st.Rotation = Math.Clamp(st.Rotation, 0, Catalogue.Length - 1);
+                st.FestRotation = Math.Clamp(st.FestRotation, 0, Catalogue.Length - 1);
                 lock (s_Lock) s_State = st;
             }
             catch (Exception e) { Mod.Log.Error($"[RevivalGuard] EventDirector: could not read {path}: {e.Message}; starting a fresh schedule"); }
@@ -633,7 +778,8 @@ namespace RevivalGuard
             try
             {
                 var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
-                if (!b.ContainsKey(P_ENABLED)) b[P_ENABLED] = new Property<bool>(true, "EventDirector: rotate live events (Olthoi swarms, eruptions, raids)");
+                if (!b.ContainsKey(P_ENABLED)) b[P_ENABLED] = new Property<bool>(false, "EventDirector: rotate live events (Olthoi swarms, eruptions, raids, festival events); off until staff turn it on");
+                if (!b.ContainsKey(P_FESTIVALS)) b[P_FESTIVALS] = new Property<bool>(true, "EventDirector: festival-only events (Pumpkin Lords, Unhappy Snowmen ...) get a slot after every event_director_festival_every year-round events while their festival runs");
                 if (!b.ContainsKey(P_OMENS)) b[P_OMENS] = new Property<bool>(false, "EventDirector: put the Season 1 Omens shadow raids (omens-*) in the rotation");
                 var d = Inner(DefaultPropertyManager.DefaultDoubleProperties);
                 foreach (var (key, def, desc) in s_Doubles) if (!d.ContainsKey(key)) d[key] = new Property<double>(def, desc);
@@ -699,13 +845,14 @@ namespace RevivalGuard
                                                  : "No live event is running right now.");
                 }
                 if (!Enabled) { Say(session, "No live events are scheduled."); return; }
+                if (AnniversaryNight.On) { Say(session, "Live events are resting for Anniversary Night. Enjoy the party!"); return; }
                 if (cur == null)
                 {
-                    var next = PeekNext();
+                    var next = PeekNext(now);
                     if (next != null) Say(session, $"Next live event: {next.Title}, {In(s_State.NextAt - now)}.");
                 }
                 else
-                    Say(session, $"The next live event follows {In(s_State.EndsAt + Minutes(P_GAP, 90) * 60 - now)}.");
+                    Say(session, $"The next live event follows {In(s_State.EndsAt + Gap * 60 - now)}.");
             }
         }
 
@@ -718,14 +865,22 @@ namespace RevivalGuard
                 case "on":
                 case "off":
                     PropertyManager.ModifyBool(P_ENABLED, verb == "on");
+                    if (verb == "on") lock (s_Lock) if (s_State.Current == null) { s_State.NextAt = Now + 600; Save(); }
                     Mod.Log.Info($"[RevivalGuard] EventDirector: turned {verb} by {who}");
                     Say(session, verb == "on"
-                        ? "[EventDirector] (ours) on. The next live event starts when the gap runs out; 'next' starts one now."
+                        ? "[EventDirector] (ours) on. The first live event starts in about 10 minutes; 'next' starts one now, 'off' cancels."
                         : "[EventDirector] (ours) off. The current event, if any, ends within 5 s with its closing broadcast.");
+                    if (verb == "off")
+                    {
+                        // Off is the kill switch: an event started by hand ends too (the tick lets those run out).
+                        void halt() { lock (s_Lock) { var c = Find(s_State.Current); if (c != null) End(c, Now, $"turned off by {who}", announce: true, victory: false); } }
+                        if (session != null) halt(); else WorldManager.EnqueueAction(new ActionEventDelegate(halt));
+                    }
                     return;
                 case "next":
                 case "stop":
                 case "start":
+                case "skip":
                     {
                         string key = verb == "start" && parameters.Length > 1 ? parameters[1] : null;
                         if (verb == "start" && Find(key) == null)
@@ -740,37 +895,49 @@ namespace RevivalGuard
                         return;
                     }
                 case "list":
-                    lock (s_Lock)
                     {
-                        Say(session, "[EventDirector] (ours) the rotation, in order:");
-                        for (int i = 0; i < Catalogue.Length; i++)
+                        var now = Now;
+                        lock (s_Lock)
                         {
-                            var e = Catalogue[i];
-                            var blocked = Blocked(e, Find(s_State.Current), manual: false);
-                            string last = s_State.LastRun.TryGetValue(e.Key, out var t) ? Stamp(t) : "never";
-                            Say(session, $"{(i == s_State.Rotation ? ">" : " ")} {e.Key,-16} {e.Title} ({Levels(e)}) at {e.Where}; last {last}{(blocked != null ? "; now: " + blocked : "")}");
+                            Say(session, "[EventDirector] (ours) the catalogue, in order (> marks each rotation's place):");
+                            for (int i = 0; i < Catalogue.Length; i++)
+                            {
+                                var e = Catalogue[i];
+                                var blocked = Blocked(e, Find(s_State.Current), manual: false, now);
+                                string last = s_State.LastRun.TryGetValue(e.Key, out var t) ? Stamp(t) : "never";
+                                bool mark = e.IsFestival ? i == s_State.FestRotation : i == s_State.Rotation;
+                                string tag = e.IsFestival ? $" [{FestivalNames(e)}, {Duration(e):0} min]" : "";
+                                Say(session, $"{(mark ? ">" : " ")} {e.Key,-20} {e.Title} ({Levels(e)}) at {e.Where}{tag}; last {last}{(blocked != null ? "; now: " + blocked : "")}");
+                            }
                         }
+                        return;
                     }
-                    return;
             }
 
-            // status
-            var now = Now;
-            lock (s_Lock)
+            // status (AcAdminHud parses the first line and the running / idle line: keep their shape)
             {
-                var cur = Find(s_State.Current);
-                Say(session, $"[EventDirector] (ours) {(Enabled ? "ON" : "OFF")}; each event {Minutes(P_DURATION, 120):0.##} min, gap {Minutes(P_GAP, 90):0.##} min, idle end {Minutes(P_IDLE, 60):0.##} min, min players {Minutes(P_MINPLAYERS, 1):0}");
-                if (cur != null)
+                var now = Now;
+                lock (s_Lock)
                 {
-                    var on = cur.Stop.Where(IsOn).ToList();
-                    Say(session, $"[EventDirector] running: {cur.Key}{(s_Suspended ? " (suspended for shutdown)" : "")}, ends {Stamp(s_State.EndsAt)} ({(s_State.EndsAt - now) / 60:F1} min); rows on: {(on.Count > 0 ? string.Join(", ", on) : "none")}");
+                    var cur = Find(s_State.Current);
+                    Say(session, $"[EventDirector] (ours) {(Enabled ? "ON" : "OFF")}; each event {Minutes(P_DURATION, 120):0.##} min (festival ones their own), gap {Gap:0.##} min, idle end {Minutes(P_IDLE, 60):0.##} min, min players {Minutes(P_MINPLAYERS, 1):0}; switch {P_ENABLED}");
+                    if (cur != null)
+                    {
+                        var on = cur.Stop.Where(IsOn).ToList();
+                        Say(session, $"[EventDirector] running: {cur.Key}{(s_Suspended ? " (suspended for shutdown)" : "")}{(s_State.Manual ? " (started by hand)" : "")}, ends {Stamp(s_State.EndsAt)} ({(s_State.EndsAt - now) / 60:F1} min); rows on: {(on.Count > 0 ? string.Join(", ", on) : "none")}");
+                    }
+                    else
+                    {
+                        var next = PeekNext(now);
+                        Say(session, $"[EventDirector] idle; next {(next != null ? next.Key : "(nothing eligible)")} at {Stamp(s_State.NextAt)} ({(s_State.NextAt - now) / 60:F1} min)");
+                    }
+                    var fests = Catalogue.Where(e => e.IsFestival && EventDirectorRules.FestivalOpen(e.Festivals, SeasonalCalendar.IsFestivalActive)).Select(e => e.Key).ToList();
+                    Say(session, $"[EventDirector] festival events in season: {(fests.Count > 0 ? string.Join(", ", fests) : "none")}{(FestivalsOn ? "" : $" ({P_FESTIVALS} is off)")}; a festival event every {FestEvery} year-round events ({P_FEST_EVERY}), {s_State.SinceFest} since the last");
+                    if (AnniversaryNight.On) Say(session, "[EventDirector] holding for Anniversary Night: nothing starts until a gap after the party.");
+                    var bosses = WorldBossSchedule.WindowsBetween(now, now + 6 * 3600);
+                    if (bosses.Count > 0) Say(session, "[EventDirector] boss windows kept clear: " + string.Join("; ", bosses.Select(b => $"{b.name} at 0x{b.lair:X4} {Stamp(b.from)} to {Stamp(b.to)}")));
+                    Say(session, "[EventDirector] @eventdirector list | on | off | next | skip | stop | start <key>");
                 }
-                else
-                {
-                    var next = PeekNext();
-                    Say(session, $"[EventDirector] idle; next {(next != null ? next.Key : "(nothing eligible)")} at {Stamp(s_State.NextAt)} ({(s_State.NextAt - now) / 60:F1} min)");
-                }
-                Say(session, "[EventDirector] @eventdirector list | on | off | next | stop | start <key>");
             }
         }
 
@@ -787,30 +954,39 @@ namespace RevivalGuard
                     Say(session, $"[EventDirector] {cur.Key} stopped; next at {Stamp(s_State.NextAt)}.");
                     return;
                 }
+                if (verb == "skip")
+                {
+                    // Pass over the queued event this round: its rotation moves on, and whatever follows takes its slot.
+                    if (cur != null) { Say(session, $"[EventDirector] {cur.Key} is running: 'stop' ends it, 'next' replaces it."); return; }
+                    var queued = PeekNext(now);
+                    if (queued == null) { Say(session, "[EventDirector] nothing is queued (see @eventdirector list)."); return; }
+                    var p = new EventDirectorRules.Pick { Rotation = s_State.Rotation, FestRotation = s_State.FestRotation, SinceFest = s_State.SinceFest };
+                    EventDirectorRules.Advance(ref p, Array.IndexOf(Catalogue, queued), queued.IsFestival, Catalogue.Length);
+                    s_State.Rotation = p.Rotation; s_State.FestRotation = p.FestRotation;   // the turn stays: a skipped festival slot goes to the next festival event
+                    Save();
+                    var then = PeekNext(now);
+                    Mod.Log.Info($"[RevivalGuard] EventDirector: {queued.Key} skipped by {who}");
+                    Say(session, $"[EventDirector] skipped {queued.Key}; next is {(then != null ? then.Key : "(nothing eligible)")} at {Stamp(s_State.NextAt)}.");
+                    return;
+                }
                 Entry target;
                 if (verb == "start")
                 {
                     target = Find(key);
-                    var b = Blocked(target, cur, manual: true);
+                    var b = Blocked(target, cur, manual: true, now);
                     if (b != null) { Say(session, $"[EventDirector] cannot start {target.Key}: {b}."); return; }
                 }
                 else
                 {
-                    target = null;
-                    // "next" moves past whatever is running now
-                    for (int i = 0; i < Catalogue.Length && target == null; i++)
-                    {
-                        int idx = (s_State.Rotation + i) % Catalogue.Length;
-                        var e = Catalogue[idx];
-                        if (e == cur) continue;
-                        if (Blocked(e, cur, manual: false) == null) { target = e; s_State.Rotation = (idx + 1) % Catalogue.Length; }
-                    }
+                    // "next" moves past whatever is running now, by the same two rotations
+                    var p = Plan(now, cur, exclude: cur);
+                    target = p.Index < 0 ? null : Catalogue[p.Index];
                     if (target == null) { Say(session, "[EventDirector] nothing else can start now (see @eventdirector list)."); return; }
                 }
                 if (cur != null) End(cur, now, $"replaced by {who}", announce: true, victory: false);
-                Begin(target, now);
+                Begin(target, now, manual: true);
                 Mod.Log.Info($"[RevivalGuard] EventDirector: {target.Key} started by {who} ({verb})");
-                Say(session, $"[EventDirector] started {target.Key}; ends {Stamp(s_State.EndsAt)}.");
+                Say(session, $"[EventDirector] started {target.Key}; ends {Stamp(s_State.EndsAt)}." + (Enabled ? "" : " The rotation is off, so nothing follows it."));
             }
         }
     }

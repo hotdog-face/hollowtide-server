@@ -82,6 +82,48 @@ namespace RevivalGuard
             new Tier("Legend", 15, LEGEND),
         };
 
+        // The seasonal bosses (WorldBoss.HARVEST, BITTERFROST, THISTLEDOWN): retail festival treats, costumes and house
+        // pieces only, nothing that fights better than what a level 200 already wears (the masks are armour 10, the
+        // Casting Jack o' Lanterns spell-less orbs, the slippers a Major Sprint). Every house piece here is a retail
+        // weenie with a HookType, not Attuned, not Stuck, not a container (housing_sweep.py's rules; checked in
+        // gen_seasonal_world_bosses.py). Their corpses keep tier 6-7 treasure: the "normal loot" share.
+        internal static readonly Tier[] HARVEST_KILL =
+        {
+            new Tier("Treat", 45, 32208, 32209, 32210, 39111),           // Marshmallow Bat, Marshmallow Pumpkin, Ginger Bread Pumpkin, Rock Candy Knath
+            new Tier("Costume", 25, 28860, 32154, 52201),                // Scarecrow Guise, Ghost Guise, Accursed Scarecrow Mask
+            new Tier("Trophy", 25, 32206, 34095, 9177, 34090, 44763),    // Pack Pumpkin Lord, Pack Pumpkin P., Pack Scarecrow, Scarecrow (yard), Scarecrow (wall)
+            new Tier("Lantern", 5, 52190, 52191, 52192),                 // Casting Jack o' Lantern (held for a seasonal boss, OBTAINABLE-ITEMS section 5)
+        };
+        internal static readonly Tier[] HARVEST_WEEKLY =
+        {
+            new Tier("Lantern", 50, 52190, 52191, 52192),
+            new Tier("Trophy", 50, 32206, 34095, 34090),
+        };
+        internal static readonly Tier[] BITTERFROST_KILL =
+        {
+            new Tier("Treat", 45, 25781, 5759, 34386),                   // Snow Pie, Fruitcake, Hot Coal (melts his Frozen Presents)
+            new Tier("Costume", 25, 32162, 32166, 32167, 32159),         // Snowman Mask, with Hat, with Fez; Penguin Mask
+            new Tier("Trophy", 25, 34407, 34405, 36922, 52576, 52577, 36916, 44773),   // Abominable Pack Snowman, Mr. P. Holiday Pack Doll, Big Wreath, Holiday Garland, Holiday Stocking, Snow Drift, Snowman (wall)
+            new Tier("Giant", 5, 32184, 32165),                          // Giant Snowman Head (floor trophy), Giant Snowman Mask
+        };
+        internal static readonly Tier[] BITTERFROST_WEEKLY =
+        {
+            new Tier("Giant", 50, 32184, 32165),
+            new Tier("Trophy", 50, 34407, 34402, 36922),                 // Neydisa Snowglobe only here
+        };
+        internal static readonly Tier[] THISTLEDOWN_KILL =
+        {
+            new Tier("Treat", 45, 7832, 7830, 5811),                     // Bar of Milk Chocolate, Bar of Dark Chocolate, Carrot Cake
+            new Tier("Costume", 25, 12126, 14917, 14916),                // Bunny Slippers, Elegant and Simple Flower Bouquet
+            new Tier("Trophy", 25, 80098, 44758, 15717, 22839),          // Colored Egg, Rabbit (wall), Crystal Vase with a Sunflower, with a Snowflower
+            new Tier("Slippers", 5, 35180),                              // Hulking Bunny Slippers
+        };
+        internal static readonly Tier[] THISTLEDOWN_WEEKLY =
+        {
+            new Tier("Slippers", 50, 35180),
+            new Tier("Trophy", 50, 44758, 15717, 80098),
+        };
+
         // ------------------------------------------------------------------ state (persisted)
         internal sealed class BossState
         {
@@ -161,9 +203,97 @@ namespace RevivalGuard
                 double start = anchor + k * every, end = start + win;
                 if (end <= now || st.Skipped.Contains(start)) continue;
                 if (start < st.ForcedEnd && end > st.ForcedStart) continue;
+                if (!InSeason(s, st, start, end, lead))
+                {
+                    // out of the festival's dates: jump to its next first day instead of walking a year of windows
+                    // (inside them but switched off by @festival: just the next window)
+                    if (!InDates(s, Local(start)))
+                    {
+                        var first = NextSeasonStart(s, start);
+                        if (first > start) k = Math.Max(k, (long)Math.Ceiling((first - anchor) / every) - 1);
+                    }
+                    continue;
+                }
                 return new Ev { Start = start, End = end, Lead = lead };
             }
             return default;
+        }
+
+        // ------------------------------------------------------------------ the festival gate (seasonal bosses)
+        /// <summary>A window counts for a festival boss only while his festival runs. Whether it RUNS is
+        /// SeasonalCalendar's (IsFestivalActive: the calendar or an admin's @festival on/off), asked for the window
+        /// now open or about to be warned; later windows are predicted from the copy of its dates in the Spec. A
+        /// festival forced on outside its dates gets the next day's windows predicted too.</summary>
+        static bool InSeason(WorldBoss.Spec s, BossState st, double start, double end, double lead)
+        {
+            if (s.YearRound || st.ActiveStart == start) return true;   // a window he was raised for runs to its end
+            double real = Now();
+            bool live = SeasonalCalendar.IsFestivalActive(s.Festival);
+            if (start - lead <= real + TICK && end > real) return live;
+            if (InDates(s, Local(start))) return true;
+            return live && !InDates(s, Local(real)) && start - real < 86400;
+        }
+
+        static bool InDates(WorldBoss.Spec s, DateTime local)
+        {
+            int md = local.Month * 100 + local.Day;
+            return s.SeasonFrom <= s.SeasonTo ? md >= s.SeasonFrom && md <= s.SeasonTo : md >= s.SeasonFrom || md <= s.SeasonTo;
+        }
+
+        /// <summary>Unix time of the next first day (00:00 UTC-5) of his festival's dates after this moment.</summary>
+        static double NextSeasonStart(WorldBoss.Spec s, double unix)
+        {
+            var day = Local(unix).Date;
+            for (int i = 1; i <= 367; i++)
+            {
+                var d = day.AddDays(i);
+                if (InDates(s, d) && !InDates(s, d.AddDays(-1)))
+                    return (DateTime.SpecifyKind(d.AddHours(-UTC_OFFSET_HOURS), DateTimeKind.Utc) - DateTime.UnixEpoch).TotalSeconds;
+            }
+            return unix;
+        }
+
+        /// <summary>For EventDirector: each boss's window, warning lead included, that overlaps [from, to), while the
+        /// schedule is on (off, Bael'Zharon keeps his 24 h rule and nobody else rises: no windows to keep clear).</summary>
+        internal static List<(string name, ushort lair, double from, double to)> WindowsBetween(double from, double to)
+        {
+            var list = new List<(string, ushort, double, double)>();
+            if (!On) return list;
+            lock (s_Lock)
+                foreach (var s in WorldBoss.Bosses.Values)
+                {
+                    var e = Next(s, St(s), from);
+                    if (e.Valid && e.Start - e.Lead < to && e.End > from) list.Add((s.Name, s.Lair, e.Start - e.Lead, e.End));
+                }
+            return list;
+        }
+
+        /// <summary>Shown to players and drawn on the map: a year-round boss always; a festival boss while his
+        /// festival runs, while a window of his is open, and for 6 h after one settled (the "defeated" badge).</summary>
+        static bool Visible(WorldBoss.Spec s, BossState st, double now) =>
+            s.YearRound || SeasonalCalendar.IsFestivalActive(s.Festival) || st.ActiveStart != 0 || st.ForcedEnd > now
+            || st.LastOutcome != null && now - st.LastEnd < 6 * 3600;
+
+        /// <summary>A festival boss's lair has no KeepAlive (a month-long boss should not hold a landblock loaded all
+        /// year): ACE's own flag is held for it while a window is warned or open, so it neither sleeps nor unloads
+        /// under a fight whose players ran back from their lifestone. Released after, unless a real KeepAlive is there.</summary>
+        static readonly HashSet<string> s_Awake = new HashSet<string>();
+        static void KeepAwake(WorldBoss.Spec s, bool want)
+        {
+            if (s.YearRound) return;
+            var lb = WorldBoss.LoadedLair(s);
+            if (lb == null) { if (!want) s_Awake.Remove(s.Key); return; }
+            if (want)
+            {
+                if (lb.HasNoKeepAliveObjects) Mod.Log.Info($"[RevivalGuard] WorldBossSchedule: holding {s.Name}'s lair 0x{s.Lair:X4} awake for his window");
+                lb.HasNoKeepAliveObjects = false;
+                s_Awake.Add(s.Key);
+            }
+            else if (s_Awake.Remove(s.Key))
+            {
+                lb.HasNoKeepAliveObjects = !lb.GetAllWorldObjectsForDiagnostics().Any(o => o.WeenieClassId == 80007);
+                Mod.Log.Info($"[RevivalGuard] WorldBossSchedule: {s.Name}'s lair 0x{s.Lair:X4} may sleep again");
+            }
         }
 
         enum Phase { Idle, Upcoming, Active, Defeated }
@@ -187,6 +317,7 @@ namespace RevivalGuard
                 s_WasOn = on;
                 if (!first) Mod.Log.Info($"[RevivalGuard] WorldBossSchedule: switched {(on ? "ON" : "off")}");
                 s_Sig.Clear();
+                if (!on) foreach (var s in WorldBoss.Bosses.Values) KeepAwake(s, false);
                 if (!on && !first) PushAll();   // the markers go away
             }
             if (!on) return;
@@ -222,6 +353,7 @@ namespace RevivalGuard
             if (rise != null) World(rise);
             if (ph == Phase.Active) EnsureSpawned(s, now);
             else Hold(s);
+            KeepAwake(s, ph == Phase.Upcoming || ph == Phase.Active);
             PushIfChanged(s, now);
         }
 
@@ -506,6 +638,8 @@ namespace RevivalGuard
         static string Describe(WorldBoss.Spec s, double now, out Wire w)
         {
             var st = St(s);
+            w = null;
+            if (!Visible(s, st, now)) return "hidden";   // a festival boss out of season: not on the map
             var e = Next(s, st, now);
             var ph = PhaseOf(e, st, now);
             w = new Wire { key = s.Key, name = s.Name, where = s.Where, ns = s.NS, ew = s.EW };
@@ -528,7 +662,7 @@ namespace RevivalGuard
             var list = new List<Wire>();
             if (On)
                 lock (s_Lock)
-                    foreach (var s in WorldBoss.Bosses.Values) { Describe(s, now, out var w); list.Add(w); }
+                    foreach (var s in WorldBoss.Bosses.Values) { Describe(s, now, out var w); if (w != null) list.Add(w); }
             return JsonSerializer.Serialize(new { now = (long)now, bosses = list }, WIRE);
         }
 
@@ -558,12 +692,19 @@ namespace RevivalGuard
             double now = Now();
             var sb = new StringBuilder();
             if (!On) sb.Append("World bosses are not on a schedule right now.\n");
+            var away = new List<string>();
             foreach (var s in WorldBoss.Bosses.Values)
             {
                 if (!On) break;
                 lock (s_Lock)
                 {
                     var st = St(s);
+                    if (!Visible(s, st, now))
+                    {
+                        away.Add($"{s.Name} during {s.FestivalName}");
+                        if (admin) sb.Append($"[WorldBoss] admin: {s.Name} ({s.Key}) is out of season ({s.FestivalName}); next rising {Stamp(Next(s, st, now).Start)} UTC. 'spawn {s.Key}' forces a window anyway.\n");
+                        continue;
+                    }
                     var e = Next(s, st, now);
                     var ph = PhaseOf(e, st, now);
                     string at = $"{s.He} rises somewhere in {s.Where}; finding the way is up to you.";
@@ -587,11 +728,13 @@ namespace RevivalGuard
                         sb.Append($"[WorldBoss] admin: site {Coords(s)} (0x{s.Lair:X4}), {(e.Forced ? "forced " : "")}window {Stamp(e.Start)} to {Stamp(e.End)} UTC, phase {ph}, raised-for {(st.ActiveStart == 0 ? "none" : Stamp(st.ActiveStart))}, last {st.LastOutcome ?? "none"}, skipped {st.Skipped.Count}{(s_Test != null ? ", TEST RHYTHM" : "")}, alive {(WorldBoss.FindAlive(s) is Creature b ? $"yes, {b.Health.Current:N0}/{b.Health.MaxValue:N0} health" : "no")}\n");
                 }
             }
+            if (away.Count > 0) sb.Append($"Festival bosses rise only in their season: {string.Join(", ", away)}.\n");
             if (p != null)
                 lock (s_Lock)
                     if (s_State.Owed.TryGetValue(p.Guid.Full.ToString("X8"), out var l) && l.Count > 0)
                         sb.Append($"{l.Count} reward(s) wait for room in your pack: @worldboss claim.\n");
-            if (admin) sb.Append("[WorldBoss] admin verbs: spawn [minutes] [window minutes], respawn, skip, reset, testschedule <every> <lead> <window> (minutes), weeklyreset [name]");
+            if (admin) sb.Append("[WorldBoss] admin verbs: spawn [boss] [minutes] [window minutes], respawn [boss], skip [boss], reset [boss], testschedule <every> <lead> <window> (minutes), weeklyreset [name]. "
+                + $"No boss named: spawn/respawn act on the year-round bosses, the rest on every boss in season. Bosses: {string.Join(", ", WorldBoss.Bosses.Values.Select(b => b.Key))}");
             return sb.ToString().TrimEnd();
         }
 
@@ -599,9 +742,17 @@ namespace RevivalGuard
         {
             double now = Now();
             if (!On && verb != "respawn") return $"[WorldBoss] the schedule is off ({P_ON}); only 'respawn' (the 24 h rule's) applies.";
+            // An optional boss key (or the start of a name) right after the verb picks one boss; without one, spawn
+            // and respawn (the admin panel's Bael button) act on the year-round bosses, the rest on every boss in season.
+            List<WorldBoss.Spec> targets;
+            var named = verb == "weeklyreset" || args.Length < 2 ? null : WorldBoss.Bosses.Values.FirstOrDefault(b =>
+                b.Key.Equals(args[1], StringComparison.OrdinalIgnoreCase) || b.Name.StartsWith(args[1], StringComparison.OrdinalIgnoreCase));
+            if (named != null) { targets = new List<WorldBoss.Spec> { named }; args = args.Where((_, i) => i != 1).ToArray(); }
+            else if (verb == "spawn" || verb == "respawn") targets = WorldBoss.Bosses.Values.Where(b => b.YearRound).ToList();
+            else lock (s_Lock) targets = WorldBoss.Bosses.Values.Where(b => b.YearRound || Visible(b, St(b), now)).ToList();
             int Arg(int i, int d) => args.Length > i && int.TryParse(args[i], out var v) ? v : d;
             var sb = new StringBuilder();
-            foreach (var s in WorldBoss.Bosses.Values)
+            foreach (var s in targets)
             {
                 lock (s_Lock)
                 {

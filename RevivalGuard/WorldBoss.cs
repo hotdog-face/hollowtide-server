@@ -46,6 +46,9 @@ namespace RevivalGuard
     ///                 the Landblock KeepAlive (80007) in the SQL keeps it loaded after that. Since
     ///                 2026-10-01 that is an OUTDOOR landblock (world-boss-outdoor.sql): no portal leads
     ///                 to him, the map marker is the only exact place, and the way there is the players' to find.
+    ///   seasonal      (2026-10-21) Jack o' the Harvest, Old Bitterfrost and Mother Thistledown rise on the
+    ///                 schedule only while their festival runs (SeasonalCalendar.IsFestivalActive); never by the
+    ///                 24 h rule, and their lairs are not preloaded (docs/WORLD-BOSS-SYSTEM.md section 8).
     ///
     ///   @worldboss            (Player) when each boss rises next; admins see the state and verbs
     ///   @worldboss respawn    (Admin) schedule on: a window now; off: forget the death, generator now
@@ -72,6 +75,13 @@ namespace RevivalGuard
             public string Stir;                // the warning's first sentence
             public string Escaped;             // the broadcast when his window closes unbeaten
             public WorldBossSchedule.Tier[] Kill, Weekly;   // a roll from Kill for every hand; Weekly once a week each
+            // seasonal bosses (docs/WORLD-BOSS-SYSTEM.md section 8): null Festival = all year
+            public string Festival;            // SeasonalCalendar key; he rises only while IsFestivalActive(Festival)
+            public string FestivalName;        // what @worldboss calls it ("Frostfell")
+            public int SeasonFrom, SeasonTo;   // MMDD, inclusive: a COPY of SeasonalCalendar's window, used only to predict later risings
+            public int Enrage;                 // Damage Rating added once in his last phase (22-26%); Bael's own extras are in PhaseExtras
+            public bool ScaleHealth;           // max health grows with each new fighter (WorldBossScaling); off for Bael'Zharon, sized as a raid
+            public bool YearRound => Festival == null;
         }
 
         internal const uint BAEL = 900200;
@@ -90,7 +100,47 @@ namespace RevivalGuard
                 Escaped = "Bael'Zharon fades back into the Shadow, unbeaten.",
                 Kill = WorldBossSchedule.BAEL_KILL, Weekly = WorldBossSchedule.BAEL_WEEKLY,
             },
+            // SEASONAL BOSSES (owner-approved 2026-10-21, seasonal improvement #4): one per festival, rising
+            // only while SeasonalCalendar has that festival on. World data: tools/gpubox-ace/gen_seasonal_world_bosses.py.
+            // Every 5 hours (5 and 24 share no factor, so the risings walk round the clock), anchored on the half
+            // hour so a rising never shares a start with Bael'Zharon's whole hours. No KeepAlive in the data: the
+            // schedule holds the lair awake only around a window (WorldBossSchedule.KeepAwake).
+            [HARVEST] = new Spec
+            {
+                Wcid = HARVEST, Name = "Jack o' the Harvest", Lair = 0x47CF, Respawn = TimeSpan.FromHours(24), Title = 325,   // Pumpkin Slayer
+                Key = "harvest", Where = "the north-western woods", NS = 63.85, EW = -44.65,   // 0x47CF002B (120, 48)
+                AnchorLocal = new DateTime(2026, 10, 1, 18, 30, 0), Interval = TimeSpan.FromHours(5),
+                Lead = TimeSpan.FromMinutes(30), Window = TimeSpan.FromMinutes(30), Warn = new[] { 30, 10, 2 },
+                Stir = "A cold wind rattles the dry stalks of the north-western woods. Jack o' the Harvest is gathering his crop.",
+                Escaped = "Jack o' the Harvest sinks back into the rotting field, unbeaten.",
+                Kill = WorldBossSchedule.HARVEST_KILL, Weekly = WorldBossSchedule.HARVEST_WEEKLY,
+                Festival = "festivalseason", FestivalName = "Festival Season", SeasonFrom = 1001, SeasonTo = 1101, Enrage = 20, ScaleHealth = true,
+            },
+            [BITTERFROST] = new Spec
+            {
+                Wcid = BITTERFROST, Name = "Old Bitterfrost", Lair = 0x6CC7, Respawn = TimeSpan.FromHours(24), Title = 840,   // Cold As Ice
+                Key = "bitterfrost", Where = "the frozen north", NS = 57.85, EW = -15.15,   // 0x6CC70027 (96, 144)
+                AnchorLocal = new DateTime(2026, 12, 4, 19, 30, 0), Interval = TimeSpan.FromHours(5),
+                Lead = TimeSpan.FromMinutes(30), Window = TimeSpan.FromMinutes(30), Warn = new[] { 30, 10, 2 },
+                Stir = "The snow falls harder over the frozen north. Old Bitterfrost is waking from his drift.",
+                Escaped = "Old Bitterfrost crumbles back into the snow, unbeaten.",
+                Kill = WorldBossSchedule.BITTERFROST_KILL, Weekly = WorldBossSchedule.BITTERFROST_WEEKLY,
+                Festival = "frostfell", FestivalName = "Frostfell", SeasonFrom = 1204, SeasonTo = 101, Enrage = 25, ScaleHealth = true,
+            },
+            [THISTLEDOWN] = new Spec
+            {
+                Wcid = THISTLEDOWN, Name = "Mother Thistledown", Lair = 0xB7D2, Respawn = TimeSpan.FromHours(24), Title = 843,   // Springs Into Action
+                Key = "thistledown", Where = "the north-eastern meadows", NS = 66.25, EW = 45.05,   // 0xB7D20033 (144, 48)
+                AnchorLocal = new DateTime(2027, 4, 1, 17, 30, 0), Interval = TimeSpan.FromHours(5),
+                Lead = TimeSpan.FromMinutes(30), Window = TimeSpan.FromMinutes(30), Warn = new[] { 30, 10, 2 },
+                He = "She", Him = "her",
+                Stir = "The meadows of the north-east are trembling. Mother Thistledown is coming up out of her warren.",
+                Escaped = "Mother Thistledown bolts back down her warren, unbeaten.",
+                Kill = WorldBossSchedule.THISTLEDOWN_KILL, Weekly = WorldBossSchedule.THISTLEDOWN_WEEKLY,
+                Festival = "spring", FestivalName = "the Spring Festival", SeasonFrom = 401, SeasonTo = 501, Enrage = 15, ScaleHealth = true,
+            },
         };
+        internal const uint HARVEST = 902300, BITTERFROST = 902310, THISTLEDOWN = 902320;
 
         const uint BOON_OF_THE_DEMON = 2048;
 
@@ -178,6 +228,7 @@ namespace RevivalGuard
             bool respawn = parameters.Length > 0 && parameters[0].Equals("respawn", StringComparison.OrdinalIgnoreCase);
             foreach (var s in Bosses.Values)
             {
+                if (!s.YearRound) { Say(session, $"[WorldBoss] {s.Name} rises only on the schedule ({WorldBossSchedule.P_ON}), during {s.FestivalName}."); continue; }
                 var alive = FindAlive(s);
                 if (respawn)
                 {
@@ -232,9 +283,12 @@ namespace RevivalGuard
         }
 
         // ------------------------------------------------------------------ phases, once each
-        internal static bool OnDamagePrefix(EmoteManager mgr)
+        internal static bool OnDamagePrefix(EmoteManager mgr, Creature attacker)
         {
-            if (!(mgr?.WorldObject is Creature c) || !Bosses.ContainsKey(c.WeenieClassId)) return true;
+            if (!(mgr?.WorldObject is Creature c) || !Bosses.TryGetValue(c.WeenieClassId, out var spec)) return true;
+            if (spec.ScaleHealth)
+                try { ScaleForFighter(spec, c, attacker); }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] WorldBoss: scaling {c.Name}: {e.Message}"); }
             var set = mgr.GetEmoteSet(EmoteCategory.WoundedTaunt, useRNG: false);
             if (set == null) return true;
             var key = set.MinHealth ?? -1f;
@@ -246,9 +300,41 @@ namespace RevivalGuard
             return true;
         }
 
+        // ------------------------------------------------------------------ health scales with the fighters
+        /// <summary>Per boss life: his weenie's max (the solo size) and the players who have damaged him.</summary>
+        sealed class Fighters { public uint BaseMax; public readonly HashSet<uint> Who = new HashSet<uint>(); }
+        static readonly ConditionalWeakTable<Creature, Fighters> s_Fighters = new ConditionalWeakTable<Creature, Fighters>();
+        internal const string P_SCALE_K = "rg_worldboss_scale_per_fighter", P_SCALE_CAP = "rg_worldboss_scale_cap";
+
+        /// <summary>A player (or a player's pet) damaging him for the first time this life raises his max health to
+        /// WorldBossScaling.TargetMax and his current health by the same amount (WorldBossScaling.cs has the formula).
+        /// Runs on his landblock thread, from EmoteManager.OnDamage, which ACE calls after each hit has landed.</summary>
+        static void ScaleForFighter(Spec s, Creature c, Creature attacker)
+        {
+            var who = attacker is Player p ? p : (attacker as CombatPet)?.P_PetOwner;
+            if (who == null || c.IsDead) return;
+            var f = s_Fighters.GetValue(c, _ => new Fighters { BaseMax = c.Health.MaxValue });
+            int n;
+            lock (f) { if (!f.Who.Add(who.Guid.Full)) return; n = f.Who.Count; }
+            double k = PropertyManager.GetDouble(P_SCALE_K, WorldBossScaling.DEFAULT_PER_FIGHTER).Item;
+            double cap = PropertyManager.GetDouble(P_SCALE_CAP, WorldBossScaling.DEFAULT_CAP).Item;
+            uint oldMax = c.Health.MaxValue, newMax = WorldBossScaling.TargetMax(f.BaseMax, oldMax, n, k, cap);
+            if (newMax <= oldMax) return;
+            var (max, cur) = WorldBossScaling.Rescale(oldMax, c.Health.Current, newMax);
+            c.Health.StartingValue += max - oldMax;   // MaxValue = StartingValue + Endurance/2 (+ enchantments)
+            c.UpdateVital(c.Health, cur);
+            Mod.Log.Info($"[RevivalGuard] WorldBoss: {c.Name} 0x{c.Guid.Full:X8}: fighter {n} ({who.Name}); max health {oldMax:N0} -> {c.Health.MaxValue:N0}, now {c.Health.Current:N0}");
+        }
+
         static void PhaseExtras(Creature c, float windowMin)
         {
-            if (c.WeenieClassId != BAEL) return;
+            if (c.WeenieClassId != BAEL)
+            {
+                // a seasonal boss's last phase: one rage, as Bael'Zharon's (his Damage Rating +30)
+                if (Bosses.TryGetValue(c.WeenieClassId, out var sp) && sp.Enrage > 0 && windowMin > 0.15f && windowMin < 0.3f)
+                    c.SetProperty(PropertyInt.DamageRating, (c.GetProperty(PropertyInt.DamageRating) ?? 0) + sp.Enrage);
+                return;
+            }
             // The phase roar: PlayScript BaelZharonSmite (0x96) on him. Not in his retail effect
             // table (0x34000028), so the retail client plays nothing; our client's sculpt maps it to
             // its full CastBig clip (expansion/creatures/baelzharon, scripts[]). One per window.
@@ -290,7 +376,7 @@ namespace RevivalGuard
             s_NextOldRule = (now - DateTime.UnixEpoch).TotalSeconds + 30;
             foreach (var s in Bosses.Values)
             {
-                if (DueAt(s) != null || FindAlive(s) != null) continue;
+                if (!s.YearRound || DueAt(s) != null || FindAlive(s) != null) continue;   // seasonal bosses need the schedule
                 foreach (var prof in LairProfiles(s))
                     if (prof.NextAvailable > now && prof.Spawned.Count == 0) prof.NextAvailable = now;
             }
@@ -302,6 +388,7 @@ namespace RevivalGuard
             var wcid = profile?.Biota?.WeenieClassId ?? 0;
             if (!Bosses.TryGetValue(wcid, out var s)) return;
             if (WorldBossSchedule.HoldNewProfile(s, profile)) return;   // the schedule owns him
+            if (!s.YearRound) { profile.NextAvailable = DateTime.UtcNow.AddDays(1); return; }   // no 24 h rule for a festival boss: schedule off, he never rises
             var due = DueAt(s);
             if (due == null || profile.NextAvailable >= due.Value) return;
             profile.NextAvailable = due.Value;
@@ -319,9 +406,9 @@ namespace RevivalGuard
             return m;
         }
         static bool Prepare(MethodBase original) => original != null || (WorldBoss.HookDamage = TargetMethod() != null);
-        static bool Prefix(EmoteManager __instance)
+        static bool Prefix(EmoteManager __instance, Creature attacker)
         {
-            try { return WorldBoss.OnDamagePrefix(__instance); }
+            try { return WorldBoss.OnDamagePrefix(__instance, attacker); }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] WorldBoss: OnDamage: {e.Message}"); return true; }
         }
     }
@@ -381,6 +468,7 @@ namespace RevivalGuard
                 WorldBoss.Register();
                 foreach (var s in WorldBoss.Bosses.Values)
                 {
+                    if (!s.YearRound) continue;   // a festival boss's lair is loaded when his window opens (WorldBossSchedule.EnsureSpawned)
                     LandblockManager.GetLandblock(new LandblockId((uint)s.Lair << 16 | 0xFFFF), false);
                     Mod.Log.Info($"[RevivalGuard] WorldBoss: lair 0x{s.Lair:X4} of {s.Name} loaded; {(WorldBoss.DueAt(s) is DateTime d ? $"he is due {d:yyyy-MM-dd HH:mm} UTC" : "he is due now")}");
                 }

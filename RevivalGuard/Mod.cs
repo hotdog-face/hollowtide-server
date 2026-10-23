@@ -65,6 +65,7 @@ namespace RevivalGuard
             AccountCreationCap.Register();
             LoginTokens.Register();
             LfgBoard.Register();
+            FeatureBoard.Register();
             ItemLock.Register();
             RagdollCorpse.Register();
             Mercenaries.Register();
@@ -94,7 +95,7 @@ namespace RevivalGuard
                 + "gear at any level and every rare (PkDeathLoot), and keyrings that open their chests and "
                 + "spend a key per unlock (Keyrings), the audit trail on disk and in game (@audit), and character "
                 + "snapshots with a confirmed restore (@snapshot), and bonded items into an offline "
-                + "character's pack (@bestow), and the looking-for-group board (@lfgboard), and locked items (@lockitem / @unlockitem), and cell furniture taken out of the world (HiddenCellStatics), and no house purchase waits for dev accounts (DevHousing), and the allegiance hall: bank, hall board, hall portal, lawn corpses, kill board and raid alarm (/mansion), and ragdoll corpses where the body lands (@ragdollcorpse), and the login screen's population count on the login port (PopulationQuery), and combat pets that only pick targets in line of sight (PetLos, pet_los_targets), and dyes that take only on clothing whose art has the colour (DyeArt, dye_by_art), and hovering NPCs reported lower than their physics (HoverDrop, hover_drop), and Azimar greeting players by name, level, hour and visit, with paced blessings (AzimarVoice, azimar_voice)");
+                + "character's pack (@bestow), and the looking-for-group board (@lfgboard), and the feature request board (@features), and locked items (@lockitem / @unlockitem), and cell furniture taken out of the world (HiddenCellStatics), and no house purchase waits for dev accounts (DevHousing), and the allegiance hall: bank, hall board, hall portal, lawn corpses, kill board and raid alarm (/mansion), and ragdoll corpses where the body lands (@ragdollcorpse), and the login screen's population count on the login port (PopulationQuery), and combat pets that only pick targets in line of sight (PetLos, pet_los_targets), and dyes that take only on clothing whose art has the colour (DyeArt, dye_by_art), and hovering NPCs reported lower than their physics (HoverDrop, hover_drop), and Azimar greeting players by name, level, hour and visit, with paced blessings (AzimarVoice, azimar_voice)");
         }
 
         public void Dispose()
@@ -490,6 +491,7 @@ namespace RevivalGuard
         {
             "@revivalclient 1", "@questlog", "@rgexpansion 0", "@rgexpansion 1", "@ragdollcorpse 0",
             "@ragdollcorpse 1", "@time", "@pop", "@myquests", "@gps",
+            "@features",   // the feature request window asks when it opens and once a minute while open
         };
         const int MAX_AUTO = 16;
 

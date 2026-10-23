@@ -19,7 +19,9 @@ namespace RevivalGuard
     ///     has already killed this victim today, and shared out when more than two players did the
     ///     damage; plus 2 per kill of a streak the victim had running (3 or more), 25 for a victim
     ///     who was Wanted, and 10 for a victim carrying infamy (justice).
-    /// A kill of a newcomer (under pk_honor_min_level) or of someone far beneath the killer earns
+    /// A kill of or by a Hollow Company mercenary is no kill at all: no renown, no infamy, no death
+    /// (owner 2026-10-22, "players only").
+    /// A kill of a newcomer (under pk_honor_min_level, 15) or of someone far beneath the killer earns
     /// INFAMY instead, one point that fades after a day each; three and the killer is branded with
     /// retail's own "Murderer" title and is worth justice renown to anyone who kills them.
     /// Nothing is ever taken from the victim: renown only grows, so a weak player is never pushed
@@ -34,46 +36,18 @@ namespace RevivalGuard
     ///     @pkladder                 the ladder (our client: the PK board window)
     ///     @pkladder me              your record this season
     ///     @pkladder season <name>   (admin) end the season: titles, archive, a fresh ladder
+    ///     @pkladder rejudge [apply] (admin) judge the season again under today's rules (a preview, then apply);
+    ///                               it also runs by itself, once, the first time the ladder is used after a
+    ///                               deploy that raised RULES (PkRules.cs)
     ///
     /// State: PkLedger/ledger.json beside the dll (ModFolder); past seasons in PkLedger/seasons.json.
     /// </summary>
-    internal static class PkRenown
+    internal static partial class PkRenown
     {
         internal const string P_SEASON = "pk_season_name";
-        const int WANTED_AT = 5, KILL_LOG_KEEP = 2000, LADDER_SHOWN = 25;
-        const long INFAMY_FADE = 86400;
+        const int LADDER_SHOWN = 25;
 
-        internal sealed class Rec
-        {
-            public string Name { get; set; }
-            public long Renown { get; set; }
-            public int Kills { get; set; }
-            public int Deaths { get; set; }
-            public int Streak { get; set; }
-            public int Best { get; set; }
-            public int Infamy { get; set; }
-            public long InfamyAt { get; set; }
-            public List<uint> Titles { get; set; } = new List<uint>();        // granted this season
-            public List<uint> PendingTitles { get; set; } = new List<uint>(); // earned while offline
-        }
-
-        internal sealed class KillEntry
-        {
-            public long At { get; set; }
-            public uint Killer { get; set; }
-            public uint Victim { get; set; }
-            public bool Counts { get; set; }    // counts toward the repeat rule
-            public int Points { get; set; }
-            public string Why { get; set; }
-        }
-
-        internal sealed class State
-        {
-            public string Season { get; set; }
-            public long SeasonStarted { get; set; }
-            public Dictionary<uint, Rec> Chars { get; set; } = new Dictionary<uint, Rec>();
-            public List<KillEntry> Kills { get; set; } = new List<KillEntry>();
-        }
+        // Rec, KillEntry, State, the scoring (Apply) and the re-judge are in PkRules.cs (pure C#, tested by NetTest).
 
         internal sealed class SeasonArchive
         {
@@ -91,6 +65,7 @@ namespace RevivalGuard
         internal static void Register()
         {
             Load();
+            CheckTitleIds();
             CommandManager.TryAddCommand(Command, "pkladder", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
                 "The player-killer renown ladder.", "[me | season <name>]");
         }
@@ -130,86 +105,25 @@ namespace RevivalGuard
 
         static int PriorKills(uint killer, uint victim)
         {
-            long since = PkCommon.Now() - (long)(PkCommon.Dbl(PkCommon.P_REPEAT_HOURS, 24) * 3600);
-            lock (s_Lock) return s_State.Kills.Count(k => k.Counts && k.Killer == killer && k.Victim == victim && k.At >= since);
+            EnsureRejudged();
+            lock (s_Lock) return PriorKillsIn(s_State, killer, victim, PkCommon.Now(), PkCommon.Dbl(PkCommon.P_REPEAT_HOURS, PkCommon.DEFAULT_REPEAT_HOURS));
         }
 
         static void Score(Player killer, Player victim, PkCommon.Judgement j)
         {
-            long now = PkCommon.Now();
-            var lines = new List<(Player to, string line)>();
-            var world = new List<string>();
-            var titles = new List<(Player p, CharacterTitle t)>();
+            Outcome o;
             lock (s_Lock)
             {
-                var kr = Get(killer); var vr = Get(victim);
-                bool wasLeader = Leader() == victim.Guid.Full;
-                int victimStreak = vr.Streak;
-                int victimInfamy = InfamyOf(vr, now);
-                // a counted death ends the victim's streak, whatever the verdict (an ally's kill does not)
-                if (j.Verdict != PkCommon.Verdict.NotCounted || j.Why.StartsWith("killed by you"))
+                o = Apply(s_State, new KillIn
                 {
-                    vr.Deaths++;
-                    vr.Streak = 0;
-                    if (victimStreak >= WANTED_AT)
-                        world.Add($"{killer.Name} has ended {victim.Name}'s killing streak of {victimStreak}.");
-                }
-
-                int pts = 0;
-                switch (j.Verdict)
-                {
-                    case PkCommon.Verdict.Honourable:
-                    {
-                        double ratio = Math.Clamp((double)(victim.Level ?? 1) / Math.Max(1, killer.Level ?? 1), 0.5, 2.0);
-                        double raw = 10 * ratio;
-                        var extra = new List<string>();
-                        if (victimStreak >= 3) { raw += 2 * victimStreak; extra.Add($"ended a streak of {victimStreak}"); }
-                        if (victimStreak >= WANTED_AT) { raw += 25; extra.Add("a Wanted player killer"); }
-                        if (victimInfamy >= 3) { raw += 10; extra.Add("justice on a Murderer"); }
-                        pts = Math.Max(1, (int)Math.Round(raw * j.Weight));
-                        kr.Renown += pts; kr.Kills++; kr.Streak++;
-                        kr.Best = Math.Max(kr.Best, kr.Streak);
-                        string why = j.Weight < 1 ? (j.Attackers > 2 ? $", shared among {j.Attackers}" : ", less for a victim you killed today") : "";
-                        lines.Add((killer, $"+{pts} renown for {victim.Name}{(extra.Count > 0 ? " (" + string.Join(", ", extra) + ")" : "")}{why}. Renown {kr.Renown}, streak {kr.Streak}."));
-                        if (kr.Streak == WANTED_AT)
-                            world.Add($"{killer.Name}{PkCommon.Of(killer)} has killed {WANTED_AT} player killers without falling and is now Wanted.");
-                        else if (kr.Streak > WANTED_AT && kr.Streak % 5 == 0)
-                            world.Add($"{killer.Name}'s killing streak reaches {kr.Streak}.");
-                        foreach (var (at, t) in new[] { (100L, CharacterTitle.Duelist), (500L, CharacterTitle.Bloodletter), (1500L, CharacterTitle.DerethsGladiator) })
-                            if (kr.Renown >= at && !kr.Titles.Contains((uint)t)) { kr.Titles.Add((uint)t); titles.Add((killer, t)); }
-                        if (wasLeader && !kr.Titles.Contains((uint)CharacterTitle.Kingslayer))
-                        { kr.Titles.Add((uint)CharacterTitle.Kingslayer); titles.Add((killer, CharacterTitle.Kingslayer)); }
-                        break;
-                    }
-                    case PkCommon.Verdict.Infamous:
-                    {
-                        int inf = InfamyOf(kr, now) + 1;
-                        kr.Infamy = inf; kr.InfamyAt = now;
-                        kr.Streak = 0;
-                        lines.Add((killer, $"No renown for killing {j.Why}. Your infamy is {inf}; it fades a point a day."));
-                        if (inf >= 3 && !kr.Titles.Contains((uint)CharacterTitle.Murderer))
-                        {
-                            kr.Titles.Add((uint)CharacterTitle.Murderer); titles.Add((killer, CharacterTitle.Murderer));
-                            world.Add($"{killer.Name} preys on the weak and is branded a Murderer. Killing them is justice.");
-                        }
-                        break;
-                    }
-                    default:
-                        lines.Add((killer, $"That kill earns no renown: {j.Why}."));
-                        break;
-                }
-
-                s_State.Kills.Add(new KillEntry
-                {
-                    At = now, Killer = killer.Guid.Full, Victim = victim.Guid.Full, Points = pts, Why = j.Why,
-                    Counts = j.Verdict == PkCommon.Verdict.Honourable || (j.Why?.StartsWith("killed by you") ?? false),
-                });
-                if (s_State.Kills.Count > KILL_LOG_KEEP) s_State.Kills.RemoveRange(0, s_State.Kills.Count - KILL_LOG_KEEP);
+                    Killer = killer.Guid.Full, Victim = victim.Guid.Full, KillerName = killer.Name, VictimName = victim.Name,
+                    KillerLevel = killer.Level ?? 1, VictimLevel = victim.Level ?? 1, KillerOf = PkCommon.Of(killer), At = PkCommon.Now(),
+                }, j);
                 Save();
             }
-            foreach (var (to, line) in lines) PkCommon.Say(to, line);
-            foreach (var w in world) PkCommon.World(w);
-            foreach (var (p, t) in titles) Grant(p, t);
+            foreach (var line in o.KillerLines) PkCommon.Say(killer, line);
+            foreach (var w in o.World) PkCommon.World(w);
+            foreach (var (_, t) in o.Titles) Grant(killer, (CharacterTitle)t);
         }
 
         static Rec Get(Player p)
@@ -219,17 +133,88 @@ namespace RevivalGuard
             return r;
         }
 
-        static int InfamyOf(Rec r, long now)
+        /// <summary>The PkRules title ids must be ACE's own; a mismatch is logged, never thrown.</summary>
+        static void CheckTitleIds()
         {
-            if (r.Infamy <= 0) return 0;
-            long faded = Math.Max(0, (now - r.InfamyAt) / INFAMY_FADE);
-            return (int)Math.Max(0, r.Infamy - faded);
+            var want = new (uint id, CharacterTitle t)[]
+            {
+                (T_BLOODLETTER, CharacterTitle.Bloodletter), (T_DUELIST, CharacterTitle.Duelist), (T_KINGSLAYER, CharacterTitle.Kingslayer),
+                (T_WARLORD, CharacterTitle.WarlordofDereth), (T_BOUNTY_HUNTER, CharacterTitle.BountyHunter), (T_GLADIATOR, CharacterTitle.DerethsGladiator),
+                (T_CHAMPION, CharacterTitle.GladiatorChampion), (T_MURDERER, CharacterTitle.Murderer),
+            };
+            foreach (var (id, t) in want)
+                if ((uint)t != id) Mod.Log.Warn($"[RevivalGuard] PkRenown: title {t} is {(uint)t} in ACE, {id} in PkRules.cs");
         }
 
-        /// <summary>The ladder's leader (guid), or 0.</summary>
-        static uint Leader() =>
-            s_State.Chars.Where(kv => kv.Value.Renown > 0).OrderByDescending(kv => kv.Value.Renown).ThenByDescending(kv => kv.Value.Kills)
-                .Select(kv => kv.Key).FirstOrDefault();
+        // ------------------------------------------------------------------ the re-judge
+
+        sealed class AceWorld : IWorld
+        {
+            public bool? IsMerc(uint guid)
+            {
+                var p = PlayerManager.FindByGuid(guid);
+                return p == null ? (bool?)null : Mercenaries.IsMercAccount(p.Account?.AccountName);
+            }
+            public int? LevelNow(uint guid) => PlayerManager.FindByGuid(guid)?.Level;
+        }
+
+        static bool s_RejudgeChecked;
+
+        /// <summary>A ledger kept under older rules is judged again once, the first time the ladder is used after
+        /// the deploy (a kill, a command, the board, a login): by then the world is open and every character can
+        /// be looked up. The old file is kept beside it as ledger.json.before-rules-N.</summary>
+        static void EnsureRejudged()
+        {
+            if (s_RejudgeChecked) return;
+            RejudgeResult res = null;
+            lock (s_Lock)
+            {
+                if (s_RejudgeChecked) return;
+                s_RejudgeChecked = true;
+                if (s_State.Rules >= RULES) return;
+                if (s_State.Kills.Count == 0) { s_State.Rules = RULES; return; }
+                try
+                {
+                    res = RunRejudge();
+                    if (s_Path != null && File.Exists(s_Path)) File.Copy(s_Path, s_Path + ".before-rules-" + RULES, true);
+                    s_State = res.Fresh;
+                    Save();
+                }
+                catch (Exception e) { Mod.Log.Error($"[RevivalGuard] PkRenown: re-judge failed, the ladder is unchanged: {e}"); return; }
+            }
+            LogRejudge(res, "automatic, rules " + RULES);
+            HandOverTitles(res);
+        }
+
+        static RejudgeResult RunRejudge() =>
+            Rejudge(s_State, new AceWorld(), PkCommon.Long(PkCommon.P_MIN_LEVEL, PkCommon.DEFAULT_MIN_LEVEL),
+                PkCommon.Dbl(PkCommon.P_RATIO, PkCommon.DEFAULT_RATIO), PkCommon.Dbl(PkCommon.P_REPEAT_HOURS, PkCommon.DEFAULT_REPEAT_HOURS), PkCommon.Now());
+
+        static void LogRejudge(RejudgeResult res, string why)
+        {
+            Mod.Log.Info($"[RevivalGuard] PkRenown: season re-judged ({why}): {res.Kills} kills, {res.Changed} changed, {res.Mercs} with a mercenary, "
+                + $"{res.Skipped} of removed characters left alone, {res.LevelsFromToday} judged with the killer's level today");
+            foreach (var l in res.Lines) Mod.Log.Info("[RevivalGuard] PkRenown: re-judge " + l);
+            foreach (var (_, n, t) in res.Taken) Mod.Log.Info($"[RevivalGuard] PkRenown: re-judge: {n} loses {TitleWord(t)} from the ladder (earned only from mercenary kills)");
+            foreach (var (_, n, t) in res.Granted) Mod.Log.Info($"[RevivalGuard] PkRenown: re-judge: {n} earns {TitleWord(t)}");
+        }
+
+        /// <summary>Titles the re-judge gives: now to a player online, else at the next login (PendingTitles).</summary>
+        static void HandOverTitles(RejudgeResult res)
+        {
+            foreach (var g in res.Granted.Select(x => x.guid).Distinct())
+            {
+                var o = PlayerManager.GetOnlinePlayer(g);
+                if (o == null) continue;
+                List<uint> pending;
+                lock (s_Lock)
+                {
+                    if (!s_State.Chars.TryGetValue(g, out var r) || r.PendingTitles.Count == 0) continue;
+                    pending = r.PendingTitles.ToList(); r.PendingTitles.Clear(); Save();
+                }
+                foreach (var t in pending) Grant(o, (CharacterTitle)t);
+            }
+        }
 
         /// <summary>A PK title granted elsewhere (the bounty board's Bounty Hunter), so the ladder row shows it.</summary>
         internal static void NoteTitle(Player p, CharacterTitle t)
@@ -277,6 +262,7 @@ namespace RevivalGuard
             {
                 try
                 {
+                    if (On) EnsureRejudged();
                     List<uint> pending = null;
                     lock (s_Lock)
                         if (s_State.Chars.TryGetValue(__instance.Guid.Full, out var r) && r.PendingTitles.Count > 0)
@@ -295,8 +281,15 @@ namespace RevivalGuard
             var p = session?.Player;
             if (p == null) return;
             if (!On) { PkCommon.Say(p, "The renown ladder is not open on this world."); return; }
+            EnsureRejudged();
             var args = parameters ?? new string[0];
             string verb = args.Length > 0 ? args[0].ToLowerInvariant() : "";
+            if (verb == "rejudge")
+            {
+                if (session.AccessLevel < AccessLevel.Admin) { PkCommon.Say(p, "Only an admin can judge the season again."); return; }
+                Rejudge(p, args.Length > 1 && args[1].ToLowerInvariant() == "apply");
+                return;
+            }
             if (verb == "season")
             {
                 if (session.AccessLevel < AccessLevel.Admin) { PkCommon.Say(p, "Only an admin can end a season."); return; }
@@ -318,7 +311,13 @@ namespace RevivalGuard
                 lock (s_Lock)
                 {
                     var hit = s_State.Chars.FirstOrDefault(kv => string.Equals((kv.Value.Name ?? "").TrimStart('+'), who, StringComparison.OrdinalIgnoreCase));
-                    if (hit.Value != null) { gone = hit.Value.Name; s_State.Chars.Remove(hit.Key); Save(); }
+                    if (hit.Value != null)
+                    {
+                        gone = hit.Value.Name; s_State.Chars.Remove(hit.Key);
+                        s_State.Removed ??= new Dictionary<uint, long>();
+                        s_State.Removed[hit.Key] = PkCommon.Now();   // a re-judge leaves their kills so far off the ladder
+                        Save();
+                    }
                 }
                 PkCommon.Say(p, gone != null ? $"{gone} is off the {Season()} ladder." : $"No ladder record is named {who}.");
                 if (gone != null) Mod.Log.Info($"[RevivalGuard] PkRenown: {p.Name} removed {gone} from the ladder");
@@ -334,6 +333,40 @@ namespace RevivalGuard
                 PkCommon.Say(p, $"{++i}. {r.Name}: {r.Renown} renown, {PkCommon.N(r.Kills, "kill")}, streak {r.Streak}{(r.Streak >= WANTED_AT ? " (Wanted)" : "")}");
             Me(p);
         }
+
+        /// <summary>@pkladder rejudge: what judging the season again under today's rules would change (the top ten
+        /// before and after, and the titles); `apply` does it, keeping the old file beside it.</summary>
+        static void Rejudge(Player admin, bool apply)
+        {
+            RejudgeResult res;
+            List<string> before;
+            lock (s_Lock)
+            {
+                before = Top(s_State, 10);
+                res = RunRejudge();
+                if (apply)
+                {
+                    try { if (s_Path != null && File.Exists(s_Path)) File.Copy(s_Path, s_Path + ".before-rejudge-" + PkCommon.Now(), true); }
+                    catch (Exception e) { PkCommon.Say(admin, $"Could not keep a copy of the ledger ({e.Message}); nothing changed."); return; }
+                    s_State = res.Fresh;
+                    Save();
+                }
+            }
+            var after = Top(res.Fresh, 10);
+            PkCommon.Say(admin, $"{(apply ? "Judged again" : "Preview")}: {res.Kills} kills, {res.Changed} judged differently, {res.Mercs} with a mercenary"
+                + $"{(res.LevelsFromToday > 0 ? $", {res.LevelsFromToday} judged with the killer's level today" : "")}.");
+            PkCommon.Say(admin, "Before: " + (before.Count > 0 ? string.Join("; ", before) : "nobody"));
+            PkCommon.Say(admin, "After: " + (after.Count > 0 ? string.Join("; ", after) : "nobody"));
+            foreach (var (_, n, t) in res.Taken) PkCommon.Say(admin, $"{n} loses {TitleWord(t)} from the ladder (only mercenary kills earned it).");
+            foreach (var (_, n, t) in res.Granted) PkCommon.Say(admin, $"{n} earns {TitleWord(t)}.");
+            if (!apply) PkCommon.Say(admin, "Nothing has changed yet. @pkladder rejudge apply does it.");
+            LogRejudge(res, apply ? $"{admin.Name}, applied" : $"{admin.Name}, preview");
+            if (apply) HandOverTitles(res);
+        }
+
+        static List<string> Top(State s, int n) =>
+            s.Chars.Where(kv => kv.Value.Renown > 0).OrderByDescending(kv => kv.Value.Renown).ThenByDescending(kv => kv.Value.Kills).ThenBy(kv => kv.Value.Name)
+                .Take(n).Select((kv, i) => $"{i + 1}. {kv.Value.Name} {kv.Value.Renown}").ToList();
 
         static void Me(Player p)
         {
@@ -374,7 +407,7 @@ namespace RevivalGuard
             for (int i = 1; i < Math.Min(3, rows.Count); i++) awards.Add((rows[i].g, rows[i].r.Name, CharacterTitle.GladiatorChampion));
             lock (s_Lock)
             {
-                var fresh = new State { Season = next, SeasonStarted = PkCommon.Now() };
+                var fresh = new State { Season = next, SeasonStarted = PkCommon.Now(), Rules = RULES };
                 // The new season opens with last season's winners carrying their title on the ladder
                 // (a row appears once they earn renown); an offline winner gets it at the next login.
                 foreach (var (g, name, t) in awards)
@@ -407,6 +440,7 @@ namespace RevivalGuard
 
         internal static void AppendJson(StringBuilder sb, uint asker)
         {
+            EnsureRejudged();
             var (rows, rank) = Ladder(asker);
             long now = PkCommon.Now();
             sb.Append(",\"season\":").Append(PkCommon.Q(Season())).Append(",\"ladder\":[");

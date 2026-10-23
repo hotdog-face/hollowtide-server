@@ -131,7 +131,11 @@ namespace RevivalGuard
             File(session, player, kind, done);
         }
 
-        static void File(Session session, Player player, string kind, string body)
+        /// <summary>A report the player did not write as a ticket (a feature request from FeatureBoard): filed the same
+        /// way, but with no "received as ticket" line and no over-the-limit message (the board already answered).</summary>
+        internal static void FileQuiet(Session session, Player player, string kind, string body) => File(session, player, kind, body, quiet: true);
+
+        static void File(Session session, Player player, string kind, string body, bool quiet = false)
         {
             bool auto = kind == "auto" || kind == "crash";
             uint account = session.AccountId;
@@ -148,7 +152,7 @@ namespace RevivalGuard
                 if (s_TodayCount >= SHARD_PER_DAY) { Mod.Log.Warn($"[RevivalGuard] ticket: shard daily ceiling reached; {kind} from {player.Name} dropped"); return; }
                 if (auto ? day >= AUTO_PER_DAY : (day >= PLAYER_PER_DAY || recent >= PLAYER_PER_10MIN))
                 {
-                    if (!auto) player.SendTransientError("You have sent several reports recently. Please wait a while before sending another.");
+                    if (!auto && !quiet) player.SendTransientError("You have sent several reports recently. Please wait a while before sending another.");
                     Offences.Add(player, "ticket", $"{kind} report over the limit; dropped");
                     return;
                 }
@@ -182,7 +186,7 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Error($"[RevivalGuard] ticket: could not file {id}: {e.Message}"); return; }
 
             Mod.Log.Info($"[RevivalGuard] ticket {id}: {kind} from {player.Name} ({session.Account}), {body.Length} chars");
-            if (!auto)
+            if (!auto && !quiet)
                 session.Network.EnqueueSend(new GameMessageSystemChat(
                     $"Thank you. Your report has been received as ticket {id}. Our team reviews every ticket.", ChatMessageType.Broadcast));
         }

@@ -57,11 +57,10 @@ namespace RevivalGuard
             return s_Allow = set;
         }
 
-        public static bool IsMerc(Player p)
-        {
-            string name = p?.Account?.AccountName;
-            return name != null && IsReservedName(name) && Allow().Contains(name);
-        }
+        public static bool IsMerc(Player p) => IsMercAccount(p?.Account?.AccountName);
+
+        /// <summary>By account name, for a character that may be offline (the PK ladder's re-judge).</summary>
+        public static bool IsMercAccount(string name) => name != null && IsReservedName(name) && Allow().Contains(name);
 
         public static int RealOnline()
         {

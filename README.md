@@ -4,8 +4,6 @@ The source of the server side of **Hollowtide**, an Asheron's Call revival. Publ
 General Public License requires: the Hollowtide server runs a modified [ACE](https://github.com/ACEmulator/ACE)
 (ACEmulator, AGPL-3.0) for players over the network, so its source is offered to them here.
 
-**About the project:** [mitchellv.me/work/hollowtide](https://www.mitchellv.me/work/hollowtide) · by [Mitchell Vizensky](https://www.mitchellv.me), game UX designer
-
 Hollowtide is not affiliated with or endorsed by Turbine, WB Games or the original game's owners. No game
 data is included; Asheron's Call's own files are the players' own.
 

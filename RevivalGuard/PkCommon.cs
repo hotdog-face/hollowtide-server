@@ -21,10 +21,11 @@ namespace RevivalGuard
     /// Retail's PK history is the reason for every rule (wiki: Olthoi Play's slag "less likely to drop"
     /// each time the same player is killed; the 2006 dev chat on gank squads; Darktide's lifestone
     /// campers): a kill between two accounts of one player, two allies, or two characters on one
-    /// connection is not a kill; a kill of a newcomer or of someone far below the killer earns
+    /// connection is not a kill; a kill of or by a Hollow Company mercenary is no kill at all
+    /// (owner 2026-10-22: players only); a kill of a newcomer (under level 15) or of someone far below the killer earns
     /// infamy instead of renown; the same victim again and again earns less and then nothing.
     /// </summary>
-    internal static class PkCommon
+    internal static partial class PkCommon
     {
         internal const string P_RENOWN = "pk_renown_enabled", P_BOUNTY = "pk_bounty_enabled", P_SHRINES = "pk_shrines_enabled";
         internal const string P_IGNORE_IP = "pk_honor_ignore_ip", P_MIN_LEVEL = "pk_honor_min_level",
@@ -39,7 +40,7 @@ namespace RevivalGuard
         };
         static readonly (string key, long def, string desc)[] s_Longs =
         {
-            (P_MIN_LEVEL, 30, "PK expansion: a victim under this level is a newcomer; killing one earns infamy, never renown"),
+            (P_MIN_LEVEL, DEFAULT_MIN_LEVEL, "PK expansion: a victim under this level is a newcomer; killing one earns infamy, never renown"),
             (PkBounty.P_MIN_TARGET, 50, "PK expansion: lowest level a bounty may be posted on"),
             (PkBounty.P_MIN_AMOUNT, 10000, "PK expansion: smallest bounty, pyreals"),
             (PkBounty.P_MAX_AMOUNT, 2000000, "PK expansion: largest total bounty on one head, pyreals"),
@@ -47,8 +48,8 @@ namespace RevivalGuard
         };
         static readonly (string key, double def, string desc)[] s_Doubles =
         {
-            (P_RATIO, 0.6, "PK expansion: a victim under this fraction of the killer's level is far beneath them (infamy)"),
-            (P_REPEAT_HOURS, 24, "PK expansion: hours over which killing the same victim again earns less, then nothing"),
+            (P_RATIO, DEFAULT_RATIO, "PK expansion: a victim under this fraction of the killer's level is far beneath them (infamy)"),
+            (P_REPEAT_HOURS, DEFAULT_REPEAT_HOURS, "PK expansion: hours over which killing the same victim again earns less, then nothing"),
             (PkBounty.P_FEE, 0.10, "PK expansion: share of a posted bounty the shard keeps (a pyreal sink)"),
             (PkBounty.P_DAYS, 7, "PK expansion: days a bounty stands before half is refunded"),
             (PkShrines.P_BONUS, 0.05, "PK expansion: creature-kill XP bonus per Shadow Shrine an allegiance holds"),
@@ -97,43 +98,24 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ the honour check
 
-        internal enum Verdict { Honourable, NotCounted, Infamous }
-
-        internal sealed class Judgement
-        {
-            public Verdict Verdict;
-            public string Why;          // for the killer and the log, when not honourable
-            public double Weight = 1;   // honourable kills: repeat and gank reductions, 0..1
-            public int Attackers = 1;
-        }
+        // Verdict, Judgement and the rules themselves are in PkRules.cs (pure C#, tested by NetTest).
 
         /// <summary>How a PK kill counts. `priorKills` is how many times this killer has killed this
         /// victim within pk_honor_repeat_hours, from the renown ledger (0 when the ladder is off).</summary>
         internal static Judgement Judge(Player killer, Player victim, int attackers, int priorKills)
         {
-            var j = new Judgement { Attackers = Math.Max(1, attackers) };
-            if (killer == null || victim == null || killer == victim) { j.Verdict = Verdict.NotCounted; j.Why = "no killer"; return j; }
-            if (killer.Account != null && victim.Account != null && killer.Account.AccountId == victim.Account.AccountId)
-            { j.Verdict = Verdict.NotCounted; j.Why = "two characters of one account"; return j; }
-            if (!On(P_IGNORE_IP) && SameAddress(killer, victim))
-            { j.Verdict = Verdict.NotCounted; j.Why = "two characters on one connection"; return j; }
-            if (Allies(killer, victim))
-            { j.Verdict = Verdict.NotCounted; j.Why = "an ally"; return j; }
-
-            int kl = killer.Level ?? 1, vl = victim.Level ?? 1;
-            if (vl < Long(P_MIN_LEVEL, 30))
-            { j.Verdict = Verdict.Infamous; j.Why = $"a newcomer (level {vl})"; return j; }
-            if (vl < kl * Dbl(P_RATIO, 0.6))
-            { j.Verdict = Verdict.Infamous; j.Why = $"someone far beneath you (level {vl} to your {kl})"; return j; }
-            if (priorKills >= 3)
-            { j.Verdict = Verdict.NotCounted; j.Why = $"killed by you {priorKills} times already today"; return j; }
-
-            j.Verdict = Verdict.Honourable;
-            j.Weight = 1.0 / (1 + priorKills);
-            // A GANK SQUAD SHARES ONE KILL: two on one is a fair fight's worth, more than two
-            // divides it (the 2006 dev chat: "fewer battles that are more epic", not ten on one).
-            if (j.Attackers > 2) j.Weight *= 2.0 / j.Attackers;
-            return j;
+            var f = new Facts { NoKiller = killer == null || victim == null || killer == victim };
+            if (!f.NoKiller)
+            {
+                f.KillerMerc = Mercenaries.IsMerc(killer);
+                f.VictimMerc = Mercenaries.IsMerc(victim);
+                f.SameAccount = killer.Account != null && victim.Account != null && killer.Account.AccountId == victim.Account.AccountId;
+                f.SameAddress = !On(P_IGNORE_IP) && SameAddress(killer, victim);
+                f.Allies = Allies(killer, victim);
+                f.KillerLevel = killer.Level ?? 1;
+                f.VictimLevel = victim.Level ?? 1;
+            }
+            return JudgeFacts(f, attackers, priorKills, Long(P_MIN_LEVEL, DEFAULT_MIN_LEVEL), Dbl(P_RATIO, DEFAULT_RATIO));
         }
 
         internal static bool SameAddress(Player a, Player b)

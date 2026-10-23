@@ -1,0 +1,96 @@
+{
+  "_about": "The feature request board's starting list (owner 2026-10-22: pre-populate it). Used ONCE, on a shard with no ~/ace/reports/features/board.json; after that the board file is the list. Each item: title (4-60 chars), text (up to 200), status open|planned|done|declined, votes = how many players asked for it before the board existed, source = where it came from. Edit freely; no em dashes. Order breaks vote ties.",
+  "items": [
+    {
+      "title": "Quick-bar numbers on inventory icons",
+      "text": "An item that sits on the quick bar shows its slot number on its icon in your packs, so you can tell it apart from its twins.",
+      "status": "planned",
+      "votes": 1,
+      "source": "report 261022-0024"
+    },
+    {
+      "title": "Show which attributes raise each skill",
+      "text": "Hovering a skill shows the attributes behind it, so you know which attributes to raise to lift that skill.",
+      "status": "open",
+      "votes": 1,
+      "source": "report 261019-0019"
+    },
+    {
+      "title": "Option to hide the active spell icons",
+      "text": "A way to hide the row of icons for your active buffs, which takes up screen space.",
+      "status": "open",
+      "votes": 1,
+      "source": "report 261017-0035"
+    },
+    {
+      "title": "A radar for rare items",
+      "text": "Something like the old Sixth Sense or Virindi radar that points out rare items and creatures nearby while you explore.",
+      "status": "open",
+      "votes": 1,
+      "source": "report 261021-0050"
+    },
+    {
+      "title": "Founder's Shirt with full coverage",
+      "text": "Make the Founder's Shirt cover the full torso and arms so it can be tailored onto full coverage shirts.",
+      "status": "open",
+      "votes": 1,
+      "source": "idea 261017-0029"
+    },
+    {
+      "title": "Freer movement while casting",
+      "text": "Start a cast while strafing, and cancel a cast by moving or jumping. Declined: casting keeps the original game's rules, where a run or jump waits for the spell to finish.",
+      "status": "declined",
+      "votes": 1,
+      "source": "reports 261019-0029, 261019-0032, 261020-0046"
+    },
+    {
+      "title": "Allegiance rank before player names",
+      "text": "Show a player's allegiance rank title in front of their name.",
+      "status": "open",
+      "votes": 1,
+      "source": "report 261022-0029"
+    },
+    {
+      "title": "Rearrange packs on the pack bar",
+      "text": "Drag your side packs to put them in the order you want.",
+      "status": "open",
+      "votes": 1,
+      "source": "report 261021-0019"
+    },
+    {
+      "title": "Mercenaries fade in after a portal",
+      "text": "A hired mercenary that follows you through a portal fades in instead of popping into place.",
+      "status": "open",
+      "votes": 1,
+      "source": "report 261019-0065"
+    },
+    {
+      "title": "Search in the spellbook",
+      "text": "A search box on the spellbook page to find a spell by name.",
+      "status": "done",
+      "votes": 1,
+      "source": "report 261016-0025"
+    },
+    {
+      "title": "Assistant casts vulnerabilities",
+      "text": "The Assistant's spell tab can cast vulnerabilities on your target and lets you pick the spells it attacks with.",
+      "status": "done",
+      "votes": 1,
+      "source": "report 261020-0042"
+    },
+    {
+      "title": "Ground cover off by default in the browser",
+      "text": "Grass and flowers start off in the browser game, which runs much better on older cards. You can still turn them on.",
+      "status": "done",
+      "votes": 1,
+      "source": "report 261016-0014"
+    },
+    {
+      "title": "Player Killer Lite for practice duels",
+      "text": "A Player Killer Lite mode so friends can duel without a vitae penalty. Declined: Hollowtide keeps Darktide's player killer rules.",
+      "status": "declined",
+      "votes": 1,
+      "source": "report 261022-0025"
+    }
+  ]
+}

@@ -21,4 +21,8 @@
     <Reference Include="0Harmony"><HintPath>$(ACEBIN)/0Harmony.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="log4net"><HintPath>$(ACEBIN)/log4net.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
+  <ItemGroup>
+    <!-- The feature request board's starting list (FeatureBoard), used once on a shard with no board file. -->
+    <EmbeddedResource Include="FeatureRequestsSeed.json" LogicalName="RevivalGuard.FeatureRequestsSeed.json" />
+  </ItemGroup>
 </Project>

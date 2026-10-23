@@ -16,7 +16,8 @@ namespace RevivalGuard
     /// physics tick that was moving. UseWalkRule decides; Settle calls ACE's own HandleMoveToCallback, Fail cancels the
     /// move and fails the use the way a newer use does (CheckMoveToParams: callback(false), UseDone). Runs on
     /// PlayerManager.Tick; the act is queued on the player's own action queue. Switch: rg_use_walk_watchdog;
-    /// use.settle_seconds, use.unfooted_seconds, use.walk_limit_seconds.
+    /// use.settle_seconds, use.unfooted_seconds, use.walk_limit_seconds, use.cancelled_seconds (a cancelled turn whose body
+    /// keeps moving, e.g. a heal kit on a fellow while the fighter turns: answered by ACE's own check, 261023-0019).
     /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class UseWalkWatchdog
@@ -25,6 +26,7 @@ namespace RevivalGuard
         static double SETTLE => Tunables.D("use.settle_seconds", 1.0);
         static double UNFOOTED => Tunables.D("use.unfooted_seconds", 2.0);
         static double LIMIT => Tunables.D("use.walk_limit_seconds", 15.0);
+        static double CANCELLED => Tunables.D("use.cancelled_seconds", 2.0);
         static double s_Next;
 
         sealed class Seen { public object Params; public double Since; }
@@ -57,17 +59,18 @@ namespace RevivalGuard
                 }
                 double age = now - s.Since;
                 bool movingTo = p.IsPlayerMovingTo2, bodyMoving = p.PhysicsObj.IsMovingOrAnimating, walkable = ServerFooting.Walkable(p);
-                var act = UseWalkRule.Decide(age, movingTo, bodyMoving, walkable, SETTLE, UNFOOTED, LIMIT);
+                var act = UseWalkRule.Decide(age, movingTo, bodyMoving, walkable, SETTLE, UNFOOTED, LIMIT, CANCELLED);
                 if (act == UseWalkRule.Act.None) continue;
                 s.Since = now;   // once per window, whatever the queue does
                 string target = mtp.Target?.Name ?? "?";
                 p.EnqueueAction(new ActionEventDelegate(() =>
                 {
                     if (!ReferenceEquals(p.MoveToParams, mtp) || mtp.Callback == null) return;   // it ended meanwhile
-                    Mod.Log.Warn($"[RevivalGuard] use walk watchdog: {p.Name} (0x{p.Guid.Full:X8}) use of {target} waited {age:F1}s "
+                    Mod.Log.Warn($"[RevivalGuard] use walk watchdog: {p.Name} (0x{p.Guid.Full:X8}) use or attack on {target} waited {age:F1}s "
                         + $"(moving to {p.IsPlayerMovingTo2}, body moving {p.PhysicsObj.IsMovingOrAnimating}; {ServerFooting.Describe(p)}): "
-                        + (act == UseWalkRule.Act.Settle ? "answered now, as ACE does once the body stops" : "failed as a newer use would"));
-                    if (act == UseWalkRule.Act.Settle) { p.HandleMoveToCallback(); return; }
+                        + (act == UseWalkRule.Act.Settle ? "answered now with ACE's own facing and range check" : "failed as a newer use would"));
+                    BusyLedger.Note(p, $"use walk watchdog: {target} {(act == UseWalkRule.Act.Settle ? "answered" : "failed")} after {age:F0}s");
+                    if (act == UseWalkRule.Act.Settle && mtp.Target != null) { p.HandleMoveToCallback(); return; }
                     if (p.IsPlayerMovingTo2) p.PhysicsObj.cancel_moveto();   // OnMoveComplete: IsPlayerMovingTo2 off, callback kept
                     if (ReferenceEquals(p.MoveToParams, mtp)) p.CheckMoveToParams();   // callback(false): UseDone
                 }));

@@ -18,7 +18,8 @@ namespace RevivalGuard
     {
         const int MAX = 16;
         static readonly TimeSpan KEEP = TimeSpan.FromMinutes(10);
-        sealed class Entry { public DateTime At; public string Text; public int Count; }
+        sealed class Entry { public DateTime First, At; public string Text; public int Count; }
+        static readonly Dictionary<uint, DateTime> s_ChugAt = new Dictionary<uint, DateTime>();
         static readonly Dictionary<uint, List<Entry>> s_By = new Dictionary<uint, List<Entry>>();
         static readonly object s_Lock = new object();
 
@@ -35,7 +36,7 @@ namespace RevivalGuard
                 }
                 var last = l.Count > 0 ? l[l.Count - 1] : null;
                 if (last != null && last.Text == text && (now - last.At).TotalSeconds < 30) { last.Count++; last.At = now; return; }
-                l.Add(new Entry { At = now, Text = text, Count = 1 });
+                l.Add(new Entry { First = now, At = now, Text = text, Count = 1 });
                 if (l.Count > MAX) l.RemoveAt(0);
             }
         }
@@ -55,6 +56,9 @@ namespace RevivalGuard
                             + $"motion done {ms.CastMotionDone}, turning {ms.IsTurning}, turn release {ms.PendingTurnRelease})");
                 var fs = p.FoodState;
                 if (fs != null && fs.IsChugging) parts.Add($"using, waiting on {fs.UseMotion} (anim {fs.UseAnimTime:F1}s)");
+                var mtp = p.MoveToParams;
+                if (mtp?.Callback != null)
+                    parts.Add($"use waiting on its server walk/turn to {mtp.Target?.Name ?? "?"} (moving to {p.IsPlayerMovingTo2}, body moving {p.PhysicsObj?.IsMovingOrAnimating})");
                 parts.Add(ServerFooting.Describe(p));
             }
             catch (Exception e) { parts.Add("state ? " + e.GetType().Name); }
@@ -63,14 +67,16 @@ namespace RevivalGuard
             {
                 if (s_By.TryGetValue(p.Guid.Full, out var l))
                     recent = string.Join("; ", l.Where(e => now - e.At < KEEP)
-                        .Select(e => $"{e.At:HH:mm:ss} {e.Text}{(e.Count > 1 ? $" x{e.Count}" : "")}"));
+                        .Select(e => e.Count > 1 && e.At - e.First >= TimeSpan.FromSeconds(1)
+                            ? $"{e.First:HH:mm:ss}-{e.At:HH:mm:ss} {e.Text} x{e.Count}"   // a run: first and last, not a burst
+                            : $"{e.At:HH:mm:ss} {e.Text}{(e.Count > 1 ? $" x{e.Count}" : "")}"));
             }
             return "now: " + string.Join(", ", parts) + (recent.Length > 0 ? "; recent (UTC): " + recent : "");
         }
 
         static string Name(Player p, uint guid)
         {
-            try { return p.FindObject(guid, Player.SearchLocations.MyInventory | Player.SearchLocations.MyEquippedItems)?.Name ?? $"0x{guid:X8}"; }
+            try { return p.FindObject(guid, Player.SearchLocations.LocationsICanMove)?.Name ?? $"0x{guid:X8}"; }
             catch { return $"0x{guid:X8}"; }
         }
 
@@ -83,7 +89,44 @@ namespace RevivalGuard
         [HarmonyPatch(typeof(Player), nameof(Player.ApplyConsumableWithAnimationCallbacks))]
         static class OnChug
         {
-            static void Postfix(Player __instance, MotionCommand useMotion) { try { Note(__instance, $"{useMotion} started (fast chug)"); } catch { } }
+            static void Postfix(Player __instance, MotionCommand useMotion)
+            {
+                try { lock (s_Lock) s_ChugAt[__instance.Guid.Full] = DateTime.UtcNow; Note(__instance, $"{useMotion} started (fast chug)"); } catch { }
+            }
+        }
+
+        // the chug's own motion-dones, timed from its start, so a slow drink reads as one (261023-0019 read as 14 s and
+        // 31 s drinks from runs of heal-kit UseDones)
+        [HarmonyPatch(typeof(Player), nameof(Player.HandleMotionDone_UseConsumable))]
+        static class OnChugDone
+        {
+            static void Prefix(Player __instance, uint motionID)
+            {
+                try
+                {
+                    var fs = __instance.FoodState;
+                    if (!__instance.FastTick || fs == null || !fs.IsChugging || motionID != (uint)fs.UseMotion) return;
+                    double secs;
+                    lock (s_Lock) secs = s_ChugAt.TryGetValue(__instance.Guid.Full, out var at) ? (DateTime.UtcNow - at).TotalSeconds : -1;
+                    Note(__instance, (fs.UseMotion == MotionCommand.Ready ? "chug finished" : $"{fs.UseMotion} done") + (secs >= 0 ? $" at {secs:F1}s" : ""));
+                }
+                catch { }
+            }
+        }
+
+        [HarmonyPatch(typeof(Player), nameof(Player.HandleActionUseWithTarget))]
+        static class OnUseWith
+        {
+            static void Prefix(Player __instance, uint sourceObjectGuid, uint targetObjectGuid)
+            {
+                try
+                {
+                    string target = targetObjectGuid == __instance.Guid.Full ? "self"
+                        : __instance.FindObject(targetObjectGuid, Player.SearchLocations.Everywhere)?.Name ?? $"0x{targetObjectGuid:X8}";
+                    Note(__instance, $"use-with {Name(__instance, sourceObjectGuid)} on {target}");
+                }
+                catch { }
+            }
         }
 
         [HarmonyPatch(typeof(MagicState), nameof(MagicState.SetCastParams))]

@@ -21,5 +21,18 @@ namespace RevivalGuard
             if (movingTo && !walkable && age >= unfootedAfter) return Act.Fail;
             return Act.None;
         }
+
+        /// <summary>As above, and a cancelled move whose body is still moving or animating is answered (ACE's own
+        /// facing and range check) once <paramref name="cancelledAfter"/> has passed. Any client MoveToState cancels the
+        /// server turn of a use (GameActionMoveToState: StopExistingMoveToChains2); in a fight the player keeps turning, so
+        /// ACE's "check again when player is stationary" waited the whole 15 s: Mystic Warrior's heal kits on The Forsaken
+        /// Moustache, five times on 2026-10-23 (261023-0019).</summary>
+        public static Act Decide(double age, bool movingTo, bool bodyMoving, bool walkable,
+                                 double settleAfter, double unfootedAfter, double limit, double cancelledAfter)
+        {
+            var act = Decide(age, movingTo, bodyMoving, walkable, settleAfter, unfootedAfter, limit);
+            if (act == Act.None && !movingTo && bodyMoving && age >= cancelledAfter) return Act.Settle;
+            return act;
+        }
     }
 }

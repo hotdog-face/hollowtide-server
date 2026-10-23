@@ -21,5 +21,12 @@ namespace RevivalGuard
         /// <summary>A drink or a gem whose phase has waited at least <paramref name="limit"/> seconds is stuck: a drink takes
         /// 1-3 s, its Ready half under 1 s.</summary>
         public static bool Stuck(double ageSeconds, double limit) => ageSeconds >= limit;
+
+        /// <summary>Stuck, or sooner when the server body is off walkable ground: ACE then queues no animation for the
+        /// phase (contact_allows_move), so its motion-done cannot come while the body stays there. Past the phase's own
+        /// animation time plus <paramref name="grace"/> (a landing re-plays it: findings use-stuck-2026-10-23) it is
+        /// finished at once instead of after the full limit.</summary>
+        public static bool Stuck(double ageSeconds, double limit, bool walkable, double animSeconds, double grace)
+            => ageSeconds >= limit || (!walkable && ageSeconds >= animSeconds + grace);
     }
 }

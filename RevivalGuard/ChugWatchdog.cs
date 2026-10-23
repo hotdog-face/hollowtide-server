@@ -21,13 +21,15 @@ namespace RevivalGuard
     /// the item used, as the player asked), then Ready's (FinishChugging, back to the stance the drink left, UseDone,
     /// IsBusy cleared). A phase is timed from when this watchdog first saw it (ChugWatchdogRule). Runs on
     /// PlayerManager.Tick (TeleportWatchdog says why not Heartbeat); the rescue is queued on the player's own action
-    /// queue. Switch: rg_chug_watchdog; chug.stuck_seconds.
+    /// queue. Switch: rg_chug_watchdog; chug.stuck_seconds. Off walkable ground (ServerFooting) the motion-done cannot come,
+    /// so the phase is finished once its animation time plus chug.unfooted_grace_seconds has passed (Genki 261023-0010).
     /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class ChugWatchdog
     {
         const string P_ON = "rg_chug_watchdog";
         static double STUCK => Tunables.D("chug.stuck_seconds", 10.0);
+        static double UNFOOTED_GRACE => Tunables.D("chug.unfooted_grace_seconds", 1.0);
         static double s_Next;
 
         sealed class Seen { public object Callback; public uint Motion; public double Since; }
@@ -57,7 +59,8 @@ namespace RevivalGuard
                 double age = ChugWatchdogRule.Age(fs.IsChugging && !p.Teleporting && !p.IsDead, fs.Callback, (uint)fs.UseMotion,
                                                   ref cb, ref mo, ref since, now);
                 s.Callback = cb; s.Motion = mo; s.Since = since;
-                if (!ChugWatchdogRule.Stuck(age, STUCK)) continue;
+                bool walkable = ServerFooting.Walkable(p);
+                if (!ChugWatchdogRule.Stuck(age, STUCK, walkable, fs.UseAnimTime, UNFOOTED_GRACE)) continue;
                 s.Since = now;   // once per phase per STUCK window, whatever the queue does
                 var callback = fs.Callback; var motion = fs.UseMotion;
                 p.EnqueueAction(new ActionEventDelegate(() =>
@@ -66,7 +69,7 @@ namespace RevivalGuard
                     // the same phase, still waiting: a callback that came meanwhile moved it on
                     if (f == null || !f.IsChugging || !ReferenceEquals(f.Callback, callback) || f.UseMotion != motion) return;
                     Mod.Log.Warn($"[RevivalGuard] chug watchdog: {p.Name} (0x{p.Guid.Full:X8}) {f.UseMotion} still waiting after "
-                        + $"{age:F0}s (anim {f.UseAnimTime:F1}s, back to {f.PrevStance}, busy {p.IsBusy}): finished as ACE would");
+                        + $"{age:F0}s (anim {f.UseAnimTime:F1}s, back to {f.PrevStance}, busy {p.IsBusy}; {ServerFooting.Describe(p)}): finished as ACE would");
                     if (f.UseMotion != MotionCommand.Ready) p.HandleMotionDone_UseConsumable((uint)f.UseMotion, true);
                     if (p.FoodState.IsChugging) p.HandleMotionDone_UseConsumable((uint)MotionCommand.Ready, true);
                 }));

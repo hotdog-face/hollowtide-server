@@ -34,8 +34,19 @@ namespace RevivalGuard
                            && o.ID != po.ID && System.Numerics.Vector3.Distance(o.Position.Frame.Origin, me) < 2.0f).Count ?? 0;
             }
             catch { near = -1; }
+            // the pose and the animation queue: getting up from a sit or sleep queues seconds of links before the use
+            string pose = "?";
+            try
+            {
+                var mi = po.MovementManager?.MotionInterpreter;
+                var q = po.PartArray?.MotionTableManager?.PendingAnimations;
+                pose = $"{(ACE.Entity.Enum.MotionCommand)(mi?.InterpretedState.ForwardCommand ?? 0)}, queue {q?.Count ?? 0}"
+                     + (q != null && q.Count > 0 ? $" ({string.Join(",", q.Select(a => ((ACE.Entity.Enum.MotionCommand)a.Motion).ToString()).Take(4))})" : "");
+            }
+            catch { }
             return $"contact {(po.TransientState & TransientStateFlags.Contact) != 0}, walkable {(po.TransientState & TransientStateFlags.OnWalkable) != 0}, "
-                 + $"plane z {po.ContactPlane.Normal.Z:0.00}, velocity {po.Velocity.Length():0.0}, cell {po.Position.ObjCellID:X8}, creatures within 2 m {near}";
+                 + $"plane z {po.ContactPlane.Normal.Z:0.00}, velocity {po.Velocity.Length():0.0}, cell {po.Position.ObjCellID:X8}, creatures within 2 m {near}, "
+                 + $"pose {pose}";
         }
     }
 }

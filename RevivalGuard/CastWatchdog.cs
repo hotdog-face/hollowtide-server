@@ -22,13 +22,17 @@ namespace RevivalGuard
     /// purpose for the player to let go of a held turn key (PendingTurnRelease). A legit cast, turn included, takes
     /// 1-4 s. Runs on PlayerManager.Tick (TeleportWatchdog explains why not Heartbeat); the fail itself is queued
     /// on the player's own action queue so it runs on the thread that owns the cast. Switch: rg_cast_watchdog.
+    /// With the server body off walkable ground (ServerFooting) neither the turn nor the gesture can play, so a cast is
+    /// failed once the body has been off it cast.unfooted_seconds (2 s), not after the full 10 s (report 261023-0014).
     /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class CastWatchdog
     {
         const string P_ON = "rg_cast_watchdog";
         static double CAST_STUCK => Tunables.D("cast.stuck_seconds", 10.0);
+        static double UNFOOTED => Tunables.D("cast.unfooted_seconds", 2.0);
         static double s_Next;
+        static readonly System.Collections.Generic.Dictionary<uint, double> s_Unfooted = new System.Collections.Generic.Dictionary<uint, double>();
 
         static void Postfix()
         {
@@ -46,9 +50,14 @@ namespace RevivalGuard
             foreach (var p in PlayerManager.GetAllOnline().ToList())
             {
                 var ms = p?.MagicState;
-                if (ms == null || !ms.IsCasting || p.Teleporting || p.IsDead) continue;
+                if (ms == null || !ms.IsCasting || p.Teleporting || p.IsDead) { if (p != null) s_Unfooted.Remove(p.Guid.Full); continue; }
                 double age = (utc - ms.StartTime).TotalSeconds;
-                if (!CastWatchdogRule.Stuck(age, ms.PendingTurnRelease, (uint)(p.LastMoveToState?.RawMotionState.TurnCommand ?? 0), CAST_STUCK)) continue;
+                if (!s_Unfooted.TryGetValue(p.Guid.Full, out var since)) since = double.NaN;
+                double unfooted = CastWatchdogRule.Unfooted(ServerFooting.Walkable(p), ref since, now);
+                s_Unfooted[p.Guid.Full] = since;
+                if (!CastWatchdogRule.Stuck(age, ms.PendingTurnRelease, (uint)(p.LastMoveToState?.RawMotionState.TurnCommand ?? 0), CAST_STUCK,
+                                            unfooted, UNFOOTED)) continue;
+                s_Unfooted.Remove(p.Guid.Full);
                 int castNum = ms.CastNum;
                 p.EnqueueAction(new ActionEventDelegate(() =>
                 {
@@ -56,10 +65,13 @@ namespace RevivalGuard
                     if (!p.MagicState.IsCasting || p.MagicState.CastNum != castNum) return;
                     Mod.Log.Warn($"[RevivalGuard] cast watchdog: {p.Name} (0x{p.Guid.Full:X8}) cast #{castNum} still running "
                         + $"after {age:F0}s (gesture {p.MagicState.CastGesture}, motion done {p.MagicState.CastMotionDone}, "
-                        + $"turning {p.MagicState.IsTurning}, turn release {p.MagicState.PendingTurnRelease}): failed as a fizzle");
+                        + $"turning {p.MagicState.IsTurning}, turn release {p.MagicState.PendingTurnRelease}; off walkable {unfooted:F0}s, "
+                        + $"{ServerFooting.Describe(p)}): failed as a fizzle");
+                    BusyLedger.Note(p, $"cast watchdog: cast #{castNum} failed after {age:F0}s (off walkable {unfooted:F0}s)");
                     p.FailCast();
                 }));
             }
+            if (s_Unfooted.Count > 200) s_Unfooted.Clear();
         }
     }
 }

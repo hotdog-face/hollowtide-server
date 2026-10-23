@@ -23,6 +23,8 @@ namespace RevivalGuard
     /// PlayerManager.Tick (TeleportWatchdog says why not Heartbeat); the rescue is queued on the player's own action
     /// queue. Switch: rg_chug_watchdog; chug.stuck_seconds. Off walkable ground (ServerFooting) the motion-done cannot come,
     /// so the phase is finished once its animation time plus chug.unfooted_grace_seconds has passed (Genki 261023-0010).
+    /// On walkable ground it is finished past its animation time plus chug.footed_grace_seconds (3 s), not 10 s: a
+    /// dispel potion's MimeEat held The Forsaken Moustache 10 s on flat ground (261023-0014, "spell hanging").
     /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class ChugWatchdog
@@ -30,6 +32,7 @@ namespace RevivalGuard
         const string P_ON = "rg_chug_watchdog";
         static double STUCK => Tunables.D("chug.stuck_seconds", 10.0);
         static double UNFOOTED_GRACE => Tunables.D("chug.unfooted_grace_seconds", 1.0);
+        static double FOOTED_GRACE => Tunables.D("chug.footed_grace_seconds", 3.0);
         static double s_Next;
 
         sealed class Seen { public object Callback; public uint Motion; public double Since; }
@@ -60,7 +63,7 @@ namespace RevivalGuard
                                                   ref cb, ref mo, ref since, now);
                 s.Callback = cb; s.Motion = mo; s.Since = since;
                 bool walkable = ServerFooting.Walkable(p);
-                if (!ChugWatchdogRule.Stuck(age, STUCK, walkable, fs.UseAnimTime, UNFOOTED_GRACE)) continue;
+                if (!ChugWatchdogRule.Stuck(age, STUCK, walkable, fs.UseAnimTime, UNFOOTED_GRACE, FOOTED_GRACE)) continue;
                 s.Since = now;   // once per phase per STUCK window, whatever the queue does
                 var callback = fs.Callback; var motion = fs.UseMotion;
                 p.EnqueueAction(new ActionEventDelegate(() =>
@@ -70,6 +73,7 @@ namespace RevivalGuard
                     if (f == null || !f.IsChugging || !ReferenceEquals(f.Callback, callback) || f.UseMotion != motion) return;
                     Mod.Log.Warn($"[RevivalGuard] chug watchdog: {p.Name} (0x{p.Guid.Full:X8}) {f.UseMotion} still waiting after "
                         + $"{age:F0}s (anim {f.UseAnimTime:F1}s, back to {f.PrevStance}, busy {p.IsBusy}; {ServerFooting.Describe(p)}): finished as ACE would");
+                    BusyLedger.Note(p, $"chug watchdog: {f.UseMotion} finished after {age:F0}s (anim {f.UseAnimTime:F1}s, walkable {ServerFooting.Walkable(p)})");
                     if (f.UseMotion != MotionCommand.Ready) p.HandleMotionDone_UseConsumable((uint)f.UseMotion, true);
                     if (p.FoodState.IsChugging) p.HandleMotionDone_UseConsumable((uint)MotionCommand.Ready, true);
                 }));

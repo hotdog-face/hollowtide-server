@@ -174,6 +174,7 @@ namespace RevivalGuard
                 ["character_id"] = $"0x{player.Guid.Full:X8}",
                 ["level"] = player.Level ?? 0,
                 ["server_location"] = player.Location?.ToLOCString() ?? "",
+                ["server_busy"] = SafeBusy(player),
                 ["report"] = body.Length > 60000 ? body.Substring(0, 60000) : body,
             };
             try
@@ -200,6 +201,9 @@ namespace RevivalGuard
             }
             catch { return 0; }
         }
+
+        // the cast/use state and its recent history (BusyLedger): a stuck cast or drink report carries its evidence
+        static string SafeBusy(Player p) { try { return BusyLedger.Describe(p); } catch (Exception e) { return "? " + e.GetType().Name; } }
 
         static string Trim(string s, int n) => s == null ? "" : s.Length <= n ? s : s.Substring(0, n) + "...";
     }

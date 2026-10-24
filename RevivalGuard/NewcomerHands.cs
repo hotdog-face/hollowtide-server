@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using ACE.Entity.Enum;
+using ACE.Entity.Enum.Properties;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
@@ -13,7 +15,9 @@ namespace RevivalGuard
     /// Banner (one per account, hookable so not attuned), the 10,000 starting pyreals of ACE's starter gear. A character
     /// under level 10 cannot give an item to another player, put one in a trade, drop one, or put one into a container it
     /// does not carry (a chest or a corpse on the ground). Giving to NPCs (quest turn-ins), selling to vendors, picking up
-    /// and receiving are untouched; staff are exempt. DIVERGENCES row "Newcomers keep their items".
+    /// and receiving are untouched; staff are exempt. What a newcomer sells is not put up for resale (ACE lists a sold item for
+    /// anyone to buy for vendor_unique_rot_time): a sale to a vendor with a second tab buying it back was a give.
+    /// DIVERGENCES row "Newcomers keep their items"; docs/findings/freebie-audit-2026-10-24.md.
     /// </summary>
     static class NewcomerHands
     {
@@ -78,6 +82,17 @@ namespace RevivalGuard
             NewcomerHands.Refuse(__instance, "drop items or put them in chests");
             __instance.Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(__instance.Session, itemGuid));
             return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(Vendor), nameof(Vendor.ProcessItemsForPurchase))]
+    static class NewcomerHandsSell
+    {
+        // ACE destroys a DestroyOnSell item instead of listing it, the same path; the newcomer is still paid as usual
+        static void Prefix(Player player, Dictionary<uint, WorldObject> items)
+        {
+            if (!NewcomerHands.Held(player) || items == null) return;
+            foreach (var item in items.Values) item?.SetProperty(PropertyBool.DestroyOnSell, true);
         }
     }
 }

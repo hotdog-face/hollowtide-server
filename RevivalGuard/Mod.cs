@@ -165,6 +165,7 @@ namespace RevivalGuard
             public DateTime At; public ACE.Entity.Position Pos; public float Budget = float.NaN; public ACE.Entity.Position StaleFrom; public DateTime TeleportedAt;
             public ushort SnapStamp; public DateTime SnapAt; public int StaleDrops;   // the last snap-back's ForcePosition sequence
             public ACE.Entity.Position ReqPos; public ushort ReqStamp;               // the newest AutonomousPosition and its echoed sequence
+            public int ForceBefore = -1;   // ACE's ForcePosition sequence when a report was let through to it (-1: none)
         }
         internal static readonly ConditionalWeakTable<Player, State> s_State = new ConditionalWeakTable<Player, State>();
 
@@ -193,6 +194,13 @@ namespace RevivalGuard
         }
 
         const double STALE_WINDOW = 3.0;   // seconds after a snap a report from before it can still be in flight
+        const double STALE_TELEPORT_MAX = 900.0;   // how long a report from the spot a teleport left counts as stale
+
+        static int ForceSeq(Player p)
+        {
+            try { var b = p.Sequences.GetCurrentSequence(SequenceType.ObjectForcePosition); return b != null && b.Length >= 2 ? BitConverter.ToUInt16(b, 0) : -1; }
+            catch { return -1; }
+        }
 
         /// <summary>A report the client sent before our snap-back reached it (its echoed ForcePosition sequence is older than
         /// the snap's): dropped quietly. The stamp comes from the AutonomousPosition that stored this very Position object,
@@ -217,6 +225,7 @@ namespace RevivalGuard
             var p = __instance;
             var st = s_State.GetOrCreateValue(p);
             var now = DateTime.UtcNow;
+            st.ForceBefore = -1;
             if (forceUpdate || p.Teleporting || p.Location == null || newPosition == null)
             { st.Pos = null; st.At = now; return true; }
             if (StaleAfterSnap(p, st, newPosition, now)) { __result = false; return false; }   // no offence, no new snap
@@ -248,6 +257,7 @@ namespace RevivalGuard
                              $"(run allowance {runAllowed:F1} m at run rate {rate:F2}, budget {allowed:F1} m); accepted");
                 st.Pos = new ACE.Entity.Position(newPosition);
                 st.At = now;
+                st.ForceBefore = ForceSeq(p);
                 return true;
             }
 
@@ -260,10 +270,20 @@ namespace RevivalGuard
                 // a sweep bot "moved 40915.0 m in 1.52 s" (2026-09-19) was the client's last position
                 // report from the old landblock, arriving after the teleport. Refusing it keeps the
                 // player at the destination; logging it as cheating would bury real offences.
-                bool stale = st.StaleFrom != null && (now - st.TeleportedAt).TotalSeconds < 10
+                // THE STALE SPOT HOLDS FOR 15 MINUTES, not 10 s (2026-10 snap sweep, docs/findings/snaps-2026-10.md):
+                // a browser player who died sat in portal space past TeleportWatchdog's 20 s, the watchdog finished the teleport,
+                // and their client's next report came from the corpse spot 1-13 minutes later ("moved 26859.7 m"; Genki, Zanenvel,
+                // Metallideth, 13 such offences in 7 days). It is still refused and the client still snapped to the lifestone: this
+                // only decides whether a REFUSED report is logged as an offence, so it is not cleared by a report from the
+                // destination either (a probe bot reported its arrival first, and its old-spot report was then an offence).
+                bool stale = st.StaleFrom != null && (now - st.TeleportedAt).TotalSeconds < STALE_TELEPORT_MAX
                              && st.StaleFrom.Distance2D(newPosition) < 50f;
+                // The baseline and the server's own copy are named too (2026-10 snap sweep): six "40-175 m in under a second"
+                // refusals could not be traced from the old line, and in seven others the server's copy had fallen 40-55 m
+                // below the client on a hill (FallWatch) and the snap pulled the client down to it.
                 if (!stale)
-                Offences.Add(p, "movement", $"moved {moved:F1} m in {dt:F2} s (budget allowed {allowed:F1} m at run rate {rate:F2}); snapped back to {p.Location.ToLOCString()}");
+                Offences.Add(p, "movement", $"moved {moved:F1} m in {dt:F2} s (budget allowed {allowed:F1} m at run rate {rate:F2}); snapped back to {p.Location.ToLOCString()}"
+                    + $" (measured from {st.Pos.ToLOCString()}, {(now - st.At).TotalSeconds:F1} s old; the server's copy {p.Location.DistanceTo(newPosition):F1} m from the report)");
                 var seq = p.Sequences.GetNextSequence(SequenceType.ObjectForcePosition);
                 if (seq != null && seq.Length >= 2) { st.SnapStamp = BitConverter.ToUInt16(seq, 0); st.SnapAt = now; st.StaleDrops = 0; }
                 p.SendUpdatePosition();
@@ -277,7 +297,31 @@ namespace RevivalGuard
             }
             st.Pos = new ACE.Entity.Position(newPosition);
             st.At = now;
+            st.ForceBefore = ForceSeq(p);
             return true;
+        }
+
+        /// <summary>
+        /// ACE'S OWN SNAP-BACK COUNTS AS A SNAP (2026-10 snap sweep). ACE's z-pos check snaps a report back to LastGroundPos with
+        /// its own ForcePosition sequence, and this guard did not know: the report already in flight from before it was judged
+        /// against the snapped spot and snapped again as an offence (The Forsaken Moustache 2026-10-24 14:38 and 14:43, "moved
+        /// 174.7 m in 0.10 s" 0 s after ACE's snap). GroundAnchor took away most of ACE's snaps; the ones left (indoors, more than
+        /// 10 m over the terrain) now arm the same stale-report drop and baseline as this guard's own snap.
+        /// </summary>
+        static void Postfix(Player __instance, bool __result)
+        {
+            try
+            {
+                var p = __instance;
+                if (__result || !s_State.TryGetValue(p, out var st) || st.ForceBefore < 0) return;
+                int after = ForceSeq(p);
+                if (after < 0 || after == st.ForceBefore) return;
+                st.SnapStamp = (ushort)after; st.SnapAt = DateTime.UtcNow; st.StaleDrops = 0;
+                st.Pos = p.Location != null ? new ACE.Entity.Position(p.Location) : null;
+                st.At = st.SnapAt;
+            }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] movement: {e.Message}"); }
+            finally { if (s_State.TryGetValue(__instance, out var s2)) s2.ForceBefore = -1; }
         }
     }
 

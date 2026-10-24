@@ -21,14 +21,15 @@ namespace RevivalGuard
     /// the character stays non-PK, and from that level on ACE's own countdown makes it PK as before. Told on
     /// entering the world and on reaching the level.
     ///
-    /// THE TOWN KIT. The Academy's exit guard hands out an Academy Coat (one of ten colours) and a Facility Hub
-    /// portal gem (world db, academyguardexitholtburg). A character that starts in town gets the same two at
-    /// creation, so skipping the tutorial costs nothing it would have given.
+    /// THE TOWN KIT. The Academy's exit guard hands out an Academy Coat (one of ten colours), a Facility Hub
+    /// portal gem and two Oil of Rendering (world db, academyguardexitholtburg: its Give emote for the exit token).
+    /// A character that starts in town gets the same at creation, so skipping the tutorial costs nothing it would
+    /// have given (the oil was missing until F7 261023-0043).
     /// </summary>
     static class NewcomerShield
     {
         static int SHIELD_LEVEL => (int)Tunables.D("newcomer.shield_level", 5);
-        const uint COAT_FIRST = 13210, GEM = 49563;   // coatacademycolor1..10, ace49563-facilityhubportalgem
+        const uint COAT_FIRST = 13210, GEM = 49563, OIL = 12711;   // coatacademycolor1..10, ace49563-facilityhubportalgem, oilacademy
         static readonly Random s_Rng = new Random();
 
         static bool PkServer => PropertyManager.GetBool("pk_server").Item;
@@ -92,12 +93,12 @@ namespace RevivalGuard
                 {
                     if (__result != PlayerFactory.CreateResult.Success || player == null) return;
                     if (player.GetProperty(PropertyBool.RecallsDisabled) == true) return;   // in the Academy: its guards give these
-                    foreach (uint wcid in new[] { COAT_FIRST + (uint)s_Rng.Next(10), GEM })
+                    foreach (uint wcid in new[] { COAT_FIRST + (uint)s_Rng.Next(10), GEM, OIL, OIL })
                     {
                         var wo = WorldObjectFactory.CreateNewWorldObject(wcid);
                         if (wo != null && !player.TryAddToInventory(wo)) wo.Destroy();
                     }
-                    Mod.Log.Info($"[RevivalGuard] town start: {player.Name} given the Academy coat and portal gem");
+                    Mod.Log.Info($"[RevivalGuard] town start: {player.Name} given the Academy coat, portal gem and two Oil of Rendering");
                 }
                 catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] town kit: {e.Message}"); }
             }

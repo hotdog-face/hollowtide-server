@@ -32,6 +32,8 @@ namespace RevivalGuard
     ///                       the last word of this verb). The password is the LAST word (6 to 64 characters, no
     ///                       spaces) so a character name with spaces still works. The admin panel's Server tab has
     ///                       the button (it makes a password when the box is empty).
+    ///   @banchar <days> <character> / @unbanchar <character>   ACE's @ban and @unban, by character: the admin panel's
+    ///                       Live tab bans the selected player's account (owner 2026-10-23). Staff accounts are refused.
     /// (The third button, "report go", is @ticket go latest: TicketConsole.)
     /// </summary>
     static class AdminOps
@@ -45,6 +47,10 @@ namespace RevivalGuard
                 "New players of the last day: made, entered, stayed, kept, came back.", "[hours]");
             CommandManager.TryAddCommand(Lockouts, "lockouts", AccessLevel.Admin, CommandHandlerFlag.None,
                 "Addresses locked out of logins; 'clear' lifts them all.", "[clear]");
+            CommandManager.TryAddCommand(BanChar, "banchar", AccessLevel.Sentinel, CommandHandlerFlag.None,
+                "Ban the account that owns a character (ACE's @ban takes the account name).", "<days> <character name>");
+            CommandManager.TryAddCommand(UnbanChar, "unbanchar", AccessLevel.Sentinel, CommandHandlerFlag.None,
+                "Lift the ban on the account that owns a character.", "<character name>");
             CommandManager.TryAddCommand(ResetLogin, "resetlogin", AccessLevel.Admin, CommandHandlerFlag.None,
                 "Set a new password on the account that owns a character (a player who lost their browser data).",
                 "<character name> <new password>");
@@ -84,6 +90,41 @@ namespace RevivalGuard
                 Mod.Log.Error("[RevivalGuard] AdminOps: resetlogin: " + e.Message);
                 Say(session, RESCUE_REPLY + "The password could not be reset: " + e.Message);
             }
+        }
+
+        /// <summary>The account behind a character, online or not; null (and says why) when there is none or it is staff.</summary>
+        static Account AccountOf(Session session, string name, string verb)
+        {
+            var found = PlayerManager.FindByName(name.Trim().TrimStart('+'));
+            if (found == null) { Say(session, $"No character is named '{name}'."); return null; }
+            uint id = found.Account?.AccountId ?? 0;
+            var account = id != 0 ? DatabaseManager.Authentication.GetAccountById(id) : null;
+            if (account == null) { Say(session, $"{found.Name}'s account could not be read."); return null; }
+            if (account.AccessLevel > 0) { Say(session, $"{found.Name} is on a staff account; it is not {verb} here."); return null; }
+            return account;
+        }
+
+        // @banchar <days> <character name>: the admin panel's "ban 7d" (owner 2026-10-23); ACE's own @ban does the rest
+        static void BanChar(Session session, params string[] p)
+        {
+            if (p == null || p.Length < 2 || !double.TryParse(p[0], out var days) || days <= 0)
+            { Say(session, "Usage: @banchar <days> <character name>"); return; }
+            string name = string.Join(" ", p.Skip(1));
+            var account = AccountOf(session, name, "banned");
+            if (account == null) return;
+            ACE.Server.Command.Handlers.SentinelCommands.HandleBanAccount(session,
+                new[] { account.AccountName, p[0], "0", "0", $"banned by staff ({name})" });
+            AuditTrail.Record("banchar", session?.Player?.Name ?? "the console", "console", $"{days} days on account {account.AccountName} (character {name})");
+        }
+
+        static void UnbanChar(Session session, params string[] p)
+        {
+            if (p == null || p.Length < 1) { Say(session, "Usage: @unbanchar <character name>"); return; }
+            string name = string.Join(" ", p);
+            var account = AccountOf(session, name, "unbanned");
+            if (account == null) return;
+            ACE.Server.Command.Handlers.SentinelCommands.HandleUnBanAccount(session, new[] { account.AccountName });
+            AuditTrail.Record("unbanchar", session?.Player?.Name ?? "the console", "console", $"account {account.AccountName} (character {name})");
         }
 
         static void Say(Session s, string text)

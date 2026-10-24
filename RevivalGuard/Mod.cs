@@ -67,6 +67,7 @@ namespace RevivalGuard
             LfgBoard.Register();
             FeatureBoard.Register();
             ItemLock.Register();
+            AutoStack.Register();
             RagdollCorpse.Register();
             Mercenaries.Register();
             Mansions.Register();

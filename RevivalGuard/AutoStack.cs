@@ -1,4 +1,8 @@
 using System.Linq;
+using System.Runtime.CompilerServices;
+using ACE.Entity.Enum;
+using ACE.Server.Command;
+using ACE.Server.Network;
 using ACE.Server.Entity.Actions;
 using ACE.Server.WorldObjects;
 using HarmonyLib;
@@ -19,12 +23,29 @@ namespace RevivalGuard
     /// The merge is ACE's own HandleActionStackableMerge, a moment later so the client has seen the
     /// new stack first. The new stack pours into the fullest stack of the same kind that has room,
     /// then the next, until it is empty or everything is full.
+    ///
+    /// Our client's "Auto-stack items in packs" option off (Feature Requests #16) sends "@rgautostack 0": that
+    /// SESSION gets no merges (a new login is a new session; the client says it again). Default on.
     /// </summary>
     public static class AutoStack
     {
+        static readonly ConditionalWeakTable<Session, object> s_Off = new ConditionalWeakTable<Session, object>();
+
+        internal static void Register() =>
+            CommandManager.TryAddCommand(Option, "rgautostack", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
+                "Our client's Auto-stack option: 0 = no automatic merges for this connection.", "1|0");
+
+        static void Option(Session session, params string[] parameters)
+        {
+            if (session == null) return;
+            s_Off.Remove(session);
+            if (parameters != null && parameters.Length > 0 && parameters[0] == "0") s_Off.Add(session, null);
+        }
+
         internal static void Later(Player p, WorldObject item)
         {
             if (p == null || item == null || !(item is Stackable) || (item.MaxStackSize ?? 1) <= 1) return;
+            if (p.Session != null && s_Off.TryGetValue(p.Session, out _)) return;
             var guid = item.Guid.Full;
             var chain = new ActionChain();
             chain.AddDelaySeconds(0.3);

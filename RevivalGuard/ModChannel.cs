@@ -68,6 +68,21 @@ namespace RevivalGuard
             RagdollCorpse.Hello(session);           // this shard places ragdoll corpses for opted-in clients
             WorldBossSchedule.Hello(session);       // the world bosses' schedule and state, for the map
             SmallHitbox.Hello(session);             // weenies that collide smaller than their spheres (Azimar)
+            SendRecalls(session);                   // the lifestone, for the tracker's recall routes
+        }
+
+        /// <summary>"recalls": the character's lifestone as map coordinates (F7 261023-0031: a character that never
+        /// used /ls was routed 3 km on foot, its lifestone 10 m from the portal). ACE sends the client no recall
+        /// destinations; a new character's Sanctuary is where it was made. Outdoor lifestones only (the route data's
+        /// surface places).</summary>
+        static void SendRecalls(Session session)
+        {
+            var sp = session?.Player?.Sanctuary;
+            if (sp == null || (sp.Cell & 0xFFFF) >= 0x100) return;
+            uint lb = sp.LandblockId.Raw;
+            float ew = (((lb >> 24) & 0xFF) * 192f + sp.PositionX) / 240f - 101.95f;
+            float ns = (((lb >> 16) & 0xFF) * 192f + sp.PositionY) / 240f - 101.95f;
+            Send(session, "recalls", string.Format(System.Globalization.CultureInfo.InvariantCulture, "{{\"ls\":[{0:0.0},{1:0.0}]}}", ns, ew));
         }
 
         /// <summary>The client version this connection announced ("" for a client older than 0.1.68, or one that has not

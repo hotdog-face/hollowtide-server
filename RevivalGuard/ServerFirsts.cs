@@ -60,6 +60,10 @@ namespace RevivalGuard
         static readonly object s_Lock = new object();
         static Dictionary<string, Claim> s_Claims;
         static readonly HashSet<uint> s_Seen = new HashSet<uint>();
+        // one world message per player per 10 minutes (owner 2026-10-23, F7 261023-0024: one player's sweep of the
+        // statue field announced 11 firsts in 4 minutes); the rest reach the killer alone, @serverfirsts lists them all
+        const double ANNOUNCE_GAP_S = 600;
+        static readonly Dictionary<uint, double> s_LastAnnounced = new Dictionary<uint, double>();
 
         internal static void Register()
         {
@@ -88,9 +92,17 @@ namespace RevivalGuard
             killer.SendMessage($"You are the first in all of Dereth to destroy {s.Label}! Take the Unique Bronze part to Bhab, "
                 + "Arcanum Tinker, in the Consortium near Xarabydun. The statue he makes weighs 5,000; if you cannot carry "
                 + "it, he sets it down at your feet.", ChatMessageType.Broadcast);
-            PlayerManager.BroadcastToAll(new GameMessageSystemChat(
-                $"{killer.Name} is the first in Dereth to destroy {s.Label}! The Arcanum Tinker near Xarabydun will cast a "
-                + "commemorative statue for this deed, and only one will ever be made.", ChatMessageType.WorldBroadcast));
+            double now = ACE.Common.Time.GetUnixTime();
+            bool announce;
+            lock (s_LastAnnounced)
+            {
+                announce = !s_LastAnnounced.TryGetValue(killer.Guid.Full, out var last) || now - last >= ANNOUNCE_GAP_S;
+                if (announce) s_LastAnnounced[killer.Guid.Full] = now;
+            }
+            if (announce)
+                PlayerManager.BroadcastToAll(new GameMessageSystemChat(
+                    $"{killer.Name} is the first in Dereth to destroy {s.Label}! The Arcanum Tinker near Xarabydun will cast a "
+                    + "commemorative statue for this deed, and only one will ever be made.", ChatMessageType.WorldBroadcast));
             Mod.Log.Info($"[RevivalGuard] ServerFirsts: {s.Key} first claimed by {killer.Name} 0x{killer.Guid.Full:X8} ({s.Flag}, part {s.Part})");
         }
 

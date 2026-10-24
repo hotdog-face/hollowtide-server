@@ -44,9 +44,24 @@ namespace RevivalGuard
                      + (q != null && q.Count > 0 ? $" ({string.Join(",", q.Select(a => ((ACE.Entity.Enum.MotionCommand)a.Motion).ToString()).Take(4))})" : "");
             }
             catch { }
+            // THE TICK GATES (261024-0003): a body whose queue never drains on walkable ground is not being advanced at all.
+            // Player.UpdateObjectPhysics -> update_object (CurCell, Parent, Frozen, UpdateTime) -> UpdateObjectInternal
+            // (Active) -> UpdatePositionInternal (Hidden) -> PartArray.Update. Offline every input tried drains it.
+            string gate = "";
+            try
+            {
+                var seq = po.PartArray?.Sequence;
+                var head = po.PartArray?.MotionTableManager?.PendingAnimations?.FirstOrDefault();
+                gate = $"; gates: cell {(po.CurCell != null ? "set" : "NULL")}, active {(po.TransientState & TransientStateFlags.Active) != 0}, "
+                     + $"hidden {(po.State & ACE.Entity.Enum.PhysicsState.Hidden) != 0}, frozen {(po.State & ACE.Entity.Enum.PhysicsState.Frozen) != 0}, parent {po.Parent != null}, "
+                     + $"animating {po.IsAnimating}, first cyclic {seq?.is_first_cyclic()}, moving/animating {po.IsMovingOrAnimating}, "
+                     + $"update lag {ACE.Server.Physics.Common.PhysicsTimer.CurrentTime - po.UpdateTime:0.00}s"
+                     + (head != null ? $", head {(ACE.Entity.Enum.MotionCommand)head.Motion}/{head.NumAnims}" : "");
+            }
+            catch { }
             return $"contact {(po.TransientState & TransientStateFlags.Contact) != 0}, walkable {(po.TransientState & TransientStateFlags.OnWalkable) != 0}, "
                  + $"plane z {po.ContactPlane.Normal.Z:0.00}, velocity {po.Velocity.Length():0.0}, cell {po.Position.ObjCellID:X8}, creatures within 2 m {near}, "
-                 + $"pose {pose}";
+                 + $"pose {pose}{gate}";
         }
     }
 }

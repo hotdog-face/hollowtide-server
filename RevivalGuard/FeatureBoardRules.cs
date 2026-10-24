@@ -176,6 +176,44 @@ namespace RevivalGuard
             return true;
         }
 
+        // ---- drop files (owner 2026-10-24: "lets make it reflect a changelist ... so its not manual") ----
+
+        /// <summary>One status update from the release pipeline (tools/features/mark.sh, ship.sh), a file in
+        /// reports/features/updates/: {"id":14,"status":"done","why":"shipped in 0.1.80"}.</summary>
+        public sealed class Drop
+        {
+            public int id { get; set; }
+            public string status { get; set; } = "";
+            public string why { get; set; } = "";
+        }
+
+        /// <summary>A drop applied like the staff verb, with two limits a script must not cross: a Declined request
+        /// stays Declined (only staff reopen it), and "planned" never takes a Done request back. Returns null when it
+        /// was applied (changed = whether the board changed, note = the audit line), else the reason it failed.
+        /// Drops never delete or merge.</summary>
+        public static string ApplyDrop(Store st, string json, long now, out bool changed, out string note)
+        {
+            changed = false; note = null;
+            Drop d;
+            try { d = System.Text.Json.JsonSerializer.Deserialize<Drop>(json ?? ""); }
+            catch (Exception e) { return "not JSON: " + e.Message; }
+            if (d == null) return "empty";
+            string s = (d.status ?? "").Trim().ToLowerInvariant();
+            if (!IsStatus(s)) return $"status \"{d.status}\" is not one of {string.Join("|", STATUSES)}";
+            var r = Find(st, d.id);
+            if (r == null) return $"there is no #{d.id}";
+            string why = Clean(d.why, TEXT_MAX);
+            string tail = why.Length > 0 ? " (" + why + ")" : "";
+            if (r.Status == s) { note = $"#{r.Id} already {StatusWord(s)}{tail}"; return null; }
+            if (r.Status == "declined") return $"#{r.Id} is Declined; only staff can reopen it";
+            if (r.Status == "done" && s == "planned") { note = $"#{r.Id} kept Done (drop said Planned){tail}"; return null; }
+            string was = r.Status;
+            SetStatus(st, r.Id, s, now);
+            changed = true;
+            note = $"#{r.Id} {StatusWord(was)} -> {StatusWord(s)}{tail}";
+            return null;
+        }
+
         // ---- the seed ------------------------------------------------------------------------------
 
         public sealed class SeedItem

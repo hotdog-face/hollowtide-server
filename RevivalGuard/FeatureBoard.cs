@@ -9,6 +9,7 @@ using ACE.Server.Command;
 using ACE.Server.Managers;
 using ACE.Server.Network;
 using ACE.Server.Network.GameMessages.Messages;
+using HarmonyLib;
 
 namespace RevivalGuard
 {
@@ -30,6 +31,11 @@ namespace RevivalGuard
     /// starts from the seed list built into the dll (FeatureRequestsSeed.json). Each new request is also filed as a
     /// "feature" report beside the tickets (tools/reports/tickets.py --kind feature), where the owner reviews reports.
     /// Changes are pushed to every connection that looked at the board in the last WATCH_SECONDS.
+    ///
+    /// Drop files (owner 2026-10-24, "make it reflect a changelist ... so its not manual"): about once a minute the
+    /// board reads features/updates/*.json, {"id":14,"status":"done","why":"shipped in 0.1.80"}, written by ship.sh
+    /// and tools/features/*.sh from `Feature Requests #N` in commit messages. FeatureBoardRules.ApplyDrop has the
+    /// limits; each file becomes .applied or .failed (the reason on its first line). No restart needed.
     /// </summary>
     public static class FeatureBoard
     {
@@ -201,6 +207,53 @@ namespace RevivalGuard
         static void Say(Session s, string line) =>
             s.Network?.EnqueueSend(new GameMessageSystemChat(line, ChatMessageType.Broadcast));
 
+        // ---- drop files --------------------------------------------------------------------------------
+
+        static string DropDir => Path.Combine(Dir, "updates");
+
+        /// <summary>Applies every waiting drop file, oldest name first (FeatureBoardDrops calls it once a minute).</summary>
+        internal static void ApplyDrops()
+        {
+            if (!Directory.Exists(DropDir)) return;
+            var files = Directory.GetFiles(DropDir, "*.json");
+            if (files.Length == 0) return;
+            Array.Sort(files, StringComparer.Ordinal);
+            long now = Now();
+            bool any = false;
+            lock (s_Lock)
+            {
+                Load();
+                foreach (var f in files)
+                {
+                    if ((DateTime.UtcNow - File.GetLastWriteTimeUtc(f)).TotalSeconds < 5) continue;   // still arriving
+                    string text = "", fail, note = null;
+                    bool changed = false;
+                    try
+                    {
+                        text = File.ReadAllText(f);
+                        fail = FeatureBoardRules.ApplyDrop(s_Store, text, now, out changed, out note);
+                        if (fail == null && changed && !Save()) fail = "applied in memory but board.json could not be written";
+                    }
+                    catch (Exception e) { fail = e.Message; }
+                    any |= changed;
+                    string name = Path.GetFileName(f);
+                    try
+                    {
+                        if (fail == null) File.Move(f, f + ".applied", overwrite: true);
+                        else { File.WriteAllText(f + ".failed", fail + "\n" + text); File.Delete(f); }
+                    }
+                    catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] feature board: could not rename {name}: {e.Message}"); }
+                    if (fail == null)
+                    {
+                        Mod.Log.Info($"[RevivalGuard] feature board drop {name}: {note}");
+                        if (changed) AuditTrail.Record("features", "release", "updates", note);
+                    }
+                    else Mod.Log.Warn($"[RevivalGuard] feature board drop {name} failed: {fail}");
+                }
+            }
+            if (any) Push(null, now);
+        }
+
         // ---- the file ---------------------------------------------------------------------------------
 
         static void Load()   // under s_Lock; once
@@ -231,6 +284,23 @@ namespace RevivalGuard
                 return true;
             }
             catch (Exception e) { Mod.Log.Error($"[RevivalGuard] feature board: could not write {FilePath}: {e.Message}"); return false; }
+        }
+    }
+
+    /// <summary>The board's minute clock for drop files (FeatureBoard.ApplyDrops).</summary>
+    [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
+    static class FeatureBoardDrops
+    {
+        const double EVERY_SECONDS = 60;
+        static double s_Next;
+
+        static void Postfix()
+        {
+            double now = ACE.Common.Time.GetUnixTime();
+            if (now < s_Next) return;
+            s_Next = now + EVERY_SECONDS;
+            try { FeatureBoard.ApplyDrops(); }
+            catch (Exception e) { TickGuard.Report("FeatureBoard drops", e); }
         }
     }
 }

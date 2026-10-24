@@ -24,6 +24,8 @@ namespace RevivalGuard
     /// on the player's own action queue so it runs on the thread that owns the cast. Switch: rg_cast_watchdog.
     /// With the server body off walkable ground (ServerFooting) neither the turn nor the gesture can play, so a cast is
     /// failed once the body has been off it cast.unfooted_seconds (2 s), not after the full 10 s (report 261023-0014).
+    /// On walkable ground a gesture with no motion-done past its own length plus cast.footed_grace_seconds (3 s) is finished
+    /// the way that callback finishes it, so the spell lands (report 261024-0003, CastWatchdogRule.FinishNow).
     /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class CastWatchdog
@@ -31,6 +33,7 @@ namespace RevivalGuard
         const string P_ON = "rg_cast_watchdog";
         static double CAST_STUCK => Tunables.D("cast.stuck_seconds", 10.0);
         static double UNFOOTED => Tunables.D("cast.unfooted_seconds", 2.0);
+        static double FOOTED_GRACE => Tunables.D("cast.footed_grace_seconds", 3.0);
         static double s_Next;
         static readonly System.Collections.Generic.Dictionary<uint, double> s_Unfooted = new System.Collections.Generic.Dictionary<uint, double>();
 
@@ -55,6 +58,17 @@ namespace RevivalGuard
                 if (!s_Unfooted.TryGetValue(p.Guid.Full, out var since)) since = double.NaN;
                 double unfooted = CastWatchdogRule.Unfooted(ServerFooting.Walkable(p), ref since, now);
                 s_Unfooted[p.Guid.Full] = since;
+                if (ms.CastGestureStartTime != System.DateTime.MinValue && !ms.CastMotionDone)
+                {
+                    double sinceGesture = (utc - ms.CastGestureStartTime).TotalSeconds;
+                    float gesture = ACE.Server.Physics.Animation.MotionTable.GetAnimationLength(p.MotionTableId, ACE.Entity.Enum.MotionStance.Magic,
+                                                                                             ms.CastGesture, Player.CastSpeed);
+                    if (CastWatchdogRule.FinishNow(sinceGesture, gesture, FOOTED_GRACE, ms.CastMotionDone, ms.IsTurning, ServerFooting.Walkable(p)))
+                    {
+                        Finish(p, ms.CastNum, sinceGesture, gesture);
+                        continue;
+                    }
+                }
                 if (!CastWatchdogRule.Stuck(age, ms.PendingTurnRelease, (uint)(p.LastMoveToState?.RawMotionState.TurnCommand ?? 0), CAST_STUCK,
                                             unfooted, UNFOOTED)) continue;
                 s_Unfooted.Remove(p.Guid.Full);
@@ -72,6 +86,27 @@ namespace RevivalGuard
                 }));
             }
             if (s_Unfooted.Count > 200) s_Unfooted.Clear();
+        }
+
+        // Once per cast: a finish that does not end it (DoCastSpell refused, a turn started) is left to the 10 s fail.
+        static readonly System.Collections.Generic.Dictionary<uint, int> s_Finished = new System.Collections.Generic.Dictionary<uint, int>();
+
+        static void Finish(Player p, int castNum, double sinceGesture, float gesture)
+        {
+            if (s_Finished.TryGetValue(p.Guid.Full, out int done) && done == castNum) return;
+            if (s_Finished.Count > 200) s_Finished.Clear();
+            s_Finished[p.Guid.Full] = castNum;
+            p.EnqueueAction(new ActionEventDelegate(() =>
+            {
+                if (!p.MagicState.IsCasting || p.MagicState.CastNum != castNum || p.MagicState.CastMotionDone) return;
+                Mod.Log.Warn($"[RevivalGuard] cast watchdog: {p.Name} (0x{p.Guid.Full:X8}) cast #{castNum} gesture {p.MagicState.CastGesture} "
+                    + $"not done {sinceGesture:F1}s after it began (plays {gesture:F1}s; {ServerFooting.Describe(p)}): finished as ACE would");
+                BusyLedger.Note(p, $"cast watchdog: cast #{castNum} finished {sinceGesture:F1}s into its gesture");
+                // HandleMotionDone_Magic's own steps
+                p.MagicState.CastMotionDone = true;
+                p.MagicState.AlwaysTurn = true;
+                p.DoCastSpell(p.MagicState);
+            }));
         }
     }
 }

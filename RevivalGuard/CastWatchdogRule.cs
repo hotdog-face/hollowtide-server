@@ -16,6 +16,15 @@ namespace RevivalGuard
                                  double unfootedSeconds, double unfootedLimit) =>
             (ageSeconds >= limit || unfootedSeconds >= unfootedLimit) && !(pendingTurnRelease && heldTurnCommand != 0);
 
+        /// <summary>A cast whose gesture has played past its own length plus <paramref name="grace"/> on walkable ground with no
+        /// motion-done is finished as ACE finishes it on that callback (HandleMotionDone_Magic: CastMotionDone, DoCastSpell),
+        /// not held to the 10 s fizzle (261024-0003: eight Revitalize casts held 10 s and fizzled, each answering every drink,
+        /// cast and swing meanwhile with "You're too busy!"). Offline (ACE's physics on the box) the gesture is done in 0.3-2.5 s
+        /// whatever the client or the server sends during it. Not while the cast turns to its target, and not before the
+        /// gesture has started (sinceGesture &lt; 0).</summary>
+        public static bool FinishNow(double sinceGesture, double gestureSeconds, double grace, bool motionDone, bool turning, bool walkable) =>
+            sinceGesture >= 0 && walkable && !motionDone && !turning && sinceGesture >= gestureSeconds + grace;
+
         /// <summary>How long the body has been off walkable ground, from the first tick it was seen so (since = NaN: footed).</summary>
         public static double Unfooted(bool walkable, ref double since, double now)
         {

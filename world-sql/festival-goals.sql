@@ -273,7 +273,9 @@ INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, d
 INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022025, 42957, 23, 1, NULL, 'CandleRaceWinsRoom');
 INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022025, 0, 10, 0, 1, 'That is your third win, and I have a prize for you, but your pack is full. Make room, win once more, and it is yours.');
 
--- 8. Anniversary: the Night Club Attendant sends anyone in and counts one night in 20 hours; the third night pays
+-- 8. Anniversary: the Night Club Attendant sends anyone in. The night counts only after a minute of dancing inside
+--    (RevivalGuard NightClubParty.cs stamps NightClubTonight and NightClubNights, and pays the balloons in the club);
+--    the attendant pays them only when the pack was full there
 INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022026, 69994, 7, 1, NULL, NULL);
 INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent) VALUES (9022026, 0, 12, 0, 1);
 INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message, min, max) VALUES (9022026, 1, 30, 0, 1, 'NightClubNights', 3, 2147483647);
@@ -296,45 +298,39 @@ INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, d
 INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022032, 69994, 13, 1, NULL, 'NightClubNights');
 INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022032, 0, 21, 0, 1, 'NightClubNightsTrophy@Done');
 INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022033, 69994, 12, 1, NULL, 'NightClubNightsTrophy@Done');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022033, 0, 10, 0, 1, 'Back for more dancing? Hold on to your socks!');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022033, 0, 10, 0, 1, 'Back for more dancing? The DJ is calling dances all night. Hold on to your socks!');
 INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, spell_Id) VALUES (9022033, 1, 19, 0, 1, 4023);
 INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022034, 69994, 13, 1, NULL, 'NightClubNightsTrophy@Done');
 INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022034, 0, 21, 0, 1, 'NightClubTonight');
 INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022035, 69994, 12, 1, NULL, 'NightClubTonight');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022035, 0, 10, 0, 1, 'Back again tonight? Hold on to your socks!');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022035, 0, 10, 0, 1, 'You danced tonight already, and it counts. Come back on another day for your next night. Hold on to your socks!');
 INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, spell_Id) VALUES (9022035, 1, 19, 0, 1, 4023);
 INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022036, 69994, 13, 1, NULL, 'NightClubTonight');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022036, 0, 10, 0, 1, 'The Night Club is open to everyone for the anniversary. All right, hold on to your socks! I hope you''ve put on your best dancing clothes!');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022036, 1, 22, 0, 1, 'NightClubTonight');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022036, 2, 22, 0, 1, 'NightClubNights');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message, min, max) VALUES (9022036, 3, 30, 0, 1, 'NightClubNights@Third', 3, 2147483647);
-INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022037, 69994, 12, 1, NULL, 'NightClubNights@Third');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022037, 0, 21, 0, 1, 'NightClubNightsTrophy');
-INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022038, 69994, 13, 1, NULL, 'NightClubNights@Third');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, spell_Id) VALUES (9022038, 0, 19, 0, 1, 4023);
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022036, 0, 10, 0, 1, 'The Night Club is open to everyone for the anniversary. Dance on the floor for about a minute and tonight counts toward Night Club Regular. Three nights earn balloons for your house. All right, hold on to your socks!');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, spell_Id) VALUES (9022036, 1, 19, 0, 1, 4023);
 
 -- 9. New Year: Rayeesh takes Bowls of Black-Eyed Peas (her own hint); the fifth pays at once
-INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022039, 30733, 6, 1, 30734, NULL);
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent) VALUES (9022039, 0, 12, 0, 1);
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022039, 1, 10, 0, 1, 'Black-eyed peas! They bring luck all year. Thank you!');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022039, 2, 22, 0, 1, 'NewYearPeas');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message, min, max) VALUES (9022039, 3, 30, 0, 1, 'NewYearPeas@Five', 5, 2147483647);
-INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022040, 30733, 12, 1, NULL, 'NewYearPeas@Five');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022040, 0, 21, 0, 1, 'NewYearPeasTrophy');
-INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022041, 30733, 13, 1, NULL, 'NewYearPeas@Five');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022041, 0, 21, 0, 1, 'NewYearPeasTrophy@Short');
-INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022042, 30733, 12, 1, NULL, 'NewYearPeasTrophy@Short');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022042, 0, 10, 0, 1, 'You already have this year''s gift from me, but the luck is welcome!');
-INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022043, 30733, 13, 1, NULL, 'NewYearPeasTrophy@Short');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022043, 0, 10, 0, 1, 'Bring me five bowls in all and I''ll have a gift for you.');
-INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022044, 30733, 12, 1, NULL, 'NewYearPeasTrophy');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022044, 0, 10, 0, 1, 'You have had this year''s prize from me already. Come back next year!');
-INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022045, 30733, 13, 1, NULL, 'NewYearPeasTrophy');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message, amount) VALUES (9022045, 0, 89, 0, 1, 'NewYearPeasRoom', 1);
-INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022046, 30733, 22, 1, NULL, 'NewYearPeasRoom');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022046, 0, 10, 0, 1, 'Five bowls! That is enough luck for the whole party. Here, a bottle for your house. Purely decorative, mind you!');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, weenie_Class_Id, stack_Size) VALUES (9022046, 1, 3, 0, 1, 902205, 1);
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022046, 2, 22, 0, 1, 'NewYearPeasTrophy');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022046, 3, 31, 0, 1, 'NewYearPeas');
-INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022047, 30733, 23, 1, NULL, 'NewYearPeasRoom');
-INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022047, 0, 10, 0, 1, 'Five bowls, and a gift waiting for you, but your pack is full. Make room and bring me one more bowl.');
+INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022037, 30733, 6, 1, 30734, NULL);
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent) VALUES (9022037, 0, 12, 0, 1);
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022037, 1, 10, 0, 1, 'Black-eyed peas! They bring luck all year. Thank you!');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022037, 2, 22, 0, 1, 'NewYearPeas');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message, min, max) VALUES (9022037, 3, 30, 0, 1, 'NewYearPeas@Five', 5, 2147483647);
+INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022038, 30733, 12, 1, NULL, 'NewYearPeas@Five');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022038, 0, 21, 0, 1, 'NewYearPeasTrophy');
+INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022039, 30733, 13, 1, NULL, 'NewYearPeas@Five');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022039, 0, 21, 0, 1, 'NewYearPeasTrophy@Short');
+INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022040, 30733, 12, 1, NULL, 'NewYearPeasTrophy@Short');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022040, 0, 10, 0, 1, 'You already have this year''s gift from me, but the luck is welcome!');
+INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022041, 30733, 13, 1, NULL, 'NewYearPeasTrophy@Short');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022041, 0, 10, 0, 1, 'Bring me five bowls in all and I''ll have a gift for you.');
+INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022042, 30733, 12, 1, NULL, 'NewYearPeasTrophy');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022042, 0, 10, 0, 1, 'You have had this year''s prize from me already. Come back next year!');
+INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022043, 30733, 13, 1, NULL, 'NewYearPeasTrophy');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message, amount) VALUES (9022043, 0, 89, 0, 1, 'NewYearPeasRoom', 1);
+INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022044, 30733, 22, 1, NULL, 'NewYearPeasRoom');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022044, 0, 10, 0, 1, 'Five bowls! That is enough luck for the whole party. Here, a bottle for your house. Purely decorative, mind you!');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, weenie_Class_Id, stack_Size) VALUES (9022044, 1, 3, 0, 1, 902205, 1);
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022044, 2, 22, 0, 1, 'NewYearPeasTrophy');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022044, 3, 31, 0, 1, 'NewYearPeas');
+INSERT INTO ace_world.weenie_properties_emote (id, object_Id, category, probability, weenie_Class_Id, quest) VALUES (9022045, 30733, 23, 1, NULL, 'NewYearPeasRoom');
+INSERT INTO ace_world.weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message) VALUES (9022045, 0, 10, 0, 1, 'Five bowls, and a gift waiting for you, but your pack is full. Make room and bring me one more bowl.');

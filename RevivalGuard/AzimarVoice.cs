@@ -146,7 +146,11 @@ namespace RevivalGuard
                     int visits = q?.NumTimesCompleted ?? 0;
                     double away = q == null ? 0 : (Now - q.LastTimeCompleted) / 86400.0;
                     lock (s_Lock) { if (visits <= 0) s_FirstNow.Add(id); else s_FirstNow.Remove(id); s_LastUse = Now; }
-                    var line = Pick(pools, GreetPools(visits, away, p.Level ?? 1, hour), id);
+                    var names = GreetPools(visits, away, p.Level ?? 1, hour);
+                    // while a festival runs (AzimarTheme), every other returning greeting is the festival's
+                    var fest = "greet.fest." + (AzimarThemeRule.FixedTheme(wo.WeenieClassId) ?? AzimarTheme.Current());
+                    if (visits > 0 && away < 3 && pools.ContainsKey(fest) && Random.Shared.NextDouble() < 0.5) names = new List<string> { fest };
+                    var line = Pick(pools, names, id);
                     return line?.Replace("%visit", Ordinal(visits + 1));
                 }
                 case "bless":
@@ -155,7 +159,12 @@ namespace RevivalGuard
                     return Pick(pools, first && pools.ContainsKey("bless.first") ? new[] { "bless.first" } : new[] { "bless" }, id);
                 }
                 case "idle":
-                    return Pick(pools, new[] { "idle", "idle.time." + TimeOfDay(hour) }, id);
+                {
+                    var names = new List<string> { "idle", "idle.time." + TimeOfDay(hour) };
+                    var fest = "idle.fest." + (AzimarThemeRule.FixedTheme(wo.WeenieClassId) ?? AzimarTheme.Current());
+                    if (pools.ContainsKey(fest) && Random.Shared.NextDouble() < 0.5) names = new List<string> { fest };
+                    return Pick(pools, names, id);
+                }
                 default:
                     return Pick(pools, new[] { kind }, id);
             }
@@ -185,7 +194,7 @@ namespace RevivalGuard
         internal static bool Emote(EmoteManager em, PropertiesEmote set, PropertiesEmoteAction a, WorldObject target, ref float result)
         {
             var wo = em.WorldObject;
-            if (a == null || wo == null || wo.WeenieClassId != WCID || !On) return true;
+            if (a == null || wo == null || !AzimarThemeRule.IsAzimar(wo.WeenieClassId) || !On) return true;
 
             // a paced spell for a player who has gone: the rest of his ceremony stops quietly
             if (a.Type == (uint)EmoteType.CastSpellInstant)
@@ -235,7 +244,7 @@ namespace RevivalGuard
         {
             try
             {
-                if (__instance.WorldObject?.WeenieClassId != AzimarVoice.WCID || !__instance.IsBusy || !AzimarVoice.On) return true;
+                if (!AzimarThemeRule.IsAzimar(__instance.WorldObject?.WeenieClassId ?? 0) || !__instance.IsBusy || !AzimarVoice.On) return true;
                 __instance.ExecuteEmoteSet(EmoteCategory.Use, null, activator, true);
                 return false;
             }

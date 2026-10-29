@@ -72,6 +72,7 @@ namespace RevivalGuard
             if (IsLocked(item) == lockIt) { if (!ModChannel.Capable(session)) Say(session, $"{item.Name} is already {(lockIt ? "locked" : "unlocked")}."); Push(session); return; }
             if (lockIt) item.SetProperty(LOCKED, true); else item.RemoveProperty(LOCKED);
             item.SaveBiotaToDatabase();
+            Mod.Log.Info($"[RevivalGuard] ItemLock: {(lockIt ? "locked" : "unlocked")} 0x{item.Guid.Full:X8} {item.Name} for {p.Name}");   // who set a lock, for a report
             if (!ModChannel.Capable(session))
                 Say(session, lockIt ? $"{item.Name} is locked: it can't be dropped, given away, salvaged, sold or drained. @unlockitem to undo."
                                     : $"{item.Name} is unlocked.");
@@ -117,7 +118,14 @@ namespace RevivalGuard
 
         internal static void Refuse(Player p, WorldObject item, string verb)
         {
-            Say(p.Session, $"Your {item.Name} is locked, so it was not {verb}. Unlock it first.");
+            // How to unlock, in the words of the client it goes to (report 261026-0013: "does not know why or how"): ours has
+            // the examine window's padlock, a retail client has the command.
+            bool ours = ModChannel.Capable(p.Session);
+            Say(p.Session, $"Your {item.Name} is locked, so it was not {verb}. " + (ours
+                ? "To unlock it, examine it and click the padlock beside Wiki."
+                : $"To unlock it, type @unlockitem {item.Name}."));
+            // our client refused nothing, so its list was out of date: the padlock would have read unlocked (and a click locked)
+            if (ours) Push(p.Session);
             Mod.Log.Info($"[RevivalGuard] ItemLock: refused {verb} of 0x{item.Guid.Full:X8} {item.Name} for {p.Name}");
         }
 

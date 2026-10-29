@@ -68,6 +68,7 @@ namespace RevivalGuard
             RagdollCorpse.Hello(session);           // this shard places ragdoll corpses for opted-in clients
             WorldBossSchedule.Hello(session);       // the world bosses' schedule and state, for the map
             SmallHitbox.Hello(session);             // weenies that collide smaller than their spheres (Azimar)
+            AzimarTheme.Hello(session);             // Azimar's festival theme, for his hats and sparkles
             SendRecalls(session);                   // the lifestone, for the tracker's recall routes
         }
 

@@ -73,7 +73,7 @@ namespace RevivalGuard
                 "Sunflowers in a crystal vase from the Spring Festival of {0}, for Spring Cleaning: twenty-five of spring's young creatures thinned out.") },
             { 902203, ("wedding", "Royal Wedding {0} Cake Topper",
                 "The figures from the top of the royal wedding cake, given at the Royal Wedding Anniversary of {0} to a three-time winner of Hoshino Kiri's candle race.") },
-            { 902204, ("anniversary", "Anniversary {0} Balloons",
+            { 902204, ("anniversary", "Anniversary Balloons",   // owner 2026-10-28: no year in the name (it stays in the description)
                 "Balloons from the Anniversary of {0}, for three nights of dancing at the Night Club.") },
             { 902205, ("newyear", "New Year {0} Champagne",
                 "A bottle of crystal champagne for the New Year of {0}, Rayeesh's thanks for five bowls of black-eyed peas. Far too much to drink.") },

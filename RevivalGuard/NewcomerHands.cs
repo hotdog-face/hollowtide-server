@@ -85,6 +85,47 @@ namespace RevivalGuard
         }
     }
 
+    // THE STACK PATHS (ticket 261024-0041 audit). A split or a merge moves items without DropItem or PutItemInContainer:
+    // split part of a stack to the ground (9,999 of the 10,000 starting pyreals), split it into a chest, or merge a
+    // carried stack into one sitting in a chest. Between the player's own packs, and anything taken out, stays free.
+    [HarmonyPatch(typeof(Player), nameof(Player.HandleActionStackableSplitTo3D))]
+    static class NewcomerHandsSplitDrop
+    {
+        static bool Prefix(Player __instance, uint stackId)
+        {
+            if (!NewcomerHands.Held(__instance)) return true;
+            NewcomerHands.Refuse(__instance, "drop items or put them in chests");
+            __instance.Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(__instance.Session, stackId));
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(Player), nameof(Player.HandleActionStackableSplitToContainer))]
+    static class NewcomerHandsSplitContainer
+    {
+        static bool Prefix(Player __instance, uint stackId, uint containerId)
+        {
+            if (!NewcomerHands.Held(__instance) || containerId == __instance.Guid.Full
+                || !NewcomerHands.Carried(__instance, stackId) || NewcomerHands.Carried(__instance, containerId)) return true;
+            NewcomerHands.Refuse(__instance, "drop items or put them in chests");
+            __instance.Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(__instance.Session, stackId));
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(Player), nameof(Player.HandleActionStackableMerge))]
+    static class NewcomerHandsMerge
+    {
+        static bool Prefix(Player __instance, uint mergeFromGuid, uint mergeToGuid)
+        {
+            if (!NewcomerHands.Held(__instance)
+                || !NewcomerHands.Carried(__instance, mergeFromGuid) || NewcomerHands.Carried(__instance, mergeToGuid)) return true;
+            NewcomerHands.Refuse(__instance, "drop items or put them in chests");
+            __instance.Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(__instance.Session, mergeFromGuid));
+            return false;
+        }
+    }
+
     [HarmonyPatch(typeof(Vendor), nameof(Vendor.ProcessItemsForPurchase))]
     static class NewcomerHandsSell
     {

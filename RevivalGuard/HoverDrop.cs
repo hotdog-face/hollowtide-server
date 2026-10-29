@@ -26,6 +26,8 @@ namespace RevivalGuard
         static readonly Dictionary<uint, float> s_Drop = new()
         {
             { 901631, 0.9f },   // Azimar the Gleaming, scale 1.8: lowest point 1.96 m -> 1.06 m
+            // his Hotel Swank review copies (AzimarThemeRule.Fixed), the same body and scale
+            { 901633, 0.9f }, { 901634, 0.9f }, { 901635, 0.9f }, { 901636, 0.9f }, { 901637, 0.9f },
         };
 
         static readonly ConcurrentDictionary<uint, bool> s_Logged = new();

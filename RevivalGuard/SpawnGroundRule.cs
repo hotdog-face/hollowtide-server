@@ -14,8 +14,15 @@ namespace RevivalGuard
             => creature && !player && fromGenerator && gravity && !isStatic && !aiImmobile && !contact;
 
         /// <summary>The sweep down is taken only when it lands on walkable ground within reach; anything else (no floor
-        /// below, a wall, a slope too steep to stand on) leaves ACE's position alone.</summary>
-        public static bool Accept(float fell, bool landed, bool walkable, float max)
-            => landed && walkable && fell > 0.01f && fell <= max;
+        /// below, a wall, a slope too steep to stand on) leaves ACE's position alone. A spawn that starts in an EnvCell
+        /// (a room: a keep's floor, an upper storey) must land in that same cell: its room's own floor, never the cell or
+        /// terrain under it (report 261024-0031, a Candeth Keep collector about 20 ft under the ground). One that starts
+        /// outdoors must land outdoors: a fall cannot reach a room or a dungeon under the landscape.</summary>
+        public static bool Accept(float fell, bool landed, bool walkable, float max, bool startIndoors = false, bool sameCell = true,
+                                  bool landIndoors = false)
+            => landed && walkable && fell > 0.01f && fell <= max && (startIndoors ? sameCell : !landIndoors);
+
+        /// <summary>An EnvCell (indoor) id: the low half 0x0100 and up.</summary>
+        public static bool Indoors(uint cell) => (cell & 0xFFFFu) >= 0x100u;
     }
 }

@@ -49,11 +49,11 @@ namespace RevivalGuard
         const int DEFAULT_MIN = 180, MAX_MIN = 24 * 60;
 
         // Where the kit adds fireworks: Holtburg's lifestone square (docs/SEASONAL-UPGRADE.md showcase stop) and where
-        // the attendants' Disco Inferno Portal Sending (spell 4023) lands on the Night Club's floor.
+        // the attendants' Disco Inferno Portal Sending (spell 4023) lands on the Night Club's main floor.
         static readonly (string where, uint cell, float x, float y, float z)[] Spots =
         {
             ("Holtburg", 0xA9B40019, 88f, 14f, 98f),
-            ("the Night Club", 0x8A040230, 160f, -30f, 15f),
+            ("the Night Club", 0x8A04018A, 20f, -90f, 9f),   // the main floor, over the dancers' ring (owner 261029-0005/0006)
         };
 
         static readonly string[] Crier =

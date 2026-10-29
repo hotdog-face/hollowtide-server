@@ -27,6 +27,8 @@ namespace RevivalGuard
         static readonly Dictionary<uint, float> s_Scale = new()
         {
             { 901631, 0.2f },   // Azimar the Gleaming: spheres r 0.5 x 1.8 = 0.9 -> 0.18 m (his torso; physcheck: a walker stops 0.76 m out, was 1.49)
+            // his Hotel Swank review copies, one per festival look (AzimarThemeRule.Fixed)
+            { 901633, 0.2f }, { 901634, 0.2f }, { 901635, 0.2f }, { 901636, 0.2f }, { 901637, 0.2f },
         };
 
         static readonly ConditionalWeakTable<PhysicsObj, Setup> s_Original = new();

@@ -13,7 +13,7 @@ namespace RevivalGuard
     /// plain use does nothing.
     ///
     /// So a gem with no spell, no contract and no created item is refused here before UseGem runs,
-    /// with a hint for Coalesced Aetheria. Every gem that does something is untouched.
+    /// with a hint for Coalesced Aetheria and the Arcanum's turn-in gems (GemNoEffectRule). Every gem that does something is untouched.
     /// </summary>
     [HarmonyPatch(typeof(Gem), nameof(Gem.UseGem))]
     public static class GemNoEffectGuard
@@ -25,9 +25,8 @@ namespace RevivalGuard
                              || (__instance.UseCreateContractId ?? 0) > 0
                              || (__instance.UseCreateItem ?? 0) > 0;
             if (hasEffect) return true;
-            player.SendTransientError(__instance.Name == "Coalesced Aetheria"
-                ? "Use an Aetheria Mana Stone on the Coalesced Aetheria to reveal it."
-                : $"The {__instance.Name} cannot be used by itself.");
+            player.SendTransientError(GemNoEffectRule.Message(__instance.Name,
+                __instance.Use, __instance.LongDesc));
             return false;
         }
     }

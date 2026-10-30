@@ -3,6 +3,10 @@ namespace RevivalGuard
     /// <summary>CastWatchdog's rule, pure (no ACE types), so tools/nettest compiles and checks it by path.</summary>
     public static class CastWatchdogRule
     {
+        /// <summary>The stuck-cast fail is our watchdog, not a retail fizzle: the fail sends the fizzle UseDone and OnCastDone, skipping DoCastSpell_Inner,
+        /// so no mana or components are spent on a cast that never happened (coordinator 2026-10-29).</summary>
+        public const bool WatchdogFailSpends = false;
+
         /// <summary>A cast running at least <paramref name="limit"/> seconds is stuck, unless ACE is holding it on
         /// purpose for a turn key still down (MagicState.PendingTurnRelease with a turn in the last MoveToState).</summary>
         public static bool Stuck(double ageSeconds, bool pendingTurnRelease, uint heldTurnCommand, double limit) =>

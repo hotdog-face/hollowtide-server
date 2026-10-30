@@ -18,7 +18,7 @@ namespace RevivalGuard
     /// chug has the same shape (FINDINGS-overnight-reports.md 0043).
     ///
     /// The rescue: a cast still running CAST_STUCK seconds after it started is failed the way ACE fails one
-    /// (FailCast: the fizzle, UseDone YourSpellFizzled, OnCastDone clears IsBusy). Not while ACE is waiting on
+    /// (UseDone YourSpellFizzled, OnCastDone clears IsBusy; no mana or components spent). Not while ACE is waiting on
     /// purpose for the player to let go of a held turn key (PendingTurnRelease). A legit cast, turn included, takes
     /// 1-4 s. Runs on PlayerManager.Tick (TeleportWatchdog explains why not Heartbeat); the fail itself is queued
     /// on the player's own action queue so it runs on the thread that owns the cast. Switch: rg_cast_watchdog.
@@ -26,16 +26,23 @@ namespace RevivalGuard
     /// failed once the body has been off it cast.unfooted_seconds (2 s), not after the full 10 s (report 261023-0014).
     /// On walkable ground a gesture with no motion-done past its own length plus cast.footed_grace_seconds (3 s) is finished
     /// the way that callback finishes it, so the spell lands (report 261024-0003, CastWatchdogRule.FinishNow).
+    /// A cast in its turn with the body standing still on walkable ground and the heading fixed for 1.5 s will never
+    /// complete the turn (261029-0010, often on a slope): it ends then, with no mana or components spent
+    /// (CastTurnStallRule, switch rg_cast_turn_stall). Checked every 0.25 s so the 1.5 s is not rounded up to 3.
     /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class CastWatchdog
     {
         const string P_ON = "rg_cast_watchdog";
+        const string P_STALL = "rg_cast_turn_stall";
         static double CAST_STUCK => Tunables.D("cast.stuck_seconds", 10.0);
         static double UNFOOTED => Tunables.D("cast.unfooted_seconds", 2.0);
         static double FOOTED_GRACE => Tunables.D("cast.footed_grace_seconds", 3.0);
         static double s_Next;
         static readonly System.Collections.Generic.Dictionary<uint, double> s_Unfooted = new System.Collections.Generic.Dictionary<uint, double>();
+
+        sealed class TurnSample { public int CastNum; public double At, Since = double.NaN; public float Heading; public ACE.Server.Physics.Common.Position Pos; }
+        static readonly System.Collections.Generic.Dictionary<uint, TurnSample> s_Turn = new System.Collections.Generic.Dictionary<uint, TurnSample>();
 
         static void Postfix()
         {
@@ -47,13 +54,13 @@ namespace RevivalGuard
         {
             var now = ACE.Common.Time.GetUnixTime();
             if (now < s_Next) return;
-            s_Next = now + 1.0;
+            s_Next = now + 0.25;
             if (!PropertyManager.GetBool(P_ON, true).Item) return;
             var utc = System.DateTime.UtcNow;
             foreach (var p in PlayerManager.GetAllOnline().ToList())
             {
                 var ms = p?.MagicState;
-                if (ms == null || !ms.IsCasting || p.Teleporting || p.IsDead) { if (p != null) s_Unfooted.Remove(p.Guid.Full); continue; }
+                if (ms == null || !ms.IsCasting || p.Teleporting || p.IsDead) { if (p != null) { s_Unfooted.Remove(p.Guid.Full); s_Turn.Remove(p.Guid.Full); } continue; }
                 double age = (utc - ms.StartTime).TotalSeconds;
                 if (!s_Unfooted.TryGetValue(p.Guid.Full, out var since)) since = double.NaN;
                 double unfooted = CastWatchdogRule.Unfooted(ServerFooting.Walkable(p), ref since, now);
@@ -69,6 +76,7 @@ namespace RevivalGuard
                         continue;
                     }
                 }
+                if (TurnStalled(p, ms, now, age)) continue;
                 if (!CastWatchdogRule.Stuck(age, ms.PendingTurnRelease, (uint)(p.LastMoveToState?.RawMotionState.TurnCommand ?? 0), CAST_STUCK,
                                             unfooted, UNFOOTED)) continue;
                 s_Unfooted.Remove(p.Guid.Full);
@@ -80,12 +88,48 @@ namespace RevivalGuard
                     Mod.Log.Warn($"[RevivalGuard] cast watchdog: {p.Name} (0x{p.Guid.Full:X8}) cast #{castNum} still running "
                         + $"after {age:F0}s (gesture {p.MagicState.CastGesture}, motion done {p.MagicState.CastMotionDone}, "
                         + $"turning {p.MagicState.IsTurning}, turn release {p.MagicState.PendingTurnRelease}; off walkable {unfooted:F0}s, "
-                        + $"{ServerFooting.Describe(p)}): failed as a fizzle");
+                        + $"{ServerFooting.Describe(p)}): failed, nothing spent");
                     BusyLedger.Note(p, $"cast watchdog: cast #{castNum} failed after {age:F0}s (off walkable {unfooted:F0}s)");
-                    p.FailCast();
+                    // FailCast(false) with the fizzle answer, as the turn-stall end: the line shows, nothing is spent
+                    if (CastWatchdogRule.WatchdogFailSpends) p.FailCast();
+                    else { p.SendUseDoneEvent(ACE.Entity.Enum.WeenieError.YourSpellFizzled); p.MagicState.OnCastDone(); }
                 }));
             }
             if (s_Unfooted.Count > 200) s_Unfooted.Clear();
+            if (s_Turn.Count > 200) s_Turn.Clear();
+        }
+
+        /// <summary>The turn-stall early end (CastTurnStallRule): true once it has queued the end of this cast.</summary>
+        static bool TurnStalled(Player p, ACE.Server.Entity.MagicState ms, double now, double age)
+        {
+            var po = p.PhysicsObj;
+            if (po == null || !PropertyManager.GetBool(P_STALL, true).Item) return false;
+            uint id = p.Guid.Full;
+            if (!s_Turn.TryGetValue(id, out var t) || t.CastNum != ms.CastNum) s_Turn[id] = t = new TurnSample { CastNum = ms.CastNum };
+            float heading = po.get_heading();
+            double dt = t.Pos == null ? 0 : now - t.At;
+            double moved = t.Pos == null ? 0 : t.Pos.Distance(po.Position);
+            double turned = t.Pos == null ? 0 : CastTurnStallRule.HeadingDelta(t.Heading, heading);
+            double stalled = CastTurnStallRule.Stalled(ms.IsTurning, ms.PendingTurnRelease, ServerFooting.Walkable(p), moved, turned, dt, ref t.Since, now);
+            t.At = now; t.Heading = heading; t.Pos = new ACE.Server.Physics.Common.Position(po.Position);
+            if (!CastTurnStallRule.FailNow(stalled)) return false;
+            s_Turn.Remove(id);
+            int castNum = ms.CastNum;
+            p.EnqueueAction(new ActionEventDelegate(() =>
+            {
+                var m = p.MagicState;
+                if (!m.IsCasting || m.CastNum != castNum || !m.IsTurning) return;
+                Mod.Log.Warn($"[RevivalGuard] cast watchdog: {p.Name} (0x{p.Guid.Full:X8}) cast #{castNum} turn stalled {stalled:F1}s "
+                    + $"({age:F1}s into the cast; heading {heading:F0}, velocity {po.Velocity.Length():F2}, {ServerFooting.Describe(p)}): ended, nothing spent");
+                BusyLedger.Note(p, $"cast watchdog: cast #{castNum} turn stalled {stalled:F1}s, ended at {age:F1}s");
+                // FailCast(tryFizzle: false) without its DoCastSpell_Inner: no mana, no components; the fizzle answer so the
+                // client and the assistant see the cast end. OnCastDone first, so the cancelled turn's OnMoveComplete_Magic
+                // finds no cast to carry on.
+                p.SendUseDoneEvent(ACE.Entity.Enum.WeenieError.YourSpellFizzled);
+                m.OnCastDone();
+                try { po.cancel_moveto(); } catch (System.Exception e) { Mod.Log.Warn($"[RevivalGuard] cast watchdog: cancel turn: {e.Message}"); }
+            }));
+            return true;
         }
 
         // Once per cast: a finish that does not end it (DoCastSpell refused, a turn started) is left to the 10 s fail.

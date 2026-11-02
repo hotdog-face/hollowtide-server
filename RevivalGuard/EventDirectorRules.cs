@@ -15,12 +15,38 @@ namespace RevivalGuard
         public static bool FestivalOpen(string[] festivals, Func<string, bool> isActive) =>
             festivals == null || festivals.Length == 0 || festivals.Any(isActive);
 
+        /// <summary>
+        /// FROSTFELL RUNS ITS OWN EVENTS (owner 2026-10-29: "Event director on from Dec 4"). While Frostfell is active the
+        /// director runs its Frostfell entries (the Present Raids, the Holtburg snowmen, the Stonehold Scold) even with
+        /// rg_event_director off; rg_event_director_frostfell (default on) lets staff switch that off. rg_event_director on
+        /// runs the whole rotation as before. No datafix: the calendar decides, so nothing can start early.
+        /// </summary>
+        public const string FROSTFELL = "frostfell";
+
+        public static bool DirectorOn(bool enabled, bool frostfellSwitch, bool frostfellActive) =>
+            enabled || (frostfellSwitch && frostfellActive);
+
+        /// <summary>May this entry run in the rotation? Everything when the director is on; else only Frostfell's own.</summary>
+        public static bool EntryAllowed(bool enabled, string[] festivals) =>
+            enabled || (festivals != null && festivals.Any(f => string.Equals(f, FROSTFELL, StringComparison.OrdinalIgnoreCase)));
+
         /// <summary>A boss lair inside the event's landblock box, widened by `margin` landblocks each way.</summary>
         public static bool LairNear((int x0, int y0, int x1, int y1) box, ushort lair, int margin)
         {
             int x = lair >> 8, y = lair & 0xFF;
             return x >= box.x0 - margin && x <= box.x1 + margin && y >= box.y0 - margin && y <= box.y1 + margin;
         }
+
+        /// <summary>RETAIL'S RAID CADENCE: the Holiday Events Stopgap Gen (ace80018) respawns the Present Raids Stopgap
+        /// (73224) every 14,400 s and it starts one raid, Tufa or Yaraq, so retail ran one Present Raid every 4 hours.
+        /// The director keeps that: a raid may not start within this many seconds of the last raid's start.</summary>
+        public const double RAID_APART_S = 14400;
+        public const string RAID_REGION = "presentraids";
+
+        /// <summary>Did any entry of this group start less than `apart` seconds before `now`? (lastStarts: unix seconds,
+        /// 0 or missing = never.)</summary>
+        public static bool TooSoon(double now, IEnumerable<double> lastStarts, double apart) =>
+            lastStarts != null && lastStarts.Any(t => t > 0 && now - t < apart);
 
         /// <summary>Do [from, to) and the boss's warned-or-open window [winFrom, winTo) overlap?</summary>
         public static bool Overlaps(double from, double to, double winFrom, double winTo) => winFrom < to && winTo > from;

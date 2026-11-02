@@ -147,6 +147,9 @@ namespace RevivalGuard
             // Azimar's festival theme follows the same calendar (AzimarTheme)
             try { AzimarTheme.Tick(); }
             catch (Exception e) { TickGuard.Report("AzimarTheme", e); }
+            // The running festivals, for the client (FestivalChannel)
+            try { FestivalChannel.Tick(); }
+            catch (Exception e) { TickGuard.Report("FestivalChannel", e); }
         }
 
         /// <summary>The local date the calendar is evaluated against. See RETAIL_UTC_OFFSET_HOURS.</summary>
@@ -163,9 +166,14 @@ namespace RevivalGuard
 
         static bool IsActive(Festival f, DateTime local)
         {
+            List<Festival> forcedOn;
             lock (s_Lock)
+            {
                 if (s_Forced.TryGetValue(f.Key, out var forced)) return forced.On;
-            return InWindow(f, local);
+                forcedOn = Calendar.Where(x => s_Forced.TryGetValue(x.Key, out var o) && o.On).ToList();
+            }
+            // a festival with another town dressing forced on keeps this one's dressing down (Displaced, ticket 261030-0001)
+            return InWindow(f, local) && !Displaced(f, false, forcedOn);
         }
 
         /// <summary>Is the festival with this key running now (calendar or forced)? Unknown keys are

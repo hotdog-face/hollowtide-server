@@ -61,6 +61,11 @@ namespace RevivalGuard
             (0x00690118, 0, 0x020015DB),
             (0x00690119, 2, 0x020015DB),
             (0x0069011A, 0, 0x020015DB),
+            // The Marketplace 0x016C01C2: the east wall's three couches, so the Broker's stall stands against the wall
+            // (owner ticket 261101-0015, 2026-11-01). Kept: the room's light (2) and the piece over the north door (3).
+            (0x016C01C2, 0, 0x02000122), (0x016C01C2, 1, 0x02000122), (0x016C01C2, 4, 0x02000122),
+            // and 0x016C01C3, open to it: the same wall's other two couches (owner 2026-11-01, the stall centred at y -35)
+            (0x016C01C3, 0, 0x02000122), (0x016C01C3, 1, 0x02000122),
         };
 
         static readonly ConcurrentDictionary<uint, bool> s_Logged = new ConcurrentDictionary<uint, bool>();

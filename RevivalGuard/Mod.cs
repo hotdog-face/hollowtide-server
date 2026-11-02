@@ -60,6 +60,7 @@ namespace RevivalGuard
             QuestLog.Register();
             ModChannel.Register();
             Mail.Register();
+            Broker.Register();
             DiscordBridge.Register();
             ItemLink.Register();
             PerfStat.Register();

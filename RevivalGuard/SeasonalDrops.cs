@@ -106,6 +106,9 @@ namespace RevivalGuard
             { 36489, new[] { "festivalseason" } },   // Chilling Ebony Staff
             { 901700, new[] { "festivalseason" } },   // Necklace of the Night Swarm (ours; 1% on the Pumpkin Lord and festival scarecrows, owner 2026-10-01)
             { 34386, new[] { "frostfell" } },   // Hot Coal
+            { 14765, new[] { "frostfell" } },   // Eggnog (the imposter Santa's drops, datafix 2026-12-01-frostfell-3; owner ticket 261031-0010)
+            { 52580, new[] { "frostfell" } },   // Holiday Sweater (the imposter Santa)
+            { 47168, new[] { "frostfell" } },   // Snow Tuskie Kennel (the imposter Santa)
             { 80078, new[] { "spring" } },   // Pon Mi's confession
             { 27249, new[] { "spring" } },   // Spring Cleaner Title Token
         };

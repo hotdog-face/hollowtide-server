@@ -1,0 +1,293 @@
+using System.Collections.Concurrent;
+using ACE.Database;
+using ACE.Entity;
+using ACE.Entity.Enum;
+using ACE.Server.Entity;
+using ACE.Server.Entity.Actions;
+using ACE.Server.Factories;
+using ACE.Server.Network.GameEvent.Events;
+using ACE.Server.Network.Structure;
+using ACE.Server.WorldObjects;
+using HarmonyLib;
+
+namespace RevivalGuard
+{
+    /// <summary>
+    /// THE STAFF BASE'S WEAPON RACKS AND ARMOR STANDS WORK (owner LIVE ticket 261101-0012, "weapon rack and
+    /// armor stand dont let me use them"; owner 2026-11-01: "yes build the mod change that makes the rack
+    /// and stand work").
+    ///
+    /// The Staff Base (landblock 0x576B, staff only) is not a house, so it has no House object. The Mansion
+    /// Furniture (MansionFurniture.cs) only shows what it holds while it hangs on a Hook, and ACE's Hook
+    /// assumes every hook belongs to a house: Hook.OnAddItem and OnRemoveItem do
+    /// House.HouseCurrentHooksUsable-- / ++, AppraiseInfo reads hook.ParentLink.HouseOwner, and
+    /// Player.HandleActionPutItemInContainer reads hook.House.HouseMaxHooksUsable. With no house each of
+    /// those throws a NullReferenceException.
+    ///
+    /// So this, and ONLY for a hook with no house on landblock 0x576B (every player house hook has its
+    /// house, and nothing here touches one):
+    ///   - Hook.OnAddItem / OnRemoveItem run ACE's own steps without the house's hook count;
+    ///   - the hooks of datafix 2026-11-01-staff-base-decor-3 (SEED below) are given their rack or stand
+    ///     when the landblock first loads them empty; ACE then saves the hook (a Hook with inventory is a
+    ///     static object that persists, WorldObject.IsStaticThatShouldPersistToShard) and the furniture
+    ///     (ContainerId = the hook), so after a restart the hook loads from the shard with its furniture,
+    ///     and the furniture loads what is on it (MansionFurniture.Load);
+    ///   - anyone on the landblock may use the hook (it is staff only); a double-click shows the piece's
+    ///     status, as a house with hooks hidden does, never opening the hook as a container;
+    ///   - the rack or stand itself is fixed: it can never be taken off, and nothing else is hung on the
+    ///     hook. Dropping an item on the hook goes to the furniture (MansionFurniture.PutFromContainer);
+    ///   - appraising the hook appraises it as ACE does, with no "This hook is owned by" line.
+    /// What goes on a rack or stand, and who may take it down, is MansionFurniture's (MayHang / MayTake).
+    /// </summary>
+    static class StaffBaseHooks
+    {
+        internal const ushort LANDBLOCK = 0x576B;
+
+        /// <summary>The hooks of 2026-11-01-staff-base-decor-3.sql (tools/gpubox-ace/gen_staff_base_home.py
+        /// HOOKS) and the furniture each holds.</summary>
+        internal static readonly Dictionary<uint, uint> SEED = new Dictionary<uint, uint>
+        {
+            [0x7576B200] = MansionFurniture.RACK, [0x7576B201] = MansionFurniture.RACK,
+            [0x7576B202] = MansionFurniture.STAND, [0x7576B203] = MansionFurniture.STAND,
+        };
+
+        /// <summary>A hook with no house on the Staff Base landblock.</summary>
+        internal static bool Is(WorldObject wo)
+        {
+            if (!(wo is Hook hook) || hook.ParentLink != null) return false;
+            var lb = hook.Location?.LandblockId.Landblock;
+            if (lb != null) return lb == LANDBLOCK;
+            uint g = hook.Guid.Full;   // a static guid is 0x7LLLLnnn
+            return (g & 0xF0000000) == 0x70000000 && ((g >> 12) & 0xFFFF) == LANDBLOCK;
+        }
+
+        static readonly ConcurrentDictionary<uint, Hook> s_Hooks = new ConcurrentDictionary<uint, Hook>();
+
+        /// <summary>The staff hook holding this item (the rack or stand itself), if any.</summary>
+        internal static Hook HolderOf(uint itemGuid)
+        {
+            foreach (var h in s_Hooks.Values)
+                if (h.Item?.Guid.Full == itemGuid) return h;
+            return null;
+        }
+
+        static void Refuse(Player p, uint itemGuid, string why)
+        {
+            if (why != null) p.SendTransientError(why);
+            p.Session?.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(p.Session, itemGuid, WeenieError.None));
+        }
+
+        // ------------------------------------------------------------------ seeding
+
+        /// <summary>Give an empty seeded hook its furniture. Runs on the hook's landblock.</summary>
+        static void Seed(Hook hook)
+        {
+            try
+            {
+                if (!Is(hook) || !SEED.TryGetValue(hook.Guid.Full, out var wcid)) return;
+                s_Hooks[hook.Guid.Full] = hook;
+                if (!hook.InventoryLoaded || hook.HasItem) return;
+                var item = WorldObjectFactory.CreateNewWorldObject(wcid);
+                if (item == null) { Mod.Log.Warn($"[StaffBaseHooks] no weenie {wcid} for hook 0x{hook.Guid.Full:X8}"); return; }
+                if (!hook.TryAddToInventory(item, 0, false, false))
+                {
+                    item.Destroy(false);
+                    Mod.Log.Warn($"[StaffBaseHooks] hook 0x{hook.Guid.Full:X8} would not take the {item.Name}");
+                    return;
+                }
+                item.SaveBiotaToDatabase();   // the hook saved itself in OnAddItem
+                Mod.Log.Info($"[StaffBaseHooks] hung a new {item.Name} 0x{item.Guid.Full:X8} on hook 0x{hook.Guid.Full:X8}");
+            }
+            catch (Exception e) { Mod.Log.Error($"[StaffBaseHooks] seed 0x{hook?.Guid.Full:X8}: {e}"); }
+        }
+
+        /// <summary>A hook made from its weenie (never saved yet) has its inventory at once.</summary>
+        [HarmonyPatch(typeof(Landblock), nameof(Landblock.AddWorldObject))]
+        static class Added
+        {
+            static void Postfix(WorldObject wo, bool __result)
+            {
+                if (!__result || !(wo is Hook hook) || !SEED.ContainsKey(hook.Guid.Full)) return;
+                hook.EnqueueAction(new ActionEventDelegate(() => Seed(hook)));
+            }
+        }
+
+        /// <summary>A hook restored from the shard loads its inventory after it is made.</summary>
+        [HarmonyPatch(typeof(Hook), "OnInitialInventoryLoadCompleted")]
+        static class Loaded
+        {
+            static void Postfix(Hook __instance)
+            {
+                if (SEED.ContainsKey(__instance.Guid.Full)) Seed(__instance);
+            }
+        }
+
+        // ------------------------------------------------------------------ ACE's hook steps, without a house
+
+        /// <summary>Hook.OnAddItem without House.HouseCurrentHooksUsable--. MansionFurniture.Hung's postfix
+        /// still runs (Harmony runs postfixes after a skipping prefix).</summary>
+        [HarmonyPatch(typeof(Hook), "OnAddItem")]
+        static class AddItem
+        {
+            [HarmonyPriority(Priority.First)]
+            static bool Prefix(Hook __instance)
+            {
+                if (!Is(__instance)) return true;
+                try
+                {
+                    s_Hooks[__instance.Guid.Full] = __instance;
+                    var item = __instance.Inventory.Values.FirstOrDefault();
+                    if (item == null) return false;
+                    __instance.NoDraw = false;
+                    __instance.UiHidden = false;
+                    __instance.Ethereal = false;
+                    __instance.SetupTableId = item.SetupTableId;
+                    __instance.MotionTableId = item.MotionTableId;
+                    __instance.PhysicsTableId = item.PhysicsTableId;
+                    __instance.SoundTableId = item.SoundTableId;
+                    __instance.ObjScale = item.ObjScale;
+                    __instance.Name = item.NameWithMaterial;
+                    if (__instance.MotionTableId != 0)
+                        __instance.CurrentMotionState = new Motion(MotionStance.Invalid);
+                    __instance.Placement = (Placement)(item.HookPlacement ?? (int)Placement.Hook);
+                    item.EmoteManager.SetProxy(__instance);
+                    __instance.SaveBiotaToDatabase();   // as ACE: never lose an item to a crash before the next save
+                    __instance.EnqueueBroadcastUpdateObject();
+                }
+                catch (Exception e) { Mod.Log.Error($"[StaffBaseHooks] add 0x{__instance.Guid.Full:X8}: {e}"); }
+                return false;
+            }
+        }
+
+        static readonly ConcurrentDictionary<uint, WorldObject> s_Bare = new ConcurrentDictionary<uint, WorldObject>();
+
+        /// <summary>Hook.OnRemoveItem without House.HouseCurrentHooksUsable++ (nothing takes the furniture off
+        /// a staff hook, but if anything ever does, the hook goes back to a bare hook and nothing throws).</summary>
+        [HarmonyPatch(typeof(Hook), "OnRemoveItem")]
+        static class RemoveItem
+        {
+            [HarmonyPriority(Priority.First)]
+            static bool Prefix(Hook __instance, WorldObject removedItem)
+            {
+                if (!Is(__instance)) return true;
+                try
+                {
+                    var bare = s_Bare.GetOrAdd(__instance.WeenieClassId,
+                        w => WorldObjectFactory.CreateWorldObject(DatabaseManager.World.GetCachedWeenie(w), ObjectGuid.Invalid));
+                    __instance.SetupTableId = bare.SetupTableId;
+                    __instance.MotionTableId = bare.MotionTableId;
+                    __instance.PhysicsTableId = bare.PhysicsTableId;
+                    __instance.SoundTableId = bare.SoundTableId;
+                    __instance.Placement = bare.Placement;
+                    __instance.ObjScale = bare.ObjScale;
+                    __instance.Name = bare.Name;
+                    __instance.NoDraw = false;
+                    __instance.UiHidden = false;
+                    __instance.Ethereal = true;
+                    if (__instance.MotionTableId == 0) __instance.CurrentMotionState = null;
+                    removedItem?.EmoteManager.ClearProxy();
+                    __instance.EnqueueBroadcastUpdateObject();
+                    __instance.SaveBiotaToDatabase();
+                    Mod.Log.Warn($"[StaffBaseHooks] {removedItem?.Name} 0x{removedItem?.Guid.Full:X8} came off hook 0x{__instance.Guid.Full:X8}");
+                }
+                catch (Exception e) { Mod.Log.Error($"[StaffBaseHooks] remove 0x{__instance.Guid.Full:X8}: {e}"); }
+                return false;
+            }
+        }
+
+        // ------------------------------------------------------------------ using it
+
+        /// <summary>Anyone on the staff landblock may use its hooks (ACE refuses everyone not in a house).</summary>
+        [HarmonyPatch(typeof(Hook), nameof(Hook.CheckUseRequirements))]
+        static class UseRequirements
+        {
+            [HarmonyPriority(Priority.First)]
+            static bool Prefix(Hook __instance, WorldObject activator, ref ActivationResult __result)
+            {
+                if (!Is(__instance) || !(activator is Player p)) return true;
+                if (p.IsOlthoiPlayer)
+                {
+                    p.SendWeenieError(WeenieError.OlthoiCannotInteractWithThat);
+                    __result = new ActivationResult(false);
+                    return false;
+                }
+                __result = new ActivationResult(true);
+                return false;
+            }
+        }
+
+        /// <summary>A double-click is the furniture's own (its status and how to use it), as with a house's
+        /// hooks hidden; the hook is never opened as a container, so the furniture cannot be dragged out.</summary>
+        [HarmonyPatch(typeof(Hook), nameof(Hook.ActOnUse))]
+        static class Use
+        {
+            [HarmonyPriority(Priority.First)]
+            static bool Prefix(Hook __instance, WorldObject wo)
+            {
+                if (!Is(__instance)) return true;
+                try
+                {
+                    var item = __instance.Item;
+                    if (item != null) item.OnActivate(wo);
+                    else if (wo is Player p) p.SendTransientError("This hook is empty.");
+                }
+                catch (Exception e) { Mod.Log.Error($"[StaffBaseHooks] use 0x{__instance.Guid.Full:X8}: {e}"); }
+                return false;
+            }
+        }
+
+        /// <summary>The furniture stays on its hook, and a drop on the hook (a client that sends
+        /// PutItemInContainer for it) goes to the furniture. ACE's own path reads hook.House and throws.</summary>
+        [HarmonyPatch(typeof(Player), nameof(Player.HandleActionPutItemInContainer))]
+        static class PutIn
+        {
+            [HarmonyPriority(Priority.First)]
+            static bool Prefix(Player __instance, uint itemGuid, uint containerGuid)
+            {
+                try
+                {
+                    var holder = HolderOf(itemGuid);
+                    if (holder != null)
+                    {
+                        Refuse(__instance, itemGuid, $"The {holder.Item?.Name ?? "furniture"} is fixed to the wall here.");
+                        return false;
+                    }
+                    if (!(__instance.CurrentLandblock?.GetObject(containerGuid) is Hook hook) || !Is(hook)) return true;
+                    if (!MansionFurniture.PutFromContainer(__instance, hook, itemGuid))
+                        Refuse(__instance, itemGuid, "Nothing can be hung on this hook.");
+                    return false;
+                }
+                catch (Exception e)
+                {
+                    Mod.Log.Error($"[StaffBaseHooks] put in container: {e}");
+                    Refuse(__instance, itemGuid, null);
+                    return false;
+                }
+            }
+        }
+
+        /// <summary>ACE's appraisal of a hook reads hook.ParentLink.HouseOwner. For a staff hook the
+        /// appraisal runs with a stand-in parent (a bare hook made from the weenie, never in the world, with
+        /// no owner), which is put back to none afterwards.</summary>
+        [HarmonyPatch(typeof(AppraiseInfo), nameof(AppraiseInfo.BuildProfile))]
+        static class Appraise
+        {
+            static void Prefix(WorldObject wo, ref bool __state)
+            {
+                __state = false;
+                if (!Is(wo)) return;
+                var stand = s_Bare.GetOrAdd(wo.WeenieClassId,
+                    w => WorldObjectFactory.CreateWorldObject(DatabaseManager.World.GetCachedWeenie(w), ObjectGuid.Invalid));
+                if (stand == null) return;
+                wo.ParentLink = stand;
+                __state = true;
+            }
+
+            static Exception Finalizer(WorldObject wo, bool __state, Exception __exception)
+            {
+                if (__state && wo != null) wo.ParentLink = null;
+                return __exception;
+            }
+        }
+    }
+}

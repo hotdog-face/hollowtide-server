@@ -539,7 +539,7 @@ namespace RevivalGuard
         /// <summary>Hang things: the house's storage permission (owner, their account, storage
         /// guests, the allegiance when it has storage), or an admin who walks through barriers.</summary>
         static bool MayHang(Player p, Display d) =>
-            p.IgnoreHouseBarriers || (RootHouseOf(d)?.HasPermission(p, true) ?? false);
+            p.IgnoreHouseBarriers || StaffBaseHooks.Is(d.Hook) || (RootHouseOf(d)?.HasPermission(p, true) ?? false);
 
         static bool IsHouseOwner(Player p, Display d)
         {
@@ -554,7 +554,8 @@ namespace RevivalGuard
         /// attuned (an attuned item goes back only to the one it is bound to).</summary>
         static bool MayTake(Player p, Display d, WorldObject real) =>
             (real.GetProperty(HUNG_BY) ?? 0) == p.Guid.Full
-            || (!real.IsAttunedOrContainsAttuned && (IsHouseOwner(p, d) || p.IgnoreHouseBarriers));
+            || (!real.IsAttunedOrContainsAttuned && (IsHouseOwner(p, d) || p.IgnoreHouseBarriers
+                                                     || (StaffBaseHooks.Is(d.Hook) && p.IsAdmin)));   // the Staff Base: an admin
 
         static bool MayUse(Player p, Display d)
         {
@@ -657,6 +658,19 @@ namespace RevivalGuard
                 return d;
             }
             return null;
+        }
+
+        /// <summary>A drop on a Staff Base hook sent as PutItemInContainer (StaffBaseHooks.PutIn): put it on
+        /// the furniture the hook holds, as a drop on the furniture is. False when the hook holds none.</summary>
+        internal static bool PutFromContainer(Player p, Hook hook, uint itemGuid)
+        {
+            if (!IsFurniture(hook.Item) || !s_Displays.TryGetValue(hook.Item.Guid.Full, out var d)) return false;
+            p.CreateMoveToChain(hook, ok =>
+            {
+                try { if (ok) Put(p, d, itemGuid, int.MaxValue); else Refuse(p, itemGuid, null); }
+                catch (Exception e) { Mod.Log.Error($"[RevivalGuard] MansionFurniture: put from container: {e}"); Refuse(p, itemGuid, "That did not work. It has been logged for staff."); }
+            });
+            return true;
         }
 
         static void Refuse(Player p, uint itemGuid, string why)

@@ -69,6 +69,7 @@ namespace RevivalGuard
             WorldBossSchedule.Hello(session);       // the world bosses' schedule and state, for the map
             SmallHitbox.Hello(session);             // weenies that collide smaller than their spheres (Azimar)
             AzimarTheme.Hello(session);             // Azimar's festival theme, for his hats and sparkles
+            FestivalChannel.Hello(session);         // the running festivals (the Lightbringer's red water)
             SendRecalls(session);                   // the lifestone, for the tracker's recall routes
         }
 

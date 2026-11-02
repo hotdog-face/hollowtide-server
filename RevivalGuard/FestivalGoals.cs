@@ -156,10 +156,13 @@ namespace RevivalGuard
         internal static void Say(Player p, string text) =>
             p?.Session?.Network?.EnqueueSend(new GameMessageSystemChat(text, ChatMessageType.Broadcast));
 
+        /// <summary>This year's name of a goal's trophy ("Frostfell 2026 Snowglobe"), or "your prize".</summary>
+        internal static string PrizeName(Goal g) => Trophies.TryGetValue(g.Trophy, out var t) ? string.Format(t.name, Year(t.key)) : "your prize";
+
         internal static string Progress(Goal g, int n)
         {
             if (n < g.N) return $"{g.Title}: {n} of {g.N} {g.Unit}.";
-            var prize = Trophies.TryGetValue(g.Trophy, out var t) ? string.Format(t.name, Year(t.key)) : "your prize";
+            var prize = PrizeName(g);
             return g.HandIn != null
                 ? $"{g.Title} complete! See {g.HandIn} for your {prize}."
                 : $"{g.Title} complete!";
@@ -215,7 +218,8 @@ namespace RevivalGuard
                 var g = FestivalGoals.ByCounter(questFormat);
                 var p = __instance.Creature as Player;
                 int now = __instance.GetCurrentSolves(g.Counter);
-                if (p != null && now > __state) FestivalGoals.Say(p, FestivalGoals.Progress(g, now));
+                // a gift box says one line for both counts (Frostfell.SayBoxProgress); everything else says its own
+                if (p != null && now > __state && !Frostfell.SayBoxProgress(p, g, now)) FestivalGoals.Say(p, FestivalGoals.Progress(g, now));
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] FestivalGoals stamp after: {e.Message}"); }
         }

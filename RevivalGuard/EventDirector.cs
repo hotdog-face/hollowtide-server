@@ -64,6 +64,7 @@ namespace RevivalGuard
             public double? Minutes;                // how long it runs; null: event_director_duration_min
             public (int x0, int y0, int x1, int y1) Box;   // landblock X/Y rectangle for "is anyone there"
             public string Announce, Victory, Withdraw;
+            public string Lost, Defeat;            // a stage row that means the players lost, and what is said then (the Present Raids)
             public bool IsFestival => Festivals != null && Festivals.Length > 0;
         }
 
@@ -186,24 +187,26 @@ namespace RevivalGuard
             new Entry
             {
                 Key = "presents-tufa", Title = "Gurogs Raid the Presents at Tufa", Where = "14.9S, 5.6E", Levels = "220 to 300",
-                Regions = new[] { "tufa", "presentraids" }, Box = (0x85, 0x6B, 0x87, 0x6D), Festivals = new[] { "frostfell", "newyear" },
+                Regions = new[] { "tufa", "presentraids" }, Box = (0x85, 0x6B, 0x87, 0x6D), Festivals = new[] { "frostfell", "newyear" }, Minutes = 30,
                 Start = new[] { "PresentRaidsTufa" },
                 Stop = new[] { "PresentRaidsTufa", "PresentRaidsDead" },
                 Stages = new[] { ("PresentRaidsDead", "The Holiday Present at Tufa has been destroyed!") },
-                Announce = LEAD + "Gurogs are raiding Tufa! A huge Holiday Present has appeared in the town, near 14.9S, 5.6E, and waves of Gurog Grumps are coming to smash it. Defend it and share what is inside.",
-                Victory = "The Gurog raid on Tufa is over.",
+                Lost = "PresentRaidsDead", Defeat = "The Gurogs smashed the Holiday Present at Tufa and went home. Gather more defenders for the next raid!",
+                Announce = LEAD + "Gurogs are raiding Tufa! A huge Holiday Present has appeared in the town, near 14.9S, 5.6E, and waves of Gurog Grumps are coming to smash it. Keep it standing for 30 minutes and every defender is rewarded.",
+                Victory = "The Holiday Present at Tufa still stands! The Gurogs have given up. Well defended!",
                 Withdraw = "The Gurogs have left Tufa.",
                 Evidence = "ace73219-presentraidstufagen at 0x866C; Gurog Grumps 220, Gurog Mastermind and Max 300; Frostfell content (wiki: Gurog Present Raids)",
             },
             new Entry
             {
                 Key = "presents-yaraq", Title = "Drudges Raid the Presents at Yaraq", Where = "21.7S, 1.3W", Levels = "200",
-                Regions = new[] { "yaraq", "presentraids" }, Box = (0x7C, 0x63, 0x7E, 0x65), Festivals = new[] { "frostfell", "newyear" },
+                Regions = new[] { "yaraq", "presentraids" }, Box = (0x7C, 0x63, 0x7E, 0x65), Festivals = new[] { "frostfell", "newyear" }, Minutes = 30,
                 Start = new[] { "PresentRaidsYaraq" },
                 Stop = new[] { "PresentRaidsYaraq", "PresentRaidsDead" },
                 Stages = new[] { ("PresentRaidsDead", "The Holiday Presents at Yaraq have been stolen!") },
-                Announce = LEAD + "Drudges are raiding Yaraq! A pile of Holiday Presents has appeared in the town, near 21.7S, 1.3W, and Drudge Pilferers are dropping from balloons to steal it. Stop them.",
-                Victory = "The Drudge raid on Yaraq is over.",
+                Lost = "PresentRaidsDead", Defeat = "The Drudges made off with the Holiday Presents at Yaraq. Gather more defenders for the next raid!",
+                Announce = LEAD + "Drudges are raiding Yaraq! A pile of Holiday Presents has appeared in the town, near 21.7S, 1.3W, and Drudge Pilferers are dropping from balloons to steal it. Keep them off it for 30 minutes and every defender is rewarded.",
+                Victory = "The Holiday Presents at Yaraq are safe! The Drudges have given up. Well defended!",
                 Withdraw = "The Drudges have left Yaraq.",
                 Evidence = "ace73230-presentraidsyaraqgen at 0x7D64; Drudge Pilferers 200; Frostfell content (wiki: Drudge Present Raids)",
             },
@@ -374,6 +377,18 @@ namespace RevivalGuard
         }
 
         static bool Enabled => PropertyManager.GetBool(P_ENABLED, false).Item;
+        const string P_FROSTFELL = "rg_event_director_frostfell";
+        static bool FrostfellSwitch => PropertyManager.GetBool(P_FROSTFELL, true).Item;
+        /// <summary>The director runs: rg_event_director on, or Frostfell active with rg_event_director_frostfell on
+        /// (EventDirectorRules.DirectorOn; then only Frostfell's own entries).</summary>
+        static bool Running => EventDirectorRules.DirectorOn(Enabled, FrostfellSwitch, SeasonalCalendar.IsFestivalActive(EventDirectorRules.FROSTFELL));
+
+        /// <summary>The running event's key, start and end (unix seconds), or null: for Frostfell's raid timer.</summary>
+        internal static (string key, double startedAt, double endsAt)? CurrentEvent()
+        {
+            var s = s_State;
+            return s?.Current == null ? ((string, double, double)?)null : (s.Current, s.StartedAt, s.EndsAt);
+        }
         static bool FestivalsOn => PropertyManager.GetBool(P_FESTIVALS, true).Item;
         static int FestEvery => (int)Math.Clamp(Math.Round(Minutes(P_FEST_EVERY, 3)), 1, 50);
         static double Minutes(string key, double def) => PropertyManager.GetDouble(key, def).Item;
@@ -417,7 +432,7 @@ namespace RevivalGuard
                     if (cur != null) { StartRows(cur); Mod.Log.Info($"[RevivalGuard] EventDirector: shutdown cancelled; {cur.Key} restarted"); }
                 }
 
-                bool enabled = Enabled;
+                bool enabled = Running;
                 if (s_WasEnabled != enabled)
                 {
                     // Switched on (by @eventdirector on or @modifybool): the first event comes in ten minutes, not at
@@ -488,7 +503,7 @@ namespace RevivalGuard
             if (s_State.NextAt <= 0) s_State.NextAt = now + Gap * 60;
             else if (s_State.NextAt < now + 300) s_State.NextAt = now + 300;
             Save();
-            Mod.Log.Info($"[RevivalGuard] EventDirector: {(Enabled ? "ON" : $"OFF ({P_ENABLED})")}; next live event {Stamp(s_State.NextAt)}");
+            Mod.Log.Info($"[RevivalGuard] EventDirector: {(Enabled ? "ON" : $"OFF ({P_ENABLED})")}{(!Enabled && FrostfellSwitch ? $", Frostfell's events run while it is on ({P_FROSTFELL})" : "")}; next live event {Stamp(s_State.NextAt)}");
         }
 
         // ---- choosing ---------------------------------------------------------------------------
@@ -526,10 +541,15 @@ namespace RevivalGuard
             {
                 if (!EventDirectorRules.FestivalOpen(e.Festivals, SeasonalCalendar.IsFestivalActive)) return $"out of season ({FestivalNames(e)} is not on)";
                 if (e.IsFestival && !FestivalsOn) return $"{P_FESTIVALS} is off";
+                if (!EventDirectorRules.EntryAllowed(Enabled, e.Festivals)) return $"{P_ENABLED} is off (only Frostfell's events run, {P_FROSTFELL})";
                 var skip = (PropertyManager.GetString(P_SKIP, "").Item ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 if (skip.Any(s => s.Equals(e.Key, StringComparison.OrdinalIgnoreCase))) return $"listed in {P_SKIP}";
                 if (e.Key.StartsWith("omens-", StringComparison.OrdinalIgnoreCase) && !PropertyManager.GetBool(P_OMENS, false).Item)
                     return $"{P_OMENS} is off";
+                if (e.Regions.Contains(EventDirectorRules.RAID_REGION, StringComparer.OrdinalIgnoreCase)
+                    && EventDirectorRules.TooSoon(now, Catalogue.Where(c => c.Regions.Contains(EventDirectorRules.RAID_REGION, StringComparer.OrdinalIgnoreCase))
+                        .Select(c => s_State.LastRun.TryGetValue(c.Key, out var t) ? t : 0), EventDirectorRules.RAID_APART_S))
+                    return "a Present Raid ran less than 4 hours ago (retail: one every 4 hours)";
             }
             // The same region, or the same rows, already busy: something outside the director (a
             // player killing the Witshire minion, an admin's @event) or another entry is running.
@@ -610,11 +630,26 @@ namespace RevivalGuard
             // stage to the next stop one row and start the other within a second or two).
             if (!cur.Stop.Any(IsOn))
             {
-                if (++s_AllOffChecks >= 2) { End(cur, now, "won by the players", announce: true, victory: true); return; }
+                // A Present Raid's rows also go off by themselves when the present is destroyed (its death starts
+                // PresentRaidsDead and the reset stopgap stops it all): a loss, not a win (box 2026-10-29: an undefended
+                // raid ended after 3 minutes "won by the players", with prizes for whoever stood near).
+                bool lost = cur.Lost != null && s_StagesSeen.Contains(cur.Lost);
+                if (++s_AllOffChecks >= 2)
+                {
+                    if (lost) { End(cur, now, "lost: " + cur.Lost, announce: false, victory: false); WorldBroadcast(cur.Defeat ?? cur.Withdraw); }
+                    else End(cur, now, "won by the players", announce: true, victory: true);
+                    return;
+                }
             }
             else s_AllOffChecks = 0;
 
-            if (now >= s_State.EndsAt) { End(cur, now, "time is up", announce: true, victory: false); return; }
+            // A Present Raid held to the end, its present still standing: the defenders won.
+            if (now >= s_State.EndsAt)
+            {
+                bool held = cur.Lost != null && !s_StagesSeen.Contains(cur.Lost);
+                End(cur, now, held ? "held to the end" : "time is up", announce: true, victory: held);
+                return;
+            }
 
             if (now >= s_NextPresence)
             {
@@ -657,6 +692,9 @@ namespace RevivalGuard
             Save();
             if (announce) WorldBroadcast(victory ? cur.Victory : cur.Withdraw);
             if (victory) JokeScrollRewards.EventWon(cur.Key, PlayersNear(cur).ToList());   // off unless rg_joke_scroll_rewards
+            if (victory && cur.Lost != null)
+                try { Frostfell.RaidWon(cur.Key, PlayersNear(cur).ToList()); }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] EventDirector: raid reward: {e.Message}"); }
             Mod.Log.Info($"[RevivalGuard] EventDirector: ENDED {cur.Key} ({why}); next {Stamp(s_State.NextAt)}");
         }
 
@@ -706,6 +744,11 @@ namespace RevivalGuard
             {
                 if (!wr.TryGetTarget(out var gen) || gen.IsDestroyed) continue;
                 if (IsOn(ev)) continue;   // restarted since (the next event, or an admin): leave it be
+                // ACE notices a stopped event only on the generator's second status check (HandleStatusStaged), so
+                // emptying it before then let it refill at once (box 2026-11-01 05:13:27: a fresh Holiday Present and
+                // 10 Grumps 4 s after the raid ended). Disabled first, it stays empty; the staged check agrees with
+                // it, and the event's next start enables it the usual way.
+                gen.GeneratorDisabled = true;
                 gone += DestroySpawn(gen, 0);
             }
             if (gone > 0) Mod.Log.Info($"[RevivalGuard] EventDirector: despawned {gone} objects left by stopped event generators");
@@ -779,6 +822,7 @@ namespace RevivalGuard
             {
                 var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_ENABLED)) b[P_ENABLED] = new Property<bool>(false, "EventDirector: rotate live events (Olthoi swarms, eruptions, raids, festival events); off until staff turn it on");
+                if (!b.ContainsKey(P_FROSTFELL)) b[P_FROSTFELL] = new Property<bool>(true, "EventDirector: while Frostfell runs, its own events (Present Raids, Holtburg snowmen, Stonehold Scold) run even with rg_event_director off");
                 if (!b.ContainsKey(P_FESTIVALS)) b[P_FESTIVALS] = new Property<bool>(true, "EventDirector: festival-only events (Pumpkin Lords, Unhappy Snowmen ...) get a slot after every event_director_festival_every year-round events while their festival runs");
                 if (!b.ContainsKey(P_OMENS)) b[P_OMENS] = new Property<bool>(false, "EventDirector: put the Season 1 Omens shadow raids (omens-*) in the rotation");
                 var d = Inner(DefaultPropertyManager.DefaultDoubleProperties);
@@ -844,7 +888,7 @@ namespace RevivalGuard
                     Say(session, natural != null ? $"Live event now: {natural.Title}, near {natural.Where} ({Levels(natural)})."
                                                  : "No live event is running right now.");
                 }
-                if (!Enabled) { Say(session, "No live events are scheduled."); return; }
+                if (!Running) { Say(session, "No live events are scheduled."); return; }
                 if (AnniversaryNight.On) { Say(session, "Live events are resting for Anniversary Night. Enjoy the party!"); return; }
                 if (cur == null)
                 {
@@ -920,7 +964,7 @@ namespace RevivalGuard
                 lock (s_Lock)
                 {
                     var cur = Find(s_State.Current);
-                    Say(session, $"[EventDirector] (ours) {(Enabled ? "ON" : "OFF")}; each event {Minutes(P_DURATION, 120):0.##} min (festival ones their own), gap {Gap:0.##} min, idle end {Minutes(P_IDLE, 60):0.##} min, min players {Minutes(P_MINPLAYERS, 1):0}; switch {P_ENABLED}");
+                    Say(session, $"[EventDirector] (ours) {(Enabled ? "ON" : Running ? "Frostfell's events only" : "OFF")}; each event {Minutes(P_DURATION, 120):0.##} min (festival ones their own), gap {Gap:0.##} min, idle end {Minutes(P_IDLE, 60):0.##} min, min players {Minutes(P_MINPLAYERS, 1):0}; switch {P_ENABLED}");
                     if (cur != null)
                     {
                         var on = cur.Stop.Where(IsOn).ToList();
@@ -986,7 +1030,7 @@ namespace RevivalGuard
                 if (cur != null) End(cur, now, $"replaced by {who}", announce: true, victory: false);
                 Begin(target, now, manual: true);
                 Mod.Log.Info($"[RevivalGuard] EventDirector: {target.Key} started by {who} ({verb})");
-                Say(session, $"[EventDirector] started {target.Key}; ends {Stamp(s_State.EndsAt)}." + (Enabled ? "" : " The rotation is off, so nothing follows it."));
+                Say(session, $"[EventDirector] started {target.Key}; ends {Stamp(s_State.EndsAt)}." + (Enabled ? "" : Running ? " The rotation runs Frostfell's events only." : " The rotation is off, so nothing follows it."));
             }
         }
     }

@@ -44,13 +44,14 @@ namespace RevivalGuard
         const int PLAYER_PER_10MIN = 5, PLAYER_PER_DAY = 30;      // tickets a person writes
         const int AUTO_PER_SESSION = 5, AUTO_PER_DAY = 40;         // reports the game writes for them
         const int USAGE_PER_SESSION = 40;                          // AcUsage flushes: every 15 min and at logout
+        const int ASSIST_PER_SESSION = 120;                        // AcAssistUsage batches: hourly at least, a stop within a minute
         const int SHARD_PER_DAY = 3000;                            // a ceiling on disk use for the whole shard
 
         static readonly string Root = Environment.GetEnvironmentVariable("REVIVAL_REPORTS_DIR")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ace", "reports");
 
         sealed class Pending { public string Kind; public int Count; public string[] Parts; public DateTime Started; }
-        sealed class SessionState { public readonly Dictionary<string, Pending> Open = new Dictionary<string, Pending>(); public int Auto, Usage; }
+        sealed class SessionState { public readonly Dictionary<string, Pending> Open = new Dictionary<string, Pending>(); public int Auto, Usage, Assist; }
         static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Session, SessionState> s_Sessions =
             new System.Runtime.CompilerServices.ConditionalWeakTable<Session, SessionState>();
         static readonly Dictionary<uint, List<(DateTime at, bool auto)>> s_ByAccount = new Dictionary<uint, List<(DateTime, bool)>>();
@@ -112,7 +113,8 @@ namespace RevivalGuard
                     {
                         // The client's feature counters (Assets/Streaming/AcUsage.cs): not a ticket, a line in
                         // the player event log (Telemetry). Capped per session, silently.
-                        if (++st.Usage > USAGE_PER_SESSION) return;
+                        // the Assistant's usage batches (AcAssistUsage) have their own cap: an 8 hour night is ~10 of them
+                        if (Telemetry.IsAssist(done) ? ++st.Assist > ASSIST_PER_SESSION : ++st.Usage > USAGE_PER_SESSION) return;
                         Telemetry.Usage(player, done);
                         return;
                     }

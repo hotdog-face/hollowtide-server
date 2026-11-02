@@ -35,6 +35,7 @@ namespace RevivalGuard
             public string Announce;         // the world broadcast when it opens (seasons.json "about")
             public string Hint = "";        // where to find it, on the login line (FestivalNotices); placements checked on OVH 2026-10-21
             public string Evidence;         // the weenie this was read off, shown by @festival list
+            public string Dressing;         // the town dressing it puts up (autumn, winter, spring): two never show at once
 
             public string Window => $"{StartMonth:00}-{StartDay:00} to {EndMonth:00}-{EndDay:00}";
         }
@@ -68,7 +69,7 @@ namespace RevivalGuard
                          + "landscape, the dead are stirring in Al-Jalima, and the Majestic Pumpkin "
                          + "is waiting in Glenden Wood.",
                 Hint = "Pumpkins line Holtburg, the Festival Costumer is in Glenden Wood, and the dead walk in Al-Jalima.",
-                Evidence = "ace80069-fallfestivaleventsstopgapgen, Oct 1 to Nov 1",
+                Evidence = "ace80069-fallfestivaleventsstopgapgen, Oct 1 to Nov 1", Dressing = "autumn",
             },
             new Festival
             {
@@ -80,7 +81,7 @@ namespace RevivalGuard
                          + "Haven is under assault, and something wearing a red suit has been seen "
                          + "in the desert.",
                 Hint = "Look for hidden presents in the towns, and the Frostfell Costumer in Holtburg.",
-                Evidence = "ace80018-holidayeventsstopgapgen, Dec 4 to Jan 1",
+                Evidence = "ace80018-holidayeventsstopgapgen, Dec 4 to Jan 1", Dressing = "winter",
             },
             new Festival
             {
@@ -90,7 +91,7 @@ namespace RevivalGuard
                 Announce = "Spring has come to Dereth. Young creatures are on the landscape, "
                          + "coloured eggs are turning up, and the House of Pancakes has opened.",
                 Hint = "Look for eggs and young creatures on the landscape, the House of Pancakes in Shoushi, and the Spring Costumer in Holtburg.",
-                Evidence = "ace87093-springeventsstopgapgen, Apr 1 to May 1",
+                Evidence = "ace87093-springeventsstopgapgen, Apr 1 to May 1", Dressing = "spring",
             },
             new Festival
             {
@@ -142,8 +143,11 @@ namespace RevivalGuard
                 StartMonth = 11, StartDay = 2, EndMonth = 12, EndDay = 1,
                 On  = new[] { "AnniversaryNightClub" },
                 Announce = "The Night Club is open for the anniversary. Its attendants are waiting in "
-                         + "Cragstone, Hebian-To, Sanamar and Zaikhal.",
-                Hint = "Its attendants are in Cragstone, Hebian-To, Sanamar and Zaikhal.",
+                         + "Cragstone, Hebian-To, Sanamar and Zaikhal. Dance on the floor for a minute and the "
+                         + "night counts; three nights earn the Anniversary Balloons for your house. Join the DJ's "
+                         + "dance calls for a party experience bonus.",
+                Hint = "Its attendants are in Cragstone, Hebian-To, Sanamar and Zaikhal. Dance a minute for the night, "
+                     + "and join the DJ's calls for a party experience bonus.",
                 Evidence = "ace69997-nightclubattendantgenerator's own window, Nov 2 to Dec 1",
             },
             new Festival
@@ -207,6 +211,17 @@ namespace RevivalGuard
         /// <summary>Has an override set at <paramref name="at"/> (UTC; null = unknown) run out? "keep" ones never do.</summary>
         internal static bool OverrideExpired(DateTime? at, bool keep, DateTime nowUtc) =>
             !keep && (at == null || nowUtc >= at.Value.AddHours(OVERRIDE_HOURS));
+
+        /// <summary>
+        /// TWO SEASONS NEVER MIX (owner's box ticket 261030-0001: "halloween event things are still in holtberg the two
+        /// should never mix"). A festival on only by its calendar window stays off while a festival with a different town
+        /// dressing is forced on: Frostfell forced in October takes Festival Season's pumpkins, buffers and costumer down
+        /// (and Azimar wears Frostfell's look). The calendar windows never overlap, so this matters only for a GM's @festival.
+        /// Two forced on are both on: that is the GM's choice.
+        /// </summary>
+        internal static bool Displaced(Festival f, bool forced, IEnumerable<Festival> forcedOn) =>
+            !forced && f.Dressing != null
+            && forcedOn.Any(o => o != f && o.Dressing != null && !o.Dressing.Equals(f.Dressing, StringComparison.OrdinalIgnoreCase));
 
         /// <summary>The festivals whose natural window holds this local date (no overrides).</summary>
         internal static List<Festival> NaturalOn(DateTime local) => Calendar.Where(f => InWindow(f, local)).ToList();

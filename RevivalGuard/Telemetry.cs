@@ -30,7 +30,8 @@ namespace RevivalGuard
     ///
     /// Events: login, logout (seconds), chargen (build), academy_exit (RecallsDisabled cleared), where (every 60 s: position, coin, total XP,
     /// kills since the last sample by creature name), levelup, death (killer), quest (stamp), tp
-    /// (teleports: portal or not), buy (vendor purchases), fellow, swear, house.
+    /// (teleports: portal or not), buy (vendor purchases), fellow, swear, house; assist (the Assistant's anonymous usage,
+    /// account hash only: Usage below; summed daily by AssistUsageSummary).
     ///
     /// ALL POSTFIXES/PREFIXES THAT ONLY READ. Nothing here changes what ACE does, and every hook
     /// swallows its own exceptions: a telemetry failure must never cost a player anything.
@@ -141,10 +142,21 @@ namespace RevivalGuard
                 if (body == null || body.Length > 8000) return;
                 using var doc = System.Text.Json.JsonDocument.Parse(body);
                 if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return;
-                Emit("usage", p, ",\"u\":" + System.Text.Json.JsonSerializer.Serialize(doc.RootElement));
+                // the Assistant's anonymous usage batch (AcAssistUsage): its own event, summed daily by AssistUsageSummary
+                bool assist = doc.RootElement.TryGetProperty("kind", out var k) && k.ValueKind == System.Text.Json.JsonValueKind.String && k.GetString() == "assist";
+                string json = System.Text.Json.JsonSerializer.Serialize(doc.RootElement);
+                if (!assist) { Emit("usage", p, ",\"u\":" + json); return; }
+                // anonymous as disclosed (dev-notes 0.1.91, the wiki's Assistant page): the salted account hash and the staff and
+                // mercenary marks only, so no character name, guid or landblock is written beside it
+                string who = ",\"a\":\"" + Acct(p?.Account?.AccountId ?? p?.Character?.AccountId ?? 0) + "\""
+                           + ((p?.Account?.AccessLevel ?? 0) > 0 ? ",\"staff\":1" : "") + (p != null && Mercenaries.IsMerc(p) ? ",\"merc\":1" : "");
+                Emit("assist", null, who + ",\"x\":" + json);
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] telemetry usage: {e.Message}"); }
         }
+
+        /// <summary>Is this usage body the Assistant's batch (AcAssistUsageRule writes "kind" first)? For TicketDesk's own cap.</summary>
+        internal static bool IsAssist(string body) => body != null && body.StartsWith("{\"kind\":\"assist\"", StringComparison.Ordinal);
 
         static string KillsJson(Live l)
         {

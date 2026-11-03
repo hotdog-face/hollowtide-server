@@ -29,11 +29,15 @@ namespace RevivalGuard
     /// CAP (default 3; 0 turns the cap off). The login screen learns about the cap before it sends a
     /// password, through AccountQuery's answer 3, and says so in words; this boot is the backstop
     /// for a client that did not ask.
+    ///
+    /// A SHARED RELAY (StaffLoginGate.IsSharedRelay, rg_shared_relays: webAC's hosted bridge) brings every browser
+    /// player from one address, so its cap is RELAY_CAP (rg_shared_relay_signups, default 50) instead (owner 2026-11-03).
     /// </summary>
     [HarmonyPatch]
     static class AccountCreationCap
     {
-        internal const string P_LAN = "rg_signup_cap_lan";
+        internal const string P_LAN = "rg_signup_cap_lan", P_RELAY_CAP = "rg_shared_relay_signups";
+        const long RELAY_CAP = 50;
         static readonly int s_Cap = ParseCap();
         static readonly TimeSpan DAY = TimeSpan.FromHours(24);
 
@@ -46,16 +50,30 @@ namespace RevivalGuard
         static System.Reflection.MethodBase TargetMethod() =>
             AccessTools.Method("ACE.Server.Network.Handlers.AuthenticationHandler:DoLogin");
 
-        /// <summary>Make rg_signup_cap_lan an ordinary ACE property, so @modifybool accepts it.</summary>
-        internal static void Register() =>
+        /// <summary>Make rg_signup_cap_lan and rg_shared_relay_signups ordinary ACE properties, so @modifybool and
+        /// @modifylong accept them; and rg_shared_relays (StaffLoginGate).</summary>
+        internal static void Register()
+        {
             ExpansionMotions.RegisterProperty(P_LAN, false, "RevivalGuard AccountCreationCap: apply the new-account cap to LAN addresses too (testing only; docs/ACCOUNT-SIGNUP.md)");
+            try
+            {
+                var l = MonsterAi.Inner(ACE.Server.Managers.DefaultPropertyManager.DefaultLongProperties);
+                if (!l.ContainsKey(P_RELAY_CAP)) l[P_RELAY_CAP] = new ACE.Server.Managers.Property<long>(RELAY_CAP,
+                    "RevivalGuard AccountCreationCap: new accounts per 24 h from a shared relay (rg_shared_relays, e.g. webAC); 0 = no cap");
+            }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] {P_RELAY_CAP}: not registered ({e.Message}); still read, default {RELAY_CAP}"); }
+            StaffLoginGate.Register();
+        }
 
         /// <summary>Would a new account from this address be refused right now?</summary>
         internal static bool Reached(IPAddress addr)
         {
             if (s_Cap <= 0 || addr == null) return false;
             if (StaffLoginGate.IsLocal(addr) && !PropertyManager.GetBool(P_LAN, false).Item) return false;
-            return CreatedToday(addr) >= s_Cap;
+            long cap = s_Cap;
+            if (StaffLoginGate.IsSharedRelay(addr))
+                try { cap = PropertyManager.GetLong(P_RELAY_CAP, RELAY_CAP).Item; } catch { cap = RELAY_CAP; }
+            return cap > 0 && CreatedToday(addr) >= cap;
         }
 
         static int CreatedToday(IPAddress addr)
@@ -97,7 +115,7 @@ namespace RevivalGuard
                 if (addr == null || !Reached(addr)) return true;
                 if (DatabaseManager.Authentication.GetAccountByName(loginRequest.Account) != null) return true;
 
-                Mod.Log.Warn($"[RevivalGuard] new account '{loginRequest.Account}' refused: {addr} already made {s_Cap} in 24 h");
+                Mod.Log.Warn($"[RevivalGuard] new account '{loginRequest.Account}' refused: {addr} already made its cap in 24 h");
                 session.Terminate(SessionTerminationReason.NotAuthorizedAccountNotFound,
                     new GameMessageBootAccount(" because this network has made too many new accounts today; try again tomorrow"));
                 return false;

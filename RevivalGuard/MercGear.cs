@@ -2,9 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity.Actions;
+using ACE.Server.Managers;
+using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects;
 using HarmonyLib;
 
@@ -26,16 +29,41 @@ namespace RevivalGuard
     ///     any trained melee weapon. Bows and casters only replace their own kind.
     ///   * jewelry and the rest: an empty slot only (no fair measure between two rings).
     /// Things it cannot wield (level, skill, attunement to someone else) are simply carried.
-    /// </summary>
+    ///
+    /// GIVING DIDN'T WORK (owner tickets 261103-0015, with Brannoc's own 0013/0014: "Unable to put Acid Cestus into
+    /// container" and "You must remove your Acid Cestus to wield Frost Katar", 80 tries in a minute on live). The old
+    /// piece was always put away into the MAIN pack; Brannoc's was full (the gift itself landed in a side pack), so
+    /// UnwieldToFullPack refused it, the wield was refused, and the next step picked the same swap again. Five gives
+    /// ran five such chains side by side. Now:
+    ///   * one run per merc at a time; a give during a run joins it;
+    ///   * the old piece goes into whichever pack has room (main pack first, then the side packs);
+    ///   * each piece is tried once per run: a wield ACE refuses is never asked again;
+    ///   * at the end, gear it was given and is not wearing goes back to the giver, with a line saying why (no room to
+    ///     put the old piece away, can't wield it, or already wears better). Anything that is not gear (kits, food,
+    ///     notes) it keeps, as before. A giver out of reach or with a full pack is told and the merc carries it.
     [HarmonyPatch]
     static class MercGear
     {
-        const int MAX_STEPS = 16;           // upgrades per give, so a bad rule can never loop
-        static MethodInfo s_WieldReq;
+        const int MAX_STEPS = 16;           // upgrades per run, so a bad rule can never loop
+        const float RETURN_RANGE = 50f;     // a giver further than this is told, not handed the gift
+        static MethodInfo s_WieldReq, s_GiveDirect;
+
+        /// <summary>One merc's gear pass: the gifts it is looking over and what it already tried.</summary>
+        sealed class Run
+        {
+            public readonly List<(uint item, uint giver)> Gifts = new List<(uint, uint)>();
+            public readonly HashSet<uint> Tried = new HashSet<uint>();
+            public readonly HashSet<uint> Worn = new HashSet<uint>();      // gifts seen on the merc during the run
+            public readonly Dictionary<uint, string> NoRoom = new Dictionary<uint, string>();   // piece -> what would not fit
+        }
+        static readonly Dictionary<uint, Run> s_Runs = new Dictionary<uint, Run>();
+        static readonly object s_Lock = new object();
 
         static MethodBase TargetMethod()
         {
             s_WieldReq = AccessTools.Method(typeof(Player), "CheckWieldRequirements", new[] { typeof(WorldObject) });
+            // our ACE's give without the walk-to (headless agents); the stock request is the fallback
+            s_GiveDirect = AccessTools.Method(typeof(Player), "AgentGiveDirect", new[] { typeof(uint), typeof(uint), typeof(int) });
             var m = AccessTools.Method(typeof(Player), "GiveObjectToPlayer");
             Mod.Log.Info($"[RevivalGuard] MercGear: {(m != null ? "on" : "OFF (Player.GiveObjectToPlayer not found)")}");
             return m;
@@ -43,12 +71,23 @@ namespace RevivalGuard
 
         static bool Prepare(MethodBase original) => original != null || TargetMethod() != null;
 
-        static void Postfix(Player __instance, Player target)
+        static void Postfix(Player __instance, Player target, WorldObject item)
         {
             try
             {
                 if (target == null || !Mercenaries.IsMerc(target)) return;
-                Later(target, 1.5, MAX_STEPS);
+                bool start = false;
+                lock (s_Lock)
+                {
+                    if (!s_Runs.TryGetValue(target.Guid.Full, out var run))
+                    {
+                        s_Runs[target.Guid.Full] = run = new Run();
+                        start = true;
+                    }
+                    if (item != null && (item.MaxStackSize ?? 1) <= 1 && __instance != null)
+                        run.Gifts.Add((item.Guid.Full, __instance.Guid.Full));
+                }
+                if (start) Later(target, 1.5, MAX_STEPS);
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] MercGear: {e.GetType().Name}: {e.Message}"); }
         }
@@ -61,15 +100,35 @@ namespace RevivalGuard
             chain.EnqueueChain();
         }
 
-        /// <summary>Find the best single upgrade, take off what it replaces, put it on, then look again.</summary>
+        /// <summary>Find the best single upgrade not yet tried, put away what it replaces, put it on, then look again.</summary>
         static void Step(Player merc, int stepsLeft)
         {
+            Run run;
+            lock (s_Lock) s_Runs.TryGetValue(merc.Guid.Full, out run);
+            if (run == null) return;
             try
             {
-                if (stepsLeft <= 0 || merc.CurrentLandblock == null || merc.IsDead || merc.Teleporting) return;
-                if (!Pick(merc, out var item, out var loc, out var off)) return;
+                lock (s_Lock)
+                    foreach (var (gift, _) in run.Gifts)
+                        if (merc.EquippedObjects.ContainsKey(new ObjectGuid(gift))) run.Worn.Add(gift);
+                if (stepsLeft <= 0 || merc.CurrentLandblock == null || merc.IsDead || merc.Teleporting
+                    || !Pick(merc, run.Tried, out var item, out var loc, out var off))
+                {
+                    Finish(merc, run);
+                    return;
+                }
+                run.Tried.Add(item.Guid.Full);
 
-                foreach (var o in off) merc.HandleActionPutItemInContainer(o.Guid.Full, merc.Guid.Full);
+                var homes = Homes(merc, off);
+                if (homes == null)
+                {
+                    var what = string.Join(" and ", off.Select(o => o.Name));
+                    run.NoRoom[item.Guid.Full] = what;
+                    Mod.Log.Info($"[RevivalGuard] MercGear: {merc.Name} has no room to put away {what} for {item.Name} 0x{item.Guid.Full:X8}");
+                    Later(merc, 0.1, stepsLeft - 1);       // another piece may need no room (a ring, an empty slot)
+                    return;
+                }
+                for (int i = 0; i < off.Count; i++) merc.HandleActionPutItemInContainer(off[i].Guid.Full, homes[i].Guid.Full);
                 var guid = item.Guid.Full;
                 var chain = new ActionChain();
                 chain.AddDelaySeconds(off.Count > 0 ? 0.75 : 0.1);
@@ -82,8 +141,78 @@ namespace RevivalGuard
                 chain.EnqueueChain();
                 Later(merc, 2.0, stepsLeft - 1);
             }
-            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] MercGear: {merc?.Name}: {e.GetType().Name}: {e.Message}"); }
+            catch (Exception e)
+            {
+                Mod.Log.Warn($"[RevivalGuard] MercGear: {merc?.Name}: {e.GetType().Name}: {e.Message}");
+                lock (s_Lock) s_Runs.Remove(merc.Guid.Full);
+            }
         }
+
+        /// <summary>A pack with room for each piece coming off (main pack first, then side packs), or null: the same
+        /// capacity test UnwieldToFullPack makes, counting what this swap already sends to each pack.</summary>
+        static List<Container> Homes(Player merc, List<WorldObject> off)
+        {
+            var packs = new List<Container> { merc };
+            packs.AddRange(merc.Inventory.Values.OfType<Container>());
+            var used = new Dictionary<Container, int>();
+            var homes = new List<Container>();
+            foreach (var o in off)
+            {
+                var home = packs.FirstOrDefault(c =>
+                {
+                    used.TryGetValue(c, out var n);
+                    if (n == 0) return UnwieldToFullPack.Fits(c, o);
+                    var cap = o.UseBackpackSlot ? (c.ContainerCapacity ?? 0) : (c.ItemCapacity ?? 0);
+                    var have = c.Inventory.Values.Count(i => i.UseBackpackSlot == o.UseBackpackSlot);
+                    return cap > have + n;
+                });
+                if (home == null) return null;
+                used[home] = used.TryGetValue(home, out var k) ? k + 1 : 1;
+                homes.Add(home);
+            }
+            return homes;
+        }
+
+        /// <summary>The run is over: gear given and not worn goes back to whoever gave it, with the reason.</summary>
+        static void Finish(Player merc, Run run)
+        {
+            List<(uint item, uint giver)> gifts;
+            lock (s_Lock) { s_Runs.Remove(merc.Guid.Full); gifts = run.Gifts.ToList(); }
+            if (merc.CurrentLandblock == null) return;      // logged out or in portal space: it carries them
+            foreach (var (gift, giverGuid) in gifts)
+            {
+                try
+                {
+                    var wo = merc.GetInventoryItem(gift);         // null: worn now, or the give never landed
+                    if (wo == null || (wo.ValidLocations ?? 0) == 0) continue;   // not gear: kept, as before
+                    string why = run.NoRoom.TryGetValue(gift, out var what) ? $"no room left in the packs to put away the {what}"
+                               : run.Worn.Contains(gift) ? "it already wears something better"
+                               : run.Tried.Contains(gift) || !CanWield(merc, wo) ? "it can't wield that"
+                               : "it already wears something better";
+                    var giver = PlayerManager.GetOnlinePlayer(giverGuid);
+                    if (giver?.Session == null || giver.Location == null || merc.Location == null
+                        || merc.Location.DistanceTo(giver.Location) > RETURN_RANGE)
+                    {
+                        Mod.Log.Info($"[RevivalGuard] MercGear: {merc.Name} keeps {wo.Name} 0x{gift:X8} ({why}); giver gone or out of reach");
+                        continue;
+                    }
+                    if (!giver.CanAddToInventory(wo))
+                    {
+                        Tell(giver, $"{merc.Name} can't use the {wo.Name} ({why}) and carries it for you: your pack is full.");
+                        Mod.Log.Info($"[RevivalGuard] MercGear: {merc.Name} keeps {wo.Name} 0x{gift:X8} ({why}); {giver.Name}'s pack is full");
+                        continue;
+                    }
+                    Tell(giver, $"{merc.Name} hands the {wo.Name} back: {why}.");
+                    Mod.Log.Info($"[RevivalGuard] MercGear: {merc.Name} hands {wo.Name} 0x{gift:X8} back to {giver.Name} ({why})");
+                    if (s_GiveDirect != null) s_GiveDirect.Invoke(merc, new object[] { giver.Guid.Full, gift, 1 });
+                    else merc.HandleActionGiveObjectRequest(giver.Guid.Full, gift, 1);
+                }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] MercGear: {merc.Name} return 0x{gift:X8}: {e.GetType().Name}: {e.Message}"); }
+            }
+        }
+
+        static void Tell(Player p, string text) =>
+            p.Session?.Network.EnqueueSend(new GameMessageSystemChat(text, ChatMessageType.Broadcast));
 
         static bool CanWield(Player merc, WorldObject item)
         {
@@ -105,12 +234,13 @@ namespace RevivalGuard
 
         static int AL(WorldObject w) => w.ArmorLevel ?? 0;
 
-        static bool Pick(Player merc, out WorldObject pick, out EquipMask loc, out List<WorldObject> off)
+        static bool Pick(Player merc, HashSet<uint> tried, out WorldObject pick, out EquipMask loc, out List<WorldObject> off)
         {
             pick = null; loc = 0; off = new List<WorldObject>();
             var carried = merc.GetAllPossessions()
                 .Where(i => !merc.EquippedObjects.ContainsKey(i.Guid) && !(i is Container)
-                            && (i.ValidLocations ?? 0) != 0 && (i.MaxStackSize ?? 1) <= 1 && CanWield(merc, i))
+                            && (i.ValidLocations ?? 0) != 0 && (i.MaxStackSize ?? 1) <= 1 && !tried.Contains(i.Guid.Full)
+                            && CanWield(merc, i))
                 .ToList();
             var melee = merc.GetEquippedMeleeWeapon(true);
             var missile = merc.GetEquippedMissileWeapon();

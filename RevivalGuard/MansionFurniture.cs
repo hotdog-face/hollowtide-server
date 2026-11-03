@@ -427,7 +427,11 @@ namespace RevivalGuard
             }
             d.Wear = wear;
             fig.Stuck = true;
-            fig.Ethereal = true;
+            // solid on the Staff Base (owner M5 261103-0060 "armor stands need collision"): the client blocks on a Stuck,
+            // non-Ethereal object's DAT volume, here the human setup's two 0.48 m spheres (the plinth's setup 0x02000B0E
+            // has none). A house's stand stays walk-through, as retail furniture is. IgnoreCollisions keeps the server's
+            // physics off it either way.
+            fig.Ethereal = !StaffBaseHooks.Is(d.Hook);
             fig.IgnoreCollisions = true;
             fig.GravityStatus = false;
             fig.TimeToRot = -1;
@@ -581,9 +585,10 @@ namespace RevivalGuard
                     if (!weapon && !shield) return "Only weapons, bows, wands and shields go on the weapon rack.";
                     break;
                 case STAND:
-                    const EquipMask worn = EquipMask.Armor | EquipMask.Clothing | EquipMask.HeadWear | EquipMask.HandWear | EquipMask.FootWear;
+                    const EquipMask worn = EquipMask.Armor | EquipMask.Clothing | EquipMask.HeadWear | EquipMask.HandWear | EquipMask.FootWear
+                        | EquipMask.Cloak;   // cloaks too (owner M5 261103-0003, "capes are also not able to be worn on armor stands")
                     if ((it & (ItemType.Armor | ItemType.Clothing)) == 0 || (loc & worn) == 0 || (loc & EquipMask.Shield) != 0)
-                        return "Only armor and clothing go on the armor stand. Shields hang on a weapon rack.";
+                        return "Only armor, clothing and cloaks go on the armor stand. Shields hang on a weapon rack.";
                     foreach (var o in d.Items)
                         if (((o.ValidLocations ?? EquipMask.None) & loc) != 0)
                             return $"The figure already wears {o.Name} there. Take it off first.";
@@ -865,7 +870,9 @@ namespace RevivalGuard
                 // owner double-clicked it expecting to dress it (2026-09-29). Say how instead.
                 if (list.Count == 0 && realGuid == 0 && d.Wcid == STAND)
                 {
-                    Say(p, "Drag armor or clothing from your pack onto the figure to dress it, one piece at a time. Double-click it to take everything back.");
+                    Say(p, StaffBaseHooks.Is(d.Hook)
+                        ? "The figure is bare. Double-click it while wearing a suit to put the suit on it, or drag pieces onto it."
+                        : "Drag armor or clothing from your pack onto the figure to dress it, one piece at a time. Double-click it to take everything back.");
                     return;
                 }
                 if (list.Count == 0) { Refresh(d); return; }
@@ -916,7 +923,8 @@ namespace RevivalGuard
         /// <summary>Would this worn item go on an armor stand (WhyNot's STAND rule, without the one-per-slot check).</summary>
         static bool StandPiece(WorldObject item)
         {
-            const EquipMask worn = EquipMask.Armor | EquipMask.Clothing | EquipMask.HeadWear | EquipMask.HandWear | EquipMask.FootWear;
+            const EquipMask worn = EquipMask.Armor | EquipMask.Clothing | EquipMask.HeadWear | EquipMask.HandWear | EquipMask.FootWear
+                        | EquipMask.Cloak;   // cloaks too (owner M5 261103-0003, "capes are also not able to be worn on armor stands")
             var loc = item.ValidLocations ?? EquipMask.None;
             return (item.ItemType & (ItemType.Armor | ItemType.Clothing)) != 0 && (loc & worn) != 0 && (loc & EquipMask.Shield) == 0;
         }
@@ -1087,7 +1095,7 @@ namespace RevivalGuard
                                             : $"The {spec.Name.ToLowerInvariant()} holds {items.Count} of {limit}: {string.Join(", ", items.Select(i => Label(i)))}.");
                     if (MayHang(p, d)) Say(p, spec.Takes);
                     Say(p, d.Wcid == SHELF ? "Double-click a gem to use it. Pick a stack up (F) to take it back."
-                         : d.Wcid == STAND && StaffBaseHooks.Is(d.Hook) ? "Double-click the figure to trade suits: it takes the armor and clothing you wear and dresses you in its suit. Bare, it just takes yours; wearing nothing, you just take its suit."
+                         : d.Wcid == STAND && StaffBaseHooks.Is(d.Hook) ? "Double-click the figure to trade suits: it takes the armor, clothing and cloak you wear and dresses you in its suit. Bare, it just takes yours; wearing nothing, you just put its suit on. Shift and double-click to take its suit into your pack without wearing it."
                          : d.Wcid == STAND ? "Double-click the figure to take back what you dressed it in. Appraise it to see what it wears."
                          : $"Double-click a {spec.Noun} or pick it up (F) to take it back. Appraise one to see its qualities.");
                 }

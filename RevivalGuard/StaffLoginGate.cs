@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using ACE.Database.Models.Auth;
+using ACE.Server.Managers;
 using ACE.Server.Network;
 using ACE.Server.Network.Enum;
 using ACE.Server.Network.GameMessages.Messages;
@@ -28,13 +29,19 @@ namespace RevivalGuard
     ///   * Any address that fails a password FAILS_ALLOWED times inside WINDOW is refused for LOCKOUT
     ///     (ACE's own TO-DO at the mismatch: "temporary lockout ... preventing brute force").
     ///     Loopback and private ranges are exempt, so the fleet cannot lock itself out.
+    ///   * A SHARED RELAY (rg_shared_relays, comma-separated exact IPs; default webAC's hosted bridge
+    ///     184.193.176.126, its docs/operators.md) carries many players from one address, so one player's typos
+    ///     must not lock out the rest: it is locked out only after RELAY_FAILS_ALLOWED. It is NOT local:
+    ///     staff accounts are still refused from it. Owner 2026-11-03, before listing Hollowtide on the
+    ///     community server list that webAC reads.
     ///
     /// REVIVAL_STAFF_GATE=0 turns the staff rule off (the throttle stays).
     /// </summary>
     [HarmonyPatch]
     static class StaffLoginGate
     {
-        const int FAILS_ALLOWED = 8;
+        const int FAILS_ALLOWED = 8, RELAY_FAILS_ALLOWED = 60;
+        internal const string P_RELAYS = "rg_shared_relays", DEFAULT_RELAYS = "184.193.176.126";
         static readonly TimeSpan WINDOW = TimeSpan.FromMinutes(10);
         static readonly TimeSpan LOCKOUT = TimeSpan.FromMinutes(15);
         const string BAD_PASSWORD = " because the password entered for this account was not correct";
@@ -135,14 +142,45 @@ namespace RevivalGuard
                 var now = DateTime.UtcNow;
                 f.At.Enqueue(now);
                 while (f.At.Count > 0 && now - f.At.Peek() > WINDOW) f.At.Dequeue();
-                if (f.At.Count >= FAILS_ALLOWED)
+                if (f.At.Count >= (IsSharedRelay(key) ? RELAY_FAILS_ALLOWED : FAILS_ALLOWED))
                 {
                     f.LockedUntil = now + LOCKOUT;
                     f.At.Clear();
                     Mod.Log.Warn($"[RevivalGuard] {key} locked out of logins for {LOCKOUT.TotalMinutes:F0} min "
-                        + $"after {FAILS_ALLOWED} failed passwords");
+                        + $"after {(IsSharedRelay(key) ? RELAY_FAILS_ALLOWED : FAILS_ALLOWED)} failed passwords");
                 }
             }
+        }
+
+        /// <summary>Register rg_shared_relays so the admin panel (@modifystring) can change it without a restart.</summary>
+        internal static void Register()
+        {
+            try
+            {
+                var s = MonsterAi.Inner(DefaultPropertyManager.DefaultStringProperties);
+                if (!s.ContainsKey(P_RELAYS)) s[P_RELAYS] = new Property<string>(DEFAULT_RELAYS,
+                    "RevivalGuard: shared relays (comma-separated exact IPs, e.g. webAC's bridge) whose many players share one address: higher login-lockout and new-account limits; never staff");
+            }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] {P_RELAYS}: not registered ({e.Message}); still read, default {DEFAULT_RELAYS}"); }
+        }
+
+        /// <summary>Is this address a shared relay (rg_shared_relays)? Read live, so a changed list applies at once.</summary>
+        internal static bool IsSharedRelay(IPAddress a)
+        {
+            if (a == null) return false;
+            if (a.IsIPv4MappedToIPv6) a = a.MapToIPv4();
+            return IsSharedRelay(a.ToString());
+        }
+
+        static bool IsSharedRelay(string key)
+        {
+            try
+            {
+                foreach (var ip in (PkCommon.Str(P_RELAYS, DEFAULT_RELAYS) ?? "").Split(','))
+                    if (ip.Trim().Length > 0 && string.Equals(ip.Trim(), key, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            catch { }
+            return false;
         }
 
         internal static bool IsLocal(IPAddress a)

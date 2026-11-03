@@ -67,14 +67,21 @@ namespace RevivalGuard
             [0x7576B239] = MansionFurniture.STAND,
         };
 
-        /// <summary>A hook with no house on the Staff Base landblock.</summary>
+        /// <summary>The owner's estate (2026-11-03, test-only for now): the wood island, landblocks EF9A to F49F (x 0xEF-0xF4,
+        /// y 0x9A-0x9F), where the houses he picks from the showroom stand, with room for more. Its houseless hooks are free
+        /// hooks like the Staff Base's.</summary>
+        static bool Estate(ushort lb) => (lb >> 8) >= 0xEF && (lb >> 8) <= 0xF4 && (lb & 0xFF) >= 0x9A && (lb & 0xFF) <= 0x9F;
+
+        static bool Ours(ushort lb) => lb == LANDBLOCK || Estate(lb);
+
+        /// <summary>A hook with no house on the Staff Base landblock or the owner's estate.</summary>
         internal static bool Is(WorldObject wo)
         {
             if (!(wo is Hook hook) || hook.ParentLink != null) return false;
             var lb = hook.Location?.LandblockId.Landblock;
-            if (lb != null) return lb == LANDBLOCK;
+            if (lb != null) return Ours(lb.Value);
             uint g = hook.Guid.Full;   // a static guid is 0x7LLLLnnn
-            return (g & 0xF0000000) == 0x70000000 && ((g >> 12) & 0xFFFF) == LANDBLOCK;
+            return (g & 0xF0000000) == 0x70000000 && Ours((ushort)((g >> 12) & 0xFFFF));
         }
 
         static readonly ConcurrentDictionary<uint, Hook> s_Hooks = new ConcurrentDictionary<uint, Hook>();
@@ -299,6 +306,37 @@ namespace RevivalGuard
             }
         }
 
+        /// <summary>A drop on a free hook sent as a give (this client drops every item on an object as GiveObjectRequest,
+        /// AcNpcInteraction.Give): ACE would hand it to GiveObjectToNPC, which a hook ignores, so nothing was hung (owner M5
+        /// 261103-0056; the fireworks' HookType was the second refusal behind it). Hung as PutIn does. Runs after
+        /// MansionFurniture.GiveTo (a rack or stand on the hook takes its own drops) and ItemLock's refusal.</summary>
+        [HarmonyPatch(typeof(Player), nameof(Player.HandleActionGiveObjectRequest))]
+        static class GiveTo
+        {
+            [HarmonyPriority(Priority.VeryLow)]
+            static bool Prefix(Player __instance, uint targetGuid, uint itemGuid, bool __runOriginal)
+            {
+                if (!__runOriginal) return false;
+                try
+                {
+                    if (!(__instance.CurrentLandblock?.GetObject(targetGuid) is Hook hook) || !Is(hook) || SEED.ContainsKey(hook.Guid.Full)) return true;
+                    var p = __instance;
+                    p.CreateMoveToChain(hook, ok =>
+                    {
+                        try { if (ok) Hang(p, hook, itemGuid); else Refuse(p, itemGuid, null); }
+                        catch (Exception e) { Mod.Log.Error($"[StaffBaseHooks] hang (give): {e}"); Refuse(p, itemGuid, "That did not work. It has been logged for staff."); }
+                    });
+                    return false;
+                }
+                catch (Exception e)
+                {
+                    Mod.Log.Error($"[StaffBaseHooks] give to hook: {e}");
+                    Refuse(__instance, itemGuid, null);
+                    return false;
+                }
+            }
+        }
+
         static void Say(Player p, string line) =>
             p.Session?.Network.EnqueueSend(new GameMessageSystemChat(line, ChatMessageType.Broadcast));
 
@@ -310,11 +348,10 @@ namespace RevivalGuard
             if (equipped) { Refuse(p, itemGuid, $"Take off the {item.Name} first."); return; }
             if (hook.HasItem) { Refuse(p, itemGuid, $"This hook already holds the {hook.Item.Name}. Double-click it to take that down first."); return; }
             if (item is Container) { Refuse(p, itemGuid, "Packs and chests do not go on a hook."); return; }
-            if (((item.HookType ?? 0) & (hook.HookType ?? 0)) == 0)
-            {
-                Refuse(p, itemGuid, (hook.HookType ?? 0) == 2 ? $"The {item.Name} does not go on a wall hook." : $"The {item.Name} does not go on a floor hook.");
-                return;
-            }
+            // Retail puts an item only on a hook its HookType names (Floor 1, Wall 2, Ceiling 4, Yard 8, Roof 0x10), and a house's
+            // hooks keep that rule. The Staff Base's free hooks take any hookable item (owner 2026-11-03 on M5 261103-0056, the
+            // yard/roof-only Fireworks 30735 on a floor hook: "Yes, allow it").
+            if ((item.HookType ?? 0) == 0) { Refuse(p, itemGuid, $"The {item.Name} does not go on a hook."); return; }
             if (p.IsTrading && item.IsBeingTradedOrContainsItemBeingTraded(p.ItemsInTradeWindow)) { Refuse(p, itemGuid, $"The {item.Name} is being traded."); return; }
             if (!p.TryRemoveFromInventoryWithNetworking(item.Guid, out var real, Player.RemoveFromInventoryAction.GiveItem)) { Refuse(p, itemGuid, null); return; }
             real.Location = null;

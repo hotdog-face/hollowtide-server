@@ -6,6 +6,7 @@ using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Factories;
 using ACE.Server.Network.GameEvent.Events;
+using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Network.Structure;
 using ACE.Server.WorldObjects;
 using HarmonyLib;
@@ -38,6 +39,15 @@ namespace RevivalGuard
     ///     hook. Dropping an item on the hook goes to the furniture (MansionFurniture.PutFromContainer);
     ///   - appraising the hook appraises it as ACE does, with no "This hook is owned by" line.
     /// What goes on a rack or stand, and who may take it down, is MansionFurniture's (MayHang / MayTake).
+    ///
+    /// THE FREE HOOKS (owner 2026-11-01: "Yes, build them", his 2026-10-29 ask for "lots of house hooks populated
+    /// so its decorated like a living space"): every other houseless hook on 0x576B (datafix
+    /// 2026-11-02-staff-base-decor-5, FREE_HOOKS in gen_staff_base_home.py) takes one item of the owner's own, as a
+    /// house hook does: drop a housing item from the pack onto an empty hook to hang it (its HookType must fit the
+    /// hook's, wall or floor; equipped items, packs and chests do not go up), double-click the hook to take it back
+    /// into the pack. ACE's own drag path reads hook.House for the hook limits and throws without one, so the move
+    /// is done here, as MansionFurniture moves a piece onto a rack. An empty free hook stays visible (no house
+    /// hides it). ACE keeps a hook with an item in ace_shard, so what hangs there survives restarts.
     /// </summary>
     static class StaffBaseHooks
     {
@@ -49,6 +59,12 @@ namespace RevivalGuard
         {
             [0x7576B200] = MansionFurniture.RACK, [0x7576B201] = MansionFurniture.RACK,
             [0x7576B202] = MansionFurniture.STAND, [0x7576B203] = MansionFurniture.STAND,
+            // the owner's wardrobe (2026-11-02, "ill need about 10 so I can have my various armors"): ten armor stands of
+            // datafix 2026-11-02-staff-base-decor-6 (WARDROBE in gen_staff_base_home.py); MansionFurniture.TradeSuits
+            [0x7576B230] = MansionFurniture.STAND, [0x7576B231] = MansionFurniture.STAND, [0x7576B232] = MansionFurniture.STAND,
+            [0x7576B233] = MansionFurniture.STAND, [0x7576B234] = MansionFurniture.STAND, [0x7576B235] = MansionFurniture.STAND,
+            [0x7576B236] = MansionFurniture.STAND, [0x7576B237] = MansionFurniture.STAND, [0x7576B238] = MansionFurniture.STAND,
+            [0x7576B239] = MansionFurniture.STAND,
         };
 
         /// <summary>A hook with no house on the Staff Base landblock.</summary>
@@ -161,8 +177,9 @@ namespace RevivalGuard
 
         static readonly ConcurrentDictionary<uint, WorldObject> s_Bare = new ConcurrentDictionary<uint, WorldObject>();
 
-        /// <summary>Hook.OnRemoveItem without House.HouseCurrentHooksUsable++ (nothing takes the furniture off
-        /// a staff hook, but if anything ever does, the hook goes back to a bare hook and nothing throws).</summary>
+        /// <summary>Hook.OnRemoveItem without House.HouseCurrentHooksUsable++: the hook goes back to a bare hook
+        /// (a free hook's item taken back; nothing takes a seeded rack or stand off, but if anything ever does,
+        /// nothing throws).</summary>
         [HarmonyPatch(typeof(Hook), "OnRemoveItem")]
         static class RemoveItem
         {
@@ -188,7 +205,8 @@ namespace RevivalGuard
                     removedItem?.EmoteManager.ClearProxy();
                     __instance.EnqueueBroadcastUpdateObject();
                     __instance.SaveBiotaToDatabase();
-                    Mod.Log.Warn($"[StaffBaseHooks] {removedItem?.Name} 0x{removedItem?.Guid.Full:X8} came off hook 0x{__instance.Guid.Full:X8}");
+                    if (SEED.ContainsKey(__instance.Guid.Full))
+                        Mod.Log.Warn($"[StaffBaseHooks] {removedItem?.Name} 0x{removedItem?.Guid.Full:X8} came off hook 0x{__instance.Guid.Full:X8}");
                 }
                 catch (Exception e) { Mod.Log.Error($"[StaffBaseHooks] remove 0x{__instance.Guid.Full:X8}: {e}"); }
                 return false;
@@ -228,7 +246,12 @@ namespace RevivalGuard
                 try
                 {
                     var item = __instance.Item;
-                    if (item != null) item.OnActivate(wo);
+                    if (!SEED.ContainsKey(__instance.Guid.Full) && wo is Player owner)
+                    {
+                        if (item != null) TakeBack(owner, __instance);
+                        else owner.SendTransientError("This hook is empty. Drag a housing item from your pack onto it to hang it.");
+                    }
+                    else if (item != null) item.OnActivate(wo);
                     else if (wo is Player p) p.SendTransientError("This hook is empty.");
                 }
                 catch (Exception e) { Mod.Log.Error($"[StaffBaseHooks] use 0x{__instance.Guid.Full:X8}: {e}"); }
@@ -247,12 +270,22 @@ namespace RevivalGuard
                 try
                 {
                     var holder = HolderOf(itemGuid);
-                    if (holder != null)
+                    if (holder != null && SEED.ContainsKey(holder.Guid.Full))
                     {
                         Refuse(__instance, itemGuid, $"The {holder.Item?.Name ?? "furniture"} is fixed to the wall here.");
                         return false;
                     }
                     if (!(__instance.CurrentLandblock?.GetObject(containerGuid) is Hook hook) || !Is(hook)) return true;
+                    if (!SEED.ContainsKey(hook.Guid.Full))
+                    {
+                        var p = __instance;
+                        p.CreateMoveToChain(hook, ok =>
+                        {
+                            try { if (ok) Hang(p, hook, itemGuid); else Refuse(p, itemGuid, null); }
+                            catch (Exception e) { Mod.Log.Error($"[StaffBaseHooks] hang: {e}"); Refuse(p, itemGuid, "That did not work. It has been logged for staff."); }
+                        });
+                        return false;
+                    }
                     if (!MansionFurniture.PutFromContainer(__instance, hook, itemGuid))
                         Refuse(__instance, itemGuid, "Nothing can be hung on this hook.");
                     return false;
@@ -264,6 +297,57 @@ namespace RevivalGuard
                     return false;
                 }
             }
+        }
+
+        static void Say(Player p, string line) =>
+            p.Session?.Network.EnqueueSend(new GameMessageSystemChat(line, ChatMessageType.Broadcast));
+
+        /// <summary>One of the player's items onto an empty free hook (on the hook's landblock, after the walk).</summary>
+        static void Hang(Player p, Hook hook, uint itemGuid)
+        {
+            var item = p.FindObject(itemGuid, Player.SearchLocations.MyInventory | Player.SearchLocations.MyEquippedItems, out _, out _, out bool equipped);
+            if (item == null) { Refuse(p, itemGuid, null); return; }
+            if (equipped) { Refuse(p, itemGuid, $"Take off the {item.Name} first."); return; }
+            if (hook.HasItem) { Refuse(p, itemGuid, $"This hook already holds the {hook.Item.Name}. Double-click it to take that down first."); return; }
+            if (item is Container) { Refuse(p, itemGuid, "Packs and chests do not go on a hook."); return; }
+            if (((item.HookType ?? 0) & (hook.HookType ?? 0)) == 0)
+            {
+                Refuse(p, itemGuid, (hook.HookType ?? 0) == 2 ? $"The {item.Name} does not go on a wall hook." : $"The {item.Name} does not go on a floor hook.");
+                return;
+            }
+            if (p.IsTrading && item.IsBeingTradedOrContainsItemBeingTraded(p.ItemsInTradeWindow)) { Refuse(p, itemGuid, $"The {item.Name} is being traded."); return; }
+            if (!p.TryRemoveFromInventoryWithNetworking(item.Guid, out var real, Player.RemoveFromInventoryAction.GiveItem)) { Refuse(p, itemGuid, null); return; }
+            real.Location = null;
+            real.PlacementPosition = null;
+            if (!hook.TryAddToInventory(real, 0, false, false))
+            {
+                p.TryCreateInInventoryWithNetworking(real);   // back in the pack, nothing lost
+                Refuse(p, itemGuid, "That did not work. It has been logged for staff.");
+                Mod.Log.Warn($"[StaffBaseHooks] hook 0x{hook.Guid.Full:X8} would not take {real.Name} 0x{real.Guid.Full:X8} from {p.Name}");
+                return;
+            }
+            real.SaveBiotaToDatabase();   // the hook saved itself in OnAddItem
+            Mod.Log.Info($"[StaffBaseHooks] {p.Name} hung {real.Name} 0x{real.Guid.Full:X8} on hook 0x{hook.Guid.Full:X8}");
+            Say(p, $"You hang the {real.Name} on the hook.");
+        }
+
+        /// <summary>A free hook's item back into the player's pack (the double-click, after the walk).</summary>
+        static void TakeBack(Player p, Hook hook)
+        {
+            var item = hook.Item;
+            if (item == null) return;
+            if (!hook.TryRemoveFromInventory(item.Guid, out var real)) { p.SendTransientError("That did not work. It has been logged for staff."); return; }
+            real.ContainerId = null;
+            if (!p.TryCreateInInventoryWithNetworking(real))
+            {
+                hook.TryAddToInventory(real, 0, false, false);   // back on the hook, nothing lost
+                real.SaveBiotaToDatabase();
+                Say(p, $"You have no room for the {real.Name}.");
+                return;
+            }
+            real.SaveBiotaToDatabase();
+            Mod.Log.Info($"[StaffBaseHooks] {p.Name} took {real.Name} 0x{real.Guid.Full:X8} off hook 0x{hook.Guid.Full:X8}");
+            Say(p, $"You take the {real.Name} off the hook.");
         }
 
         /// <summary>ACE's appraisal of a hook reads hook.ParentLink.HouseOwner. For a staff hook the

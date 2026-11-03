@@ -220,6 +220,7 @@ namespace RevivalGuard
                     case UnlockResults.UnlockSuccess:
                         keys = Math.Max(0, (ring.GetProperty(PropertyInt.NumKeys) ?? keys) - 1);
                         player.UpdateProperty(ring, PropertyInt.NumKeys, keys);
+                        ring.SaveBiotaToDatabase();   // the spent key on disk now, not at the 5-minute save (a crash would hand it back)
                         if (Keyrings.RefreshUseFlags(ring, keys, info))
                             player.EnqueueBroadcast(new GameMessageUpdateObject(ring));   // the PWD carries both flags
                         Keyrings.Opened++;

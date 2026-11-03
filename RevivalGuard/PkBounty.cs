@@ -306,7 +306,9 @@ namespace RevivalGuard
             lock (s_Lock)
             {
                 owed = s_State.Owed.TryGetValue(p.Guid.Full, out var v) ? v : 0;
-                if (owed > 0) s_State.Owed.Remove(p.Guid.Full);   // taken out now; whatever is not delivered goes back
+                // taken out now, and on disk before any coin is made (a crash between loses the payout, never pays it
+                // twice); whatever is not delivered goes back
+                if (owed > 0) { s_State.Owed.Remove(p.Guid.Full); Save(); }
             }
             if (owed <= 0) { if (!quiet) PkCommon.Say(p, "You are owed nothing."); return; }
             long delivered = 0, left = owed;

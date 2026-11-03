@@ -272,7 +272,7 @@ namespace RevivalGuard
         {
             foreach (var c in d.Copies)
             {
-                s_Copies.TryRemove(c.Guid.Full, out _);
+                if (s_Copies.TryRemove(c.Guid.Full, out _)) s_Retired[c.Guid.Full] = (d, DateTime.UtcNow);
                 s_Figures.TryRemove(c.Guid.Full, out _);
                 try { if (!c.IsDestroyed) c.Destroy(false); } catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] MansionFurniture: clearing a copy: {e.Message}"); }
             }
@@ -643,9 +643,24 @@ namespace RevivalGuard
         }
 
         /// <summary>The display a guid belongs to: a hook holding furniture, or one of its copies.</summary>
+        /// <summary>COPIES REPLACED IN THE LAST MINUTE, by their old guid. Every piece put up rebuilds the copies (the figure too)
+        /// under new guids, so a selection dropped on a figure (owner 261102-0045, "dragging and dropping multiple items at once
+        /// doesnt work"), given one item at a time by the client, aimed every item after the first at a figure that was gone.
+        /// Such a give lands on the furniture's hook instead. (A destroyed copy's guid is recycled only much later.)</summary>
+        static readonly ConcurrentDictionary<uint, (Display d, DateTime at)> s_Retired = new ConcurrentDictionary<uint, (Display, DateTime)>();
+
         static Display DisplayAt(Player p, uint guid, out WorldObject target)
         {
             target = null;
+            if (!s_Copies.ContainsKey(guid) && s_Retired.TryGetValue(guid, out var old))
+            {
+                if (DateTime.UtcNow - old.at < TimeSpan.FromMinutes(1) && old.d.Hook != null && !old.d.Hook.IsDestroyed)
+                {
+                    target = old.d.Hook;
+                    return old.d;
+                }
+                s_Retired.TryRemove(guid, out _);
+            }
             if (s_Copies.TryGetValue(guid, out var hit))
             {
                 target = hit.d.Copies.FirstOrDefault(c => c.Guid.Full == guid);
@@ -684,7 +699,10 @@ namespace RevivalGuard
             var spec = s_Spec[d.Wcid];
             var item = p.FindObject(itemGuid, Player.SearchLocations.MyInventory | Player.SearchLocations.MyEquippedItems, out _, out _, out bool equipped);
             if (item == null) { Refuse(p, itemGuid, null); return; }
-            if (equipped) { Refuse(p, itemGuid, $"Take off the {item.Name} first."); return; }
+            // A WORN PIECE dragged from the paper doll (owner 261102-0045, "dragging items from equipped to the wooden figure
+            // doesnt work"): on a Staff Base piece it comes off you and goes up, the double-click store's rule (TradeSuits);
+            // a house's furniture still asks you to take it off first.
+            if (equipped && !StaffBaseHooks.Is(d.Hook)) { Refuse(p, itemGuid, $"Take off the {item.Name} first."); return; }
             if (!MayHang(p, d)) { Refuse(p, itemGuid, $"Only someone with storage rights in this house can put things on the {spec.Name.ToLowerInvariant()}."); return; }
             if (item is Container) { Refuse(p, itemGuid, $"Empty packs and chests do not go on the {spec.Name.ToLowerInvariant()}."); return; }
             if (p.IsTrading && item.IsBeingTradedOrContainsItemBeingTraded(p.ItemsInTradeWindow)) { Refuse(p, itemGuid, $"The {item.Name} is being traded."); return; }
@@ -712,12 +730,16 @@ namespace RevivalGuard
                     }
                 }
 
-                int limit = d.Wcid == STAND ? 9 : spec.Slots.Length;
+                int limit = Limit(d);
                 if (d.Items.Count >= limit) { Refuse(p, itemGuid, $"The {spec.Name.ToLowerInvariant()} is full. Take something off first."); return; }
                 int slot = Enumerable.Range(0, limit).First(i => !d.Items.Any(o => (o.GetProperty(SLOT) ?? -1) == i));
 
                 WorldObject real;
-                if (take < stack)
+                if (equipped)
+                {
+                    if (!p.TryDequipObjectWithNetworking(item.Guid, out real, Player.DequipObjectAction.TradeItem)) { Refuse(p, itemGuid, null); return; }
+                }
+                else if (take < stack)
                 {
                     // a split: the stack left in the pack shrinks and a new stack of `take` goes up
                     real = WorldObjectFactory.CreateNewWorldObject(item.WeenieClassId);
@@ -771,6 +793,7 @@ namespace RevivalGuard
                         {
                             if (!ok) return;
                             if (d.Wcid == SHELF) UseGem(__instance, d, hit.real);
+                            else if (d.Wcid == STAND && hit.real == 0 && StaffBaseHooks.Is(d.Hook)) TradeSuits(__instance, d);
                             else TakeDown(__instance, d, hit.real);
                         }
                         catch (Exception e) { Mod.Log.Error($"[RevivalGuard] MansionFurniture: use: {e}"); }
@@ -882,9 +905,130 @@ namespace RevivalGuard
             }
         }
 
+        /// <summary>How many pieces the furniture holds. An armor stand's figure takes 9 (a suit of armor); a Staff Base
+        /// stand takes 16, so a whole suit with its underclothes fits for TradeSuits.</summary>
+        static int Limit(Display d) => d.Wcid == STAND ? (StaffBaseHooks.Is(d.Hook) ? 16 : 9) : s_Spec[d.Wcid].Slots.Length;
+
+        // ------------------------------------------------------------------ trading suits (the Staff Base's stands)
+
+        static readonly System.Reflection.MethodInfo s_WieldCheck = AccessTools.Method(typeof(Player), "CheckWieldRequirements");
+
+        /// <summary>Would this worn item go on an armor stand (WhyNot's STAND rule, without the one-per-slot check).</summary>
+        static bool StandPiece(WorldObject item)
+        {
+            const EquipMask worn = EquipMask.Armor | EquipMask.Clothing | EquipMask.HeadWear | EquipMask.HandWear | EquipMask.FootWear;
+            var loc = item.ValidLocations ?? EquipMask.None;
+            return (item.ItemType & (ItemType.Armor | ItemType.Clothing)) != 0 && (loc & worn) != 0 && (loc & EquipMask.Shield) == 0;
+        }
+
+        /// <summary>THE OWNER'S WARDROBE (owner 2026-11-02: "give me armor housing items so I can line up my suits of armor and
+        /// choose them from the mannequin as i see fit"). On a Staff Base armor stand a double-click on the figure TRADES SUITS:
+        /// the armor and clothing you wear go up on the figure, and the figure's suit comes to you and is put on (ACE's own
+        /// wield, with its requirements; a piece that cannot be worn stays in the pack). An empty figure just takes your suit
+        /// (store it); wearing nothing, you just take the figure's suit back. Jewelry, weapons and shields stay where they are.
+        /// The pieces are the real items throughout (enchantments, attunement and ownership go with them, as on any stand),
+        /// saved at each step. Player houses' stands keep the double-click take-down (TakeDown).</summary>
+        static void TradeSuits(Player p, Display d)
+        {
+            lock (d.Lock)
+            {
+                if (!d.Loaded) { Say(p, "The armor stand is still being set up. Try again in a moment."); return; }
+                var theirs = d.Items.ToList();
+                var notMine = theirs.Where(i => !MayTake(p, d, i)).ToList();
+                if (notMine.Count > 0) { Say(p, $"The figure wears {Label(notMine[0])}, which is not yours to take."); return; }
+                var mine = p.EquippedObjects.Values.Where(StandPiece).ToList();
+                if (theirs.Count == 0 && mine.Count == 0)
+                {
+                    Say(p, "The figure is bare and you wear no armor. Double-click it while wearing a suit to put the suit on it.");
+                    return;
+                }
+                if (mine.Count > Limit(d)) { Say(p, $"You wear {mine.Count} pieces; the figure holds {Limit(d)}."); return; }
+                if (theirs.Count > 0 && p.GetFreeInventorySlots(true) < theirs.Count)
+                {
+                    Say(p, $"Make room in your main pack for {theirs.Count} pieces first: the figure's suit passes through it.");
+                    return;
+                }
+
+                // 1. the figure's suit comes off it (still saved as on the figure until it reaches the pack)
+                foreach (var real in theirs) d.Items.Remove(real);
+
+                // 2. what you wear goes up
+                int up = 0, slot = 0;
+                foreach (var w in mine)
+                {
+                    if (!p.TryDequipObjectWithNetworking(w.Guid, out var real, Player.DequipObjectAction.TradeItem)) continue;
+                    real.Location = null;
+                    real.ContainerId = d.FurnitureGuid;
+                    real.PlacementPosition = null;
+                    real.SetProperty(HUNG_BY, p.Guid.Full);
+                    real.SetProperty(SLOT, slot++);
+                    real.SaveBiotaToDatabase();
+                    d.Items.Add(real);
+                    up++;
+                    Mod.Log.Info($"[RevivalGuard] MansionFurniture: {p.Name} put {real.Name} 0x{real.Guid.Full:X8} on the figure 0x{d.FurnitureGuid:X8} (trade)");
+                }
+
+                // 3. the figure's suit comes to your pack now, and is put on a second later in its own step: the client
+                //    takes a wield only for an item it has already been sent (box 2026-11-02: wielded in the same tick as
+                //    its create, the server had it worn and the client still listed it in the pack)
+                var packed = new List<WorldObject>();
+                foreach (var real in theirs)
+                {
+                    real.RemoveProperty(HUNG_BY);
+                    real.RemoveProperty(SLOT);
+                    real.ContainerId = null;
+                    if (!p.TryCreateInInventoryWithNetworking(real))
+                    {
+                        real.ContainerId = d.FurnitureGuid;   // back on the figure, nothing lost
+                        real.SetProperty(HUNG_BY, p.Guid.Full);
+                        real.SetProperty(SLOT, slot++);
+                        real.SaveBiotaToDatabase();
+                        d.Items.Add(real);
+                        Say(p, $"You have no room for the {real.Name}; it stays on the figure.");
+                        continue;
+                    }
+                    packed.Add(real);
+                    Mod.Log.Info($"[RevivalGuard] MansionFurniture: {p.Name} took {real.Name} 0x{real.Guid.Full:X8} off the figure 0x{d.FurnitureGuid:X8} (trade)");
+                }
+                string Pieces(int n) => n == 1 ? "1 piece" : $"{n} pieces";
+                if (packed.Count == 0)
+                {
+                    Say(p, theirs.Count == 0 ? $"You put your suit on the figure ({Pieces(up)})." : $"You put {Pieces(up)} on the figure.");
+                }
+                else
+                {
+                    var wear = new ActionChain();
+                    wear.AddDelaySeconds(1.0);
+                    wear.AddAction(p, () =>
+                    {
+                        int worn = 0;
+                        foreach (var real in packed)
+                        {
+                            try
+                            {
+                                if (p.FindObject(real.Guid.Full, Player.SearchLocations.MyInventory, out _, out _, out bool on) == null || on) continue;   // moved or worn since
+                                var why = s_WieldCheck?.Invoke(p, new object[] { real }) is WeenieError we ? we : WeenieError.None;
+                                if (why == WeenieError.None && real.ValidLocations is EquipMask loc && loc != EquipMask.None
+                                    && !p.EquippedObjects.Values.Any(o => ((o.CurrentWieldedLocation ?? EquipMask.None) & loc) != 0))
+                                    p.HandleActionGetAndWieldItem(real.Guid.Full, loc);
+                                if (real.WielderId == p.Guid.Full) worn++;
+                            }
+                            catch (Exception e) { Mod.Log.Error($"[RevivalGuard] MansionFurniture: trade wield {real.Name}: {e}"); }
+                        }
+                        int left = packed.Count - worn;
+                        string rest = left > 0 ? $"; {left} left in your pack (you cannot wear {(left == 1 ? "it" : "them")} now)" : "";
+                        Say(p, up == 0 ? $"You take the figure's suit and put it on ({Pieces(worn)}{rest})."
+                                       : $"You trade suits with the figure: {Pieces(up)} up, {worn} put on{rest}.");
+                    });
+                    wear.EnqueueChain();
+                }
+                Refresh(d);
+            }
+        }
+
         static int NextFreeSlot(Display d, WorldObject self)
         {
-            int limit = d.Wcid == STAND ? 9 : s_Spec[d.Wcid].Slots.Length;
+            int limit = Limit(d);
             for (int i = 0; i < limit; i++)
                 if (!d.Items.Any(o => o != self && (o.GetProperty(SLOT) ?? -1) == i)) return i;
             return 0;
@@ -936,13 +1080,14 @@ namespace RevivalGuard
                 {
                     if (!s_Displays.TryGetValue(__instance.Guid.Full, out var d)) { Say(p, $"Hang the {__instance.Name} on a hook in your house first."); return false; }
                     var spec = s_Spec[d.Wcid];
-                    int limit = d.Wcid == STAND ? 9 : spec.Slots.Length;
+                    int limit = Limit(d);
                     List<WorldObject> items;
                     lock (d.Lock) items = d.Items.ToList();
                     Say(p, items.Count == 0 ? $"The {spec.Name.ToLowerInvariant()} is empty ({limit} places for {spec.Holds})."
                                             : $"The {spec.Name.ToLowerInvariant()} holds {items.Count} of {limit}: {string.Join(", ", items.Select(i => Label(i)))}.");
                     if (MayHang(p, d)) Say(p, spec.Takes);
                     Say(p, d.Wcid == SHELF ? "Double-click a gem to use it. Pick a stack up (F) to take it back."
+                         : d.Wcid == STAND && StaffBaseHooks.Is(d.Hook) ? "Double-click the figure to trade suits: it takes the armor and clothing you wear and dresses you in its suit. Bare, it just takes yours; wearing nothing, you just take its suit."
                          : d.Wcid == STAND ? "Double-click the figure to take back what you dressed it in. Appraise it to see what it wears."
                          : $"Double-click a {spec.Noun} or pick it up (F) to take it back. Appraise one to see its qualities.");
                 }

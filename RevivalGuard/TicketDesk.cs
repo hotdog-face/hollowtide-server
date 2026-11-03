@@ -39,7 +39,8 @@ namespace RevivalGuard
     {
         const string MAGIC = "RVT1";
         static readonly HashSet<string> KINDS = new HashSet<string> { "bug", "help", "player", "auto", "crash", "idea", "answer", "usage" };
-        const int MAX_CHUNKS = 48, MAX_CHUNK_CHARS = 600, MAX_PENDING = 2;
+        const int MAX_CHUNKS = 48, MAX_CHUNK_CHARS = 600, MAX_PENDING = 2, MAX_PENDING_STAFF = 16;
+        static bool Staff(Session s) => s != null && s.AccessLevel >= AccessLevel.Sentinel;
         const double PENDING_SECONDS = 180;
         const int PLAYER_PER_10MIN = 5, PLAYER_PER_DAY = 30;      // tickets a person writes
         const int AUTO_PER_SESSION = 5, AUTO_PER_DAY = 40;         // reports the game writes for them
@@ -98,7 +99,9 @@ namespace RevivalGuard
                     st.Open.Remove(stale);
                 if (!st.Open.TryGetValue(f[1], out var p))
                 {
-                    if (st.Open.Count >= MAX_PENDING) { Offences.Add(player, "ticket", "too many unfinished reports; chunk dropped"); return; }
+                    // Staff (Sentinel and up) file reports in bursts while reviewing (owner 2026-11-02: "am i limited in how many bug
+                    // reports i can send?"): no per-account caps for them; the shard's daily ceiling still applies.
+                    if (st.Open.Count >= (Staff(session) ? MAX_PENDING_STAFF : MAX_PENDING)) { Offences.Add(player, "ticket", "too many unfinished reports; chunk dropped"); return; }
                     p = new Pending { Kind = kind, Count = count, Parts = new string[count], Started = now };
                     st.Open[f[1]] = p;
                 }
@@ -152,7 +155,7 @@ namespace RevivalGuard
                 string today = now.ToString("yyMMdd");
                 if (s_Today != today) { s_Today = today; s_TodayCount = CountToday(now); }
                 if (s_TodayCount >= SHARD_PER_DAY) { Mod.Log.Warn($"[RevivalGuard] ticket: shard daily ceiling reached; {kind} from {player.Name} dropped"); return; }
-                if (auto ? day >= AUTO_PER_DAY : (day >= PLAYER_PER_DAY || recent >= PLAYER_PER_10MIN))
+                if (!Staff(session) && (auto ? day >= AUTO_PER_DAY : (day >= PLAYER_PER_DAY || recent >= PLAYER_PER_10MIN)))
                 {
                     if (!auto && !quiet) player.SendTransientError("You have sent several reports recently. Please wait a while before sending another.");
                     Offences.Add(player, "ticket", $"{kind} report over the limit; dropped");

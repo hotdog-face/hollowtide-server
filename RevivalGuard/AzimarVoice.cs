@@ -18,6 +18,9 @@ namespace RevivalGuard
     /// Visits: the AzimarBlessingWait quest his ceremony already stamps (count and last time per character).
     /// Also: a Use while a ceremony runs starts a second one (ACE drops a Use on a busy NPC), the paced spells stop
     /// if their player logs off, and idle lines play only with a player within IDLE_RANGE, at most one per IDLE_GAP.
+    /// His weapon blessings (2026-11-02): the "AzimarWeapon" step casts them (AzimarWeaponBlessing, its own switches).
+    /// The tell after them ("AzimarLines:weapon") stays quiet when an enchantable weapon is wielded or none were cast,
+    /// else says they wait on the player (weapon.none) or the weapon refuses them (weapon.proof).
     ///   @modifybool azimar_voice false     his plain fallback lines; ACE's busy rule
     ///   @modifylong azimar_hour_offset N   hours added to the server clock for his time of day (box/OVH are UTC)
     /// </summary>
@@ -73,6 +76,17 @@ namespace RevivalGuard
             var l = new List<string> { "greet.return", "greet.band." + Band(level), "greet.time." + TimeOfDay(hour) };
             if (visits >= 9) l.Add("greet.often");
             return l;
+        }
+
+        /// <summary>The tell after his weapon auras: null (quiet) when an enchantable weapon or wand is wielded (the auras
+        /// work on it), "weapon.none" when none is, "weapon.proof" when what is wielded refuses enchantment (ACE adds the
+        /// wielder's auras only to an IsEnchantable weapon). Wielded = equipped in a selectable slot, a weapon or caster.</summary>
+        internal static string WeaponPool(Creature p)
+        {
+            var held = p.EquippedObjects.Values.Where(i => (i.ItemType & (ItemType.Weapon | ItemType.Caster)) != 0
+                && (i.ValidLocations & EquipMask.Selectable) != 0).ToList();
+            if (held.Count == 0) return "weapon.none";
+            return held.Any(i => i.IsEnchantable) ? null : "weapon.proof";
         }
 
         // ---- the hooks ----
@@ -194,7 +208,15 @@ namespace RevivalGuard
         internal static bool Emote(EmoteManager em, PropertiesEmote set, PropertiesEmoteAction a, WorldObject target, ref float result)
         {
             var wo = em.WorldObject;
-            if (a == null || wo == null || !AzimarThemeRule.IsAzimar(wo.WeenieClassId) || !On) return true;
+            if (a == null || wo == null || !AzimarThemeRule.IsAzimar(wo.WeenieClassId)) return true;
+
+            // his weapon auras (AzimarWeaponBlessing): an inert step in his table, cast here whatever his voice switch says
+            if (a.TestString == AzimarWeaponBlessing.TAG)
+            {
+                result = target is Player wp && PlayerManager.GetOnlinePlayer(wp.Guid) != null ? Math.Max(0f, AzimarWeaponBlessing.Bless(wo, wp)) : 0;
+                return false;
+            }
+            if (!On) return true;
 
             // a paced spell for a player who has gone: the rest of his ceremony stops quietly
             if (a.Type == (uint)EmoteType.CastSpellInstant)
@@ -213,10 +235,17 @@ namespace RevivalGuard
                 target = p;
             }
             else if (p != null && PlayerManager.GetOnlinePlayer(p.Guid) == null) { result = 0; return false; }
+            if (kind == "weapon")
+            {
+                var pool = p == null || AzimarWeaponBlessing.LevelFor(p) <= 0 ? null : WeaponPool(p);
+                if (pool == null) { result = 0; return false; }
+                kind = pool;
+            }
 
             var line = Line(wo, kind, p);
             if (line == null) return true;   // no pool: his own fallback Message
-            var said = new PropertiesEmoteAction { Type = a.Type, Extent = a.Extent, Message = line };
+            // an inert step (type 0, the weapon tell) speaks as a Tell
+            var said = new PropertiesEmoteAction { Type = a.Type == 0 ? (uint)EmoteType.Tell : a.Type, Extent = a.Extent, Message = line };
             result = em.ExecuteEmote(set, said, target);
             return false;
         }
@@ -226,7 +255,7 @@ namespace RevivalGuard
     static class AzimarVoiceEmote
     {
         static bool s_Done;
-        static bool Prepare() { if (!s_Done) { s_Done = true; AzimarVoice.Register(); } return true; }
+        static bool Prepare() { if (!s_Done) { s_Done = true; AzimarVoice.Register(); AzimarWeaponBlessing.Register(); } return true; }
 
         static bool Prefix(EmoteManager __instance, PropertiesEmote emoteSet, PropertiesEmoteAction emote, WorldObject targetObject, ref float __result)
         {

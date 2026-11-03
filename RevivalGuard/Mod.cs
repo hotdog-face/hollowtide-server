@@ -53,6 +53,7 @@ namespace RevivalGuard
             MagicRim.Register();
             PkDeathLoot.Register();
             Keyrings.Register();
+            TradeSafe.Register();
             AuditTrail.Register();
             CharacterSnapshot.Register();
             Bestow.Register();

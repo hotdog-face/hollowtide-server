@@ -430,20 +430,29 @@ namespace RevivalGuard
                     else Close(x, State.Cancelled, now);
                 if (!Save()) { Mod.Log.Error("[RevivalGuard] Broker: ledger not written; buy refused"); Load(); Done(false); return; }
             }
-            // 2. the items
+            // 2. the money, BEFORE the items: its removal reaches the database queue first (DupeGuard saves a shrunk stack at
+            // once, a spent one is deleted at once), so a crash between can lose the payment but never keep both
+            // (docs/findings/dupe-recheck-2026-11-02.md). Pay takes nothing when it returns false.
+            long owe = total;
+            NoteChange.t_Change = 0;
+            if (owe > 0 && !NoteChange.Pay(p, owe))
+            {
+                NoteChange.t_Change = 0;
+                lock (s_Lock) { foreach (var (x, _) in picks) Undo(x); Save(); }
+                Mod.Log.Error($"[RevivalGuard] Broker: {p.Name} could not pay {owe:N0} after the check passed; buy refused");
+                Done(false); return;
+            }
+            long change = NoteChange.t_Change; NoteChange.t_Change = 0;
+            // 3. the items; one that will not move is refunded with the change
             var moved = new List<(Listing x, WorldObject wo)>();
             foreach (var (x, wo) in picks)
             {
                 if (v.TryRemoveFromInventory(wo.Guid, out var taken) && p.TryCreateInInventoryWithNetworking(taken)) { moved.Add((x, taken)); continue; }
                 if (taken != null && taken.ContainerId != p.Guid.Full) v.TryAddToInventory(taken);   // back where it was
+                if (paidFor.Any(q => q.x == x)) change += x.Price;
                 lock (s_Lock) Undo(x);
-                Log("buy-failed", p.Name, $"{x.ItemName} {G(x.Item)} could not move; listing restored");
+                Log("buy-failed", p.Name, $"{x.ItemName} {G(x.Item)} could not move; listing restored, price refunded");
             }
-            // 3. the money for what moved
-            long owe = moved.Where(m => paidFor.Any(q => q.x == m.x)).Sum(m => m.x.Price);
-            NoteChange.t_Change = 0;
-            if (owe > 0 && !NoteChange.Pay(p, owe)) Mod.Log.Error($"[RevivalGuard] Broker: {p.Name} could not pay {owe:N0} after the check passed");
-            long change = NoteChange.t_Change; NoteChange.t_Change = 0;
             if (change > 0) NoteChange.GiveChange(p, change);
             NoteChange.Recount(p);
             // 4. saved at once, in this order on the database queue: the items, then the buyer (coin and items)

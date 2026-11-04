@@ -71,7 +71,9 @@ namespace RevivalGuard
 
         static readonly (string key, bool def, string desc)[] s_Bools =
         {
-            (P_CASTER, true, "RevivalGuard MonsterAi: casters re-roll spells instead of melee-chasing, and back off when crowded"),
+            // P_CASTER off by default (owner 2026-11-03): the Withered Atoll shamans backed away from players, and it is a common
+            // botting spot where players expect retail behaviour.
+            (P_CASTER, false, "RevivalGuard MonsterAi: casters re-roll spells instead of melee-chasing, and back off when crowded"),
             (P_KITE, true, "RevivalGuard MonsterAi: missile users step back when their target closes, then shoot"),
             (P_PACK, true, "RevivalGuard MonsterAi: a hurt monster wakes same-family monsters in range and line of sight"),
             (P_SPREAD, true, "RevivalGuard MonsterAi: melee chasers of one target take slots around it instead of stacking"),
@@ -133,7 +135,7 @@ namespace RevivalGuard
             {
                 if (rt < s_CfgNext) return s_Cfg;
                 var n = new Cfg();
-                n.Caster = PropertyManager.GetBool(P_CASTER, true).Item;
+                n.Caster = PropertyManager.GetBool(P_CASTER, false).Item;
                 n.Kite = PropertyManager.GetBool(P_KITE, true).Item;
                 n.Pack = PropertyManager.GetBool(P_PACK, true).Item;
                 n.Spread = PropertyManager.GetBool(P_SPREAD, true).Item;

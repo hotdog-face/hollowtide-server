@@ -23,7 +23,9 @@ UPDATE ace_world.weenie_properties_string SET value = 'Bael''Zharon Mask (protot
 DELETE FROM ace_world.weenie_properties_string WHERE object_Id = 907990 AND type = 16;
 DELETE FROM ace_world.weenie_properties_anim_part WHERE object_Id = 907990 AND `index` = 16;
 INSERT INTO ace_world.weenie_properties_anim_part (object_Id, `index`, animation_Id) SELECT 907990, 16, 16785381 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 907990);
-UPDATE ace_world.weenie_properties_d_i_d SET value = 100689128 WHERE object_Id = 907990 AND type = 8;
+UPDATE ace_world.weenie_properties_d_i_d SET value = 117383171 WHERE object_Id = 907990 AND type = 8;
+DELETE FROM ace_world.weenie_properties_bool WHERE object_Id = 907990 AND type = 84;
+INSERT INTO ace_world.weenie_properties_bool (object_Id, type, value) SELECT 907990, 84, 1 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 907990);
 
 DELETE FROM ace_world.weenie WHERE class_Id = 907991 AND class_Name = 'ace907991-costumegaerlan';
 INSERT INTO ace_world.weenie (class_Id, class_Name, type) SELECT 907991, 'ace907991-costumegaerlan', type FROM ace_world.weenie WHERE class_Id = 36352;
@@ -42,7 +44,9 @@ UPDATE ace_world.weenie_properties_string SET value = 'Gaerlan Mask (prototype)'
 DELETE FROM ace_world.weenie_properties_string WHERE object_Id = 907991 AND type = 16;
 DELETE FROM ace_world.weenie_properties_anim_part WHERE object_Id = 907991 AND `index` = 16;
 INSERT INTO ace_world.weenie_properties_anim_part (object_Id, `index`, animation_Id) SELECT 907991, 16, 16787999 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 907991);
-UPDATE ace_world.weenie_properties_d_i_d SET value = 100689123 WHERE object_Id = 907991 AND type = 8;
+UPDATE ace_world.weenie_properties_d_i_d SET value = 117383172 WHERE object_Id = 907991 AND type = 8;
+DELETE FROM ace_world.weenie_properties_bool WHERE object_Id = 907991 AND type = 84;
+INSERT INTO ace_world.weenie_properties_bool (object_Id, type, value) SELECT 907991, 84, 1 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 907991);
 
 DELETE FROM ace_world.weenie WHERE class_Id = 907992 AND class_Name = 'ace907992-costumelich';
 INSERT INTO ace_world.weenie (class_Id, class_Name, type) SELECT 907992, 'ace907992-costumelich', type FROM ace_world.weenie WHERE class_Id = 36352;
@@ -80,7 +84,9 @@ UPDATE ace_world.weenie_properties_string SET value = 'Santa Sclavus Mask (proto
 DELETE FROM ace_world.weenie_properties_string WHERE object_Id = 907993 AND type = 16;
 DELETE FROM ace_world.weenie_properties_anim_part WHERE object_Id = 907993 AND `index` = 16;
 INSERT INTO ace_world.weenie_properties_anim_part (object_Id, `index`, animation_Id) SELECT 907993, 16, 16793437 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 907993);
-UPDATE ace_world.weenie_properties_d_i_d SET value = 100672163 WHERE object_Id = 907993 AND type = 8;
+UPDATE ace_world.weenie_properties_d_i_d SET value = 117383173 WHERE object_Id = 907993 AND type = 8;
+DELETE FROM ace_world.weenie_properties_bool WHERE object_Id = 907993 AND type = 84;
+INSERT INTO ace_world.weenie_properties_bool (object_Id, type, value) SELECT 907993, 84, 1 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 907993);
 
 DELETE FROM ace_world.weenie WHERE class_Id = 907994 AND class_Name = 'ace907994-costumebronzebanderling';
 INSERT INTO ace_world.weenie (class_Id, class_Name, type) SELECT 907994, 'ace907994-costumebronzebanderling', type FROM ace_world.weenie WHERE class_Id = 36352;
@@ -137,7 +143,9 @@ UPDATE ace_world.weenie_properties_string SET value = 'Void Lord Mask (prototype
 DELETE FROM ace_world.weenie_properties_string WHERE object_Id = 907996 AND type = 16;
 DELETE FROM ace_world.weenie_properties_anim_part WHERE object_Id = 907996 AND `index` = 16;
 INSERT INTO ace_world.weenie_properties_anim_part (object_Id, `index`, animation_Id) SELECT 907996, 16, 16792600 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 907996);
-UPDATE ace_world.weenie_properties_d_i_d SET value = 100690119 WHERE object_Id = 907996 AND type = 8;
+UPDATE ace_world.weenie_properties_d_i_d SET value = 117383170 WHERE object_Id = 907996 AND type = 8;
+DELETE FROM ace_world.weenie_properties_bool WHERE object_Id = 907996 AND type = 84;
+INSERT INTO ace_world.weenie_properties_bool (object_Id, type, value) SELECT 907996, 84, 1 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 907996);
 
 DELETE FROM ace_world.weenie WHERE class_Id = 907997 AND class_Name = 'ace907997-costumearchfiend';
 INSERT INTO ace_world.weenie (class_Id, class_Name, type) SELECT 907997, 'ace907997-costumearchfiend', type FROM ace_world.weenie WHERE class_Id = 36352;
@@ -156,7 +164,9 @@ UPDATE ace_world.weenie_properties_string SET value = 'Archfiend Mask (prototype
 DELETE FROM ace_world.weenie_properties_string WHERE object_Id = 907997 AND type = 16;
 DELETE FROM ace_world.weenie_properties_anim_part WHERE object_Id = 907997 AND `index` = 16;
 INSERT INTO ace_world.weenie_properties_anim_part (object_Id, `index`, animation_Id) SELECT 907997, 16, 16792458 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 907997);
-UPDATE ace_world.weenie_properties_d_i_d SET value = 100671025 WHERE object_Id = 907997 AND type = 8;
+UPDATE ace_world.weenie_properties_d_i_d SET value = 117383174 WHERE object_Id = 907997 AND type = 8;
+DELETE FROM ace_world.weenie_properties_bool WHERE object_Id = 907997 AND type = 84;
+INSERT INTO ace_world.weenie_properties_bool (object_Id, type, value) SELECT 907997, 84, 1 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 907997);
 
 DELETE FROM ace_world.weenie WHERE class_Id = 907998 AND class_Name = 'ace907998-costumestrawdrudge';
 INSERT INTO ace_world.weenie (class_Id, class_Name, type) SELECT 907998, 'ace907998-costumestrawdrudge', type FROM ace_world.weenie WHERE class_Id = 36352;
@@ -232,7 +242,9 @@ UPDATE ace_world.weenie_properties_string SET value = 'Count Dardante Mask (prot
 DELETE FROM ace_world.weenie_properties_string WHERE object_Id = 908001 AND type = 16;
 DELETE FROM ace_world.weenie_properties_anim_part WHERE object_Id = 908001 AND `index` = 16;
 INSERT INTO ace_world.weenie_properties_anim_part (object_Id, `index`, animation_Id) SELECT 908001, 16, 16793193 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 908001);
-UPDATE ace_world.weenie_properties_d_i_d SET value = 100689697 WHERE object_Id = 908001 AND type = 8;
+UPDATE ace_world.weenie_properties_d_i_d SET value = 117383175 WHERE object_Id = 908001 AND type = 8;
+DELETE FROM ace_world.weenie_properties_bool WHERE object_Id = 908001 AND type = 84;
+INSERT INTO ace_world.weenie_properties_bool (object_Id, type, value) SELECT 908001, 84, 1 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 908001);
 
 DELETE FROM ace_world.weenie WHERE class_Id = 908002 AND class_Name = 'ace908002-costumetumerokpriest';
 INSERT INTO ace_world.weenie (class_Id, class_Name, type) SELECT 908002, 'ace908002-costumetumerokpriest', type FROM ace_world.weenie WHERE class_Id = 36352;
@@ -346,7 +358,9 @@ UPDATE ace_world.weenie_properties_string SET value = 'Patriarch''s Executioner 
 DELETE FROM ace_world.weenie_properties_string WHERE object_Id = 908007 AND type = 16;
 DELETE FROM ace_world.weenie_properties_anim_part WHERE object_Id = 908007 AND `index` = 16;
 INSERT INTO ace_world.weenie_properties_anim_part (object_Id, `index`, animation_Id) SELECT 908007, 16, 16789491 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 908007);
-UPDATE ace_world.weenie_properties_d_i_d SET value = 100672164 WHERE object_Id = 908007 AND type = 8;
+UPDATE ace_world.weenie_properties_d_i_d SET value = 117383176 WHERE object_Id = 908007 AND type = 8;
+DELETE FROM ace_world.weenie_properties_bool WHERE object_Id = 908007 AND type = 84;
+INSERT INTO ace_world.weenie_properties_bool (object_Id, type, value) SELECT 908007, 84, 1 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 908007);
 
 DELETE FROM ace_world.weenie WHERE class_Id = 908008 AND class_Name = 'ace908008-costumetormentedattendant';
 INSERT INTO ace_world.weenie (class_Id, class_Name, type) SELECT 908008, 'ace908008-costumetormentedattendant', type FROM ace_world.weenie WHERE class_Id = 36352;
@@ -384,7 +398,9 @@ UPDATE ace_world.weenie_properties_string SET value = 'Ka''hiri Mask (prototype)
 DELETE FROM ace_world.weenie_properties_string WHERE object_Id = 908009 AND type = 16;
 DELETE FROM ace_world.weenie_properties_anim_part WHERE object_Id = 908009 AND `index` = 16;
 INSERT INTO ace_world.weenie_properties_anim_part (object_Id, `index`, animation_Id) SELECT 908009, 16, 16793475 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 908009);
-UPDATE ace_world.weenie_properties_d_i_d SET value = 100689233 WHERE object_Id = 908009 AND type = 8;
+UPDATE ace_world.weenie_properties_d_i_d SET value = 117383177 WHERE object_Id = 908009 AND type = 8;
+DELETE FROM ace_world.weenie_properties_bool WHERE object_Id = 908009 AND type = 84;
+INSERT INTO ace_world.weenie_properties_bool (object_Id, type, value) SELECT 908009, 84, 1 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 908009);
 
 DELETE FROM ace_world.weenie WHERE class_Id = 908010 AND class_Name = 'ace908010-costumefiunluunere';
 INSERT INTO ace_world.weenie (class_Id, class_Name, type) SELECT 908010, 'ace908010-costumefiunluunere', type FROM ace_world.weenie WHERE class_Id = 36352;
@@ -441,7 +457,9 @@ UPDATE ace_world.weenie_properties_string SET value = 'Aun Hareltah Mask (protot
 DELETE FROM ace_world.weenie_properties_string WHERE object_Id = 908012 AND type = 16;
 DELETE FROM ace_world.weenie_properties_anim_part WHERE object_Id = 908012 AND `index` = 16;
 INSERT INTO ace_world.weenie_properties_anim_part (object_Id, `index`, animation_Id) SELECT 908012, 16, 16786158 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 908012);
-UPDATE ace_world.weenie_properties_d_i_d SET value = 100674855 WHERE object_Id = 908012 AND type = 8;
+UPDATE ace_world.weenie_properties_d_i_d SET value = 117383169 WHERE object_Id = 908012 AND type = 8;
+DELETE FROM ace_world.weenie_properties_bool WHERE object_Id = 908012 AND type = 84;
+INSERT INTO ace_world.weenie_properties_bool (object_Id, type, value) SELECT 908012, 84, 1 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 908012);
 
 DELETE FROM ace_world.weenie WHERE class_Id = 908013 AND class_Name = 'ace908013-costumebaronnuvillus';
 INSERT INTO ace_world.weenie (class_Id, class_Name, type) SELECT 908013, 'ace908013-costumebaronnuvillus', type FROM ace_world.weenie WHERE class_Id = 36352;
@@ -802,6 +820,9 @@ UPDATE ace_world.weenie_properties_d_i_d SET value = 100667455 WHERE object_Id =
 DELETE FROM ace_world.weenie_properties_float WHERE object_Id = 908040 AND type = 39;
 DELETE FROM ace_world.weenie_properties_int WHERE object_Id = 908040 AND type IN (158, 159, 160);
 INSERT INTO ace_world.weenie_properties_d_i_d (object_Id, type, value) SELECT 908040, 9070, 33557498 FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 908040);
+UPDATE ace_world.weenie_properties_d_i_d SET value = 1073741875 WHERE object_Id = 908040 AND type = 27;
+DELETE FROM ace_world.weenie_properties_string WHERE object_Id = 908040 AND type = 9070;
+INSERT INTO ace_world.weenie_properties_string (object_Id, type, value) SELECT 908040, 9070, 'Toast' FROM DUAL WHERE EXISTS (SELECT 1 FROM ace_world.weenie WHERE class_Id = 908040);
 
 DELETE FROM ace_world.weenie WHERE class_Id = 908035 AND class_Name = 'ace908035-costumecastingstein';
 INSERT INTO ace_world.weenie (class_Id, class_Name, type) SELECT 908035, 'ace908035-costumecastingstein', type FROM ace_world.weenie WHERE class_Id = 23774;

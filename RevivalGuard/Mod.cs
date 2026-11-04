@@ -62,10 +62,12 @@ namespace RevivalGuard
             ModChannel.Register();
             Mail.Register();
             Broker.Register();
+            DressingRoom.Register();
             DiscordBridge.Register();
             ItemLink.Register();
             PerfStat.Register();
             AccountCreationCap.Register();
+            RetailWelcome.Register();
             LoginTokens.Register();
             LfgBoard.Register();
             FeatureBoard.Register();
@@ -564,6 +566,11 @@ namespace RevivalGuard
                 finally { st.Position = pos; }   // the real handler reads it again
             }
             catch { }
+
+            // The staff Dressing Room's panel speaks one @dress line per click (DressingRoom.cs); Sentinels are below
+            // Admin, so without this a few quick colour clicks would be dropped as spam.
+            if (opcode == GameActionType.Talk && session.AccessLevel >= AccessLevel.Sentinel && text != null
+                && text.TrimStart().StartsWith("@dress ", StringComparison.OrdinalIgnoreCase)) return true;
 
             var h = s_Hist.GetOrCreateValue(session);
             var now = DateTime.UtcNow;

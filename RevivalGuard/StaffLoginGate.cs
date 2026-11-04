@@ -24,7 +24,9 @@ namespace RevivalGuard
     ///
     ///   * An account above Player logs in only from loopback, RFC 1918 private ranges, Tailscale
     ///     (100.64.0.0/10), IPv6 loopback/link-local/ULA, or an address listed in
-    ///     REVIVAL_STAFF_ALLOW (comma-separated, exact IPs). Anywhere else gets the wrong-password
+    ///     REVIVAL_STAFF_ALLOW (comma-separated, exact IPs), or in the live property rg_staff_allow (the same form; owner
+    ///     2026-11-03, away from home for about 5 days: staff tell us their current IP and it is added from the OVH
+    ///     console with no restart, and removed when they are home). Anywhere else gets the wrong-password
     ///     boot, word for word, so the gate does not confirm that a staff account exists.
     ///   * Any address that fails a password FAILS_ALLOWED times inside WINDOW is refused for LOCKOUT
     ///     (ACE's own TO-DO at the mismatch: "temporary lockout ... preventing brute force").
@@ -42,6 +44,7 @@ namespace RevivalGuard
     {
         const int FAILS_ALLOWED = 8, RELAY_FAILS_ALLOWED = 60;
         internal const string P_RELAYS = "rg_shared_relays", DEFAULT_RELAYS = "184.193.176.126";
+        internal const string P_STAFF_ALLOW = "rg_staff_allow";
         static readonly TimeSpan WINDOW = TimeSpan.FromMinutes(10);
         static readonly TimeSpan LOCKOUT = TimeSpan.FromMinutes(15);
         const string BAD_PASSWORD = " because the password entered for this account was not correct";
@@ -91,7 +94,7 @@ namespace RevivalGuard
 
                 if (account == null) return true;   // ACE answers "account does not exist" itself
 
-                if (s_GateOn && account.AccessLevel > 0 && !local && !s_Allow.Contains(key))
+                if (s_GateOn && account.AccessLevel > 0 && !local && !s_Allow.Contains(key) && !InLiveAllow(key))
                 {
                     Mod.Log.Warn($"[RevivalGuard] staff login refused: account '{account.AccountName}' "
                         + $"(level {account.AccessLevel}) from {key}, outside the shard's network");
@@ -162,6 +165,25 @@ namespace RevivalGuard
                     "RevivalGuard: shared relays (comma-separated exact IPs, e.g. webAC's bridge) whose many players share one address: higher login-lockout and new-account limits; never staff");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] {P_RELAYS}: not registered ({e.Message}); still read, default {DEFAULT_RELAYS}"); }
+            try
+            {
+                var s = MonsterAi.Inner(DefaultPropertyManager.DefaultStringProperties);
+                if (!s.ContainsKey(P_STAFF_ALLOW)) s[P_STAFF_ALLOW] = new Property<string>("",
+                    "RevivalGuard StaffLoginGate: extra exact IPs (comma-separated) staff may log in from, beside REVIVAL_STAFF_ALLOW; empty = none");
+            }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] {P_STAFF_ALLOW}: not registered ({e.Message}); still read, default empty"); }
+        }
+
+        /// <summary>Is this address in rg_staff_allow? Read live, so an added or removed IP applies at the next login.</summary>
+        static bool InLiveAllow(string key)
+        {
+            try
+            {
+                foreach (var ip in (PkCommon.Str(P_STAFF_ALLOW, "") ?? "").Split(','))
+                    if (ip.Trim().Length > 0 && string.Equals(ip.Trim(), key, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            catch { }
+            return false;
         }
 
         /// <summary>Is this address a shared relay (rg_shared_relays)? Read live, so a changed list applies at once.</summary>

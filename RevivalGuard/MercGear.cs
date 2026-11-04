@@ -234,6 +234,14 @@ namespace RevivalGuard
 
         static int AL(WorldObject w) => w.ArmorLevel ?? 0;
 
+        // AL on every body part the piece covers, plus one a part so plain clothing still counts as covering it
+        static int Protection(WorldObject w)
+        {
+            uint parts = (uint)(w.ClothingPriority ?? 0), n = 0;
+            for (; parts != 0; parts &= parts - 1) n++;
+            return (AL(w) + 1) * (int)n;
+        }
+
         static bool Pick(Player merc, HashSet<uint> tried, out WorldObject pick, out EquipMask loc, out List<WorldObject> off)
         {
             pick = null; loc = 0; off = new List<WorldObject>();
@@ -275,19 +283,25 @@ namespace RevivalGuard
                     return true;
                 }
 
-            // 3. armor and clothing, the biggest armor gain first
+            // 3. armor and clothing, the biggest protection gain first. TOTAL PROTECTION, NOT THE BEST PIECE (ticket
+            // 261103-0032, "he gave it right back"): a stripped Brannoc wearing only 100-AL Bracers handed back a
+            // Luminous Robe (AL 100 on seven body parts) and an Olthoi Amuli Coat (AL 100 on three), because each was
+            // held against the best single piece it would replace (100 is not more than 100). What it replaces is what
+            // ACE makes it take off, the pieces in the same equip slots (a shirt under a coat stays), and protection is
+            // AL on every body part a piece covers, so a robe over bare legs and arms wins.
             WorldObject best = null; List<WorldObject> bestOff = null; int bestGain = int.MinValue;
             foreach (var a in carried.Where(i => i is Clothing && (i.ClothingPriority ?? 0) != 0 && !i.IsShield))
             {
-                var worn = merc.GetEquippedClothingArmor(a.ClothingPriority ?? 0);
+                var slots = a.ValidLocations ?? 0;
+                var worn = merc.EquippedObjects.Values
+                    .Where(e => !(e is MeleeWeapon) && !(e is MissileLauncher) && !e.IsShield
+                                && ((e.CurrentWieldedLocation ?? 0) & slots) != 0)
+                    .Distinct().ToList();
                 int gain;
-                if (worn.Count == 0) gain = 1000 + AL(a);                               // an empty slot first
+                if (worn.Count == 0) gain = 1000000 + Protection(a);                  // empty slots first
                 else
                 {
-                    CoverageMask covered = 0;
-                    foreach (var w in worn) covered |= w.ClothingPriority ?? 0;
-                    if ((covered & ~(a.ClothingPriority ?? 0)) != 0) continue;         // would strip more than it covers
-                    gain = AL(a) - worn.Max(AL);
+                    gain = Protection(a) - worn.Sum(Protection);
                     if (gain <= 0) continue;
                 }
                 if (gain > bestGain) { best = a; bestOff = worn; bestGain = gain; }

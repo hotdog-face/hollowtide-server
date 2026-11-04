@@ -1,4 +1,7 @@
+using System.Collections.Concurrent;
 using System.Linq;
+using ACE.Server.Network;
+using ACE.Server.Network.GameAction.Actions;
 using ACE.Server.Managers;
 using ACE.Server.WorldObjects;
 using HarmonyLib;
@@ -106,6 +109,15 @@ namespace RevivalGuard
         /// why this is 90 s and not ACE's five minutes.</summary>
         const double FORCE_LOGOFF_SECONDS = 90.0;
 
+        /// <summary>A client that has NOT sent LoginComplete for this teleport is still showing portal space (ours holds
+        /// it until the world is ready: 25 s, 90 s on a first visit or in the browser, then a 100 s fallback). ACE keeps
+        /// the player hidden and unattackable until then, as retail did; completing it at 20 s let a PK kill a slow loader
+        /// who saw only the tunnel (ticket 261103-0036). Such a player waits this long before the arms above.</summary>
+        const double CLIENT_PORTAL_SECONDS = 120.0;
+
+        /// <summary>When each player's client last sent LoginComplete (unix time), from <see cref="LoginCompleteSeen"/>.</summary>
+        internal static readonly ConcurrentDictionary<uint, double> s_ClientArrived = new ConcurrentDictionary<uint, double>();
+
         static void Postfix()
         {
             try { Run(); }
@@ -125,11 +137,15 @@ namespace RevivalGuard
                 var started = p.LastTeleportStartTimestamp;
                 if (started == null || started <= 0) continue;
                 var stuck = now - started.Value;
-                if (stuck < STUCK_SECONDS) continue;
+                // the client's own LoginComplete for THIS teleport: then only the retry chain can be holding it
+                bool clientDone = s_ClientArrived.TryGetValue(p.Guid.Full, out var at) && at >= started.Value;
+                double grace = clientDone ? 0.0 : CLIENT_PORTAL_SECONDS - STUCK_SECONDS;
+                if (stuck < STUCK_SECONDS + grace) continue;
 
                 var who = $"{p.Name} (0x{p.Guid.Full:X8}) was Teleporting for {stuck:F0}s";
 
-                if (stuck >= FORCE_LOGOFF_SECONDS)
+                if (!clientDone) who += " (its client never said portal space ended)";
+                if (stuck >= FORCE_LOGOFF_SECONDS + grace)
                 {
                     Mod.Log.Warn($"[RevivalGuard] teleport watchdog: {who} and did not recover -- "
                         + $"forcing the relog ACE's own five-minute rule intends but never reaches. "
@@ -155,6 +171,21 @@ namespace RevivalGuard
                     + $"landblock {(lb == null ? "is null" : "never reported CreateWorldObjectsCompleted")} "
                     + $"-- the destination it was sent to is the thing to look at: {p.Location}");
             }
+        }
+    }
+
+    /// <summary>Notes each client's LoginComplete (the end of its portal space) for <see cref="TeleportWatchdog"/>.</summary>
+    [HarmonyPatch(typeof(GameActionLoginComplete), nameof(GameActionLoginComplete.Handle))]
+    public static class LoginCompleteSeen
+    {
+        static void Prefix(Session session)
+        {
+            try
+            {
+                var p = session?.Player;
+                if (p != null) TeleportWatchdog.s_ClientArrived[p.Guid.Full] = ACE.Common.Time.GetUnixTime();
+            }
+            catch (System.Exception e) { Mod.Log.Warn($"[RevivalGuard] LoginCompleteSeen: {e.Message}"); }
         }
     }
 }

@@ -255,7 +255,11 @@ namespace RevivalGuard
                     var item = __instance.Item;
                     if (!SEED.ContainsKey(__instance.Guid.Full) && wo is Player owner)
                     {
-                        if (item != null) TakeBack(owner, __instance);
+                        // A hooked item with a use of its own is used, as on a house with its hooks hidden (Hook.ActOnUse):
+                        // the Fireworks go off (owner 2026-11-03, "yes it should set it off"). Anything else comes back to the
+                        // pack. Any item also comes back when dragged off the hook into the pack (TakeOff below).
+                        if (item != null && Usable(item)) { owner.LasUsedHookId = __instance.Guid; item.OnActivate(owner); }
+                        else if (item != null) TakeBack(owner, __instance);
                         else owner.SendTransientError("This hook is empty. Drag a housing item from your pack onto it to hang it.");
                     }
                     else if (item != null) item.OnActivate(wo);
@@ -276,6 +280,18 @@ namespace RevivalGuard
             {
                 try
                 {
+                    // DRAGGED OFF THE HOOK: the client lifts the hook itself (it is what the client sees) and puts it in the pack.
+                    if (__instance.CurrentLandblock?.GetObject(itemGuid) is Hook off && Is(off))
+                    {
+                        if (SEED.ContainsKey(off.Guid.Full) || !off.HasItem) { Refuse(__instance, itemGuid, off.HasItem ? $"The {off.Item.Name} is fixed to the wall here." : null); return false; }
+                        var tp = __instance;
+                        tp.CreateMoveToChain(off, ok =>
+                        {
+                            try { if (ok) TakeBack(tp, off); else Refuse(tp, itemGuid, null); }
+                            catch (Exception e) { Mod.Log.Error($"[StaffBaseHooks] take off: {e}"); Refuse(tp, itemGuid, "That did not work. It has been logged for staff."); }
+                        });
+                        return false;
+                    }
                     var holder = HolderOf(itemGuid);
                     if (holder != null && SEED.ContainsKey(holder.Guid.Full))
                     {
@@ -303,6 +319,51 @@ namespace RevivalGuard
                     Refuse(__instance, itemGuid, null);
                     return false;
                 }
+            }
+        }
+
+        /// <summary>A Hooker (the Fireworks, the Pyreal Bell, the Snowmaker: house items used only while hooked) on a free
+        /// staff hook may be used: ACE's Hooker.CheckUseRequirements wants the hook to belong to an owned house and refuses
+        /// "You are not permitted to use that hook" otherwise.</summary>
+        [HarmonyPatch(typeof(Hooker), nameof(Hooker.CheckUseRequirements))]
+        static class HookerUse
+        {
+            [HarmonyPriority(Priority.First)]
+            static bool Prefix(Hooker __instance, WorldObject activator, ref ActivationResult __result)
+            {
+                try
+                {
+                    if (!(activator is Player p) || !__instance.IsHooked(p, out var hook) || !Is(hook) || SEED.ContainsKey(hook.Guid.Full)) return true;
+                    __result = new ActivationResult(true);
+                    return false;
+                }
+                catch (Exception e) { Mod.Log.Error($"[StaffBaseHooks] hooker 0x{__instance.Guid.Full:X8}: {e}"); return true; }
+            }
+        }
+
+        /// <summary>A storage chest with no house on the Staff Base or the estate (the Wardrobe Chest, decor-10; an admin character's
+        /// Storage; the estate's chests) opens for staff. ACE's Storage.CheckUseRequirements wants a house, and without one
+        /// lets in only a player with IgnoreHouseBarriers set (and logs "couldn't find RootHouse" for anyone else).</summary>
+        [HarmonyPatch(typeof(Storage), nameof(Storage.CheckUseRequirements))]
+        static class StaffStorage
+        {
+            [HarmonyPriority(Priority.First)]
+            static bool Prefix(Storage __instance, WorldObject activator, ref ActivationResult __result)
+            {
+                try
+                {
+                    var lb = __instance.Location?.LandblockId.Landblock;
+                    if (__instance.House != null || lb == null || !Ours(lb.Value) || !(activator is Player p)) return true;
+                    if (p.IgnoreHouseBarriers || (p.Session?.AccessLevel ?? AccessLevel.Player) >= AccessLevel.Advocate)
+                    {
+                        __result = new ActivationResult(true);
+                        return false;
+                    }
+                    p.SendTransientError($"Only staff can open the {__instance.Name}.");
+                    __result = new ActivationResult(false);
+                    return false;
+                }
+                catch (Exception e) { Mod.Log.Error($"[StaffBaseHooks] storage 0x{__instance.Guid.Full:X8}: {e}"); return true; }
             }
         }
 
@@ -369,6 +430,11 @@ namespace RevivalGuard
         }
 
         /// <summary>A free hook's item back into the player's pack (the double-click, after the walk).</summary>
+        /// <summary>Has a use of its own: a Use emote (the Fireworks 30735, the Pyreal Bell, the Snowmaker), as retail's
+        /// "Once hooked, use this ...".</summary>
+        static bool Usable(WorldObject item) =>
+            item is Hooker || (item.Biota.PropertiesEmote?.Any(e => e.Category == EmoteCategory.Use) ?? false);
+
         static void TakeBack(Player p, Hook hook)
         {
             var item = hook.Item;

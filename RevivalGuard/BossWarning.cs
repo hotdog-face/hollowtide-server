@@ -60,7 +60,14 @@ namespace RevivalGuard
         /// <summary>Raise the warning over a body for every nearby client that can draw it.</summary>
         public static void Warn(WorldObject on)
         {
-            if (on?.Location == null || !On) return;
+            if (!On) return;
+            WarnAlways(on);
+        }
+
+        /// <summary>The same effect for callers with a switch of their own (MonsterFun's heavy attacks).</summary>
+        public static void WarnAlways(WorldObject on)
+        {
+            if (on?.Location == null) return;
             string payload = "{\"k\":\"" + EFFECT + "\",\"g\":" + on.Guid.Full + "}";
             foreach (var p in PlayerManager.GetAllOnline())
             {

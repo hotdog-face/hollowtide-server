@@ -79,6 +79,7 @@ namespace RevivalGuard
             TrophyMounts.Register();
             ServerFirsts.Register();
             MonsterAi.Register();
+            MonsterFun.Register();
             EventDirector.Register();
             ExtraDeathLines.Register();
             // The PK expansion (docs/PK-EXPANSION.md): every part off until its property is set.

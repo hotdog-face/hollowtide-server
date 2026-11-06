@@ -98,6 +98,7 @@ namespace RevivalGuard
             var vers = new SortedDictionary<string, int>(StringComparer.Ordinal);
             var stops = new SortedDictionary<string, int>(StringComparer.Ordinal);
             var tabs = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            var clicks = new SortedDictionary<string, int>(StringComparer.Ordinal);
             var ends = new SortedDictionary<string, int>(StringComparer.Ordinal);
             var overnightEnds = new SortedDictionary<string, int>(StringComparer.Ordinal);
             var lengths = new SortedDictionary<string, int>(StringComparer.Ordinal) { ["a_under_1h"] = 0, ["b_1_to_3h"] = 0, ["c_3_to_6h"] = 0, ["d_6h_plus"] = 0 };
@@ -136,6 +137,7 @@ namespace RevivalGuard
                     }
                 AddCounts(stops, x["stops"] as JsonObject);
                 AddCounts(tabs, x["tabs"] as JsonObject);
+                AddCounts(clicks, x["clicks"] as JsonObject);
                 pk += (int)Num(x, "pk");
                 if (x["runs"] is JsonArray rs)
                     foreach (var rn in rs)
@@ -171,6 +173,7 @@ namespace RevivalGuard
                 ["versions"] = Obj(vers),
                 ["stops"] = Obj(stops),
                 ["tabs"] = Obj(tabs),
+                ["clicks"] = Obj(clicks),
                 ["pk_alerts"] = pk,
                 ["settings_snapshots"] = lastSettings.Count,
             };

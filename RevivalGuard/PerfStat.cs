@@ -14,7 +14,8 @@ namespace RevivalGuard
     /// </summary>
     public static class PerfStat
     {
-        static readonly HashSet<string> NUMS = new HashSet<string> { "frames", "fps_med", "fps_p5", "slow_pct", "worst_ms", "heap_used_mb", "heap_mb", "net_switches" };
+        static readonly HashSet<string> NUMS = new HashSet<string> { "frames", "fps_med", "fps_p5", "slow_pct", "worst_ms", "heap_used_mb", "heap_mb", "net_switches",
+            "gc_n", "gc_worst_ms", "gc_avg_ms" };   // collections per period and the frames they cost (docs/BROWSER-PERF-2026-11.md)
         static readonly HashSet<string> TEXTS = new HashSet<string> { "v", "plat", "gpu", "screen", "arrivals", "floors", "net", "net_why" };   // net: udp / ws_backup / ws (BRIDGE-NOTES note 161)
 
         // ONE SAMPLE PER SESSION PER 5 MINUTES (security audit 2026-10-20): the client sends one every 10 minutes, and a

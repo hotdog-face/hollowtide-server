@@ -126,9 +126,11 @@ INSERT INTO weenie_properties_emote_action (emote_Id, `order`, type, delay, exte
 INSERT INTO weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, spell_Id) SELECT @e, 60, 19, 0.2, 1, 5826 FROM DUAL WHERE @e IS NOT NULL;
 INSERT INTO weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, spell_Id) SELECT @e, 61, 19, 0.2, 1, 5850 FROM DUAL WHERE @e IS NOT NULL;
 INSERT INTO weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, spell_Id) SELECT @e, 62, 19, 0.2, 1, 5874 FROM DUAL WHERE @e IS NOT NULL;
-INSERT INTO weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, test_String) SELECT @e, 63, 0, 0, 1, 'AzimarWeapon' FROM DUAL WHERE @e IS NOT NULL;
-INSERT INTO weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, test_String) SELECT @e, 64, 0, 0, 0, 'AzimarLines:weapon' FROM DUAL WHERE @e IS NOT NULL;
-INSERT INTO weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message, test_String) SELECT @e, 65, 8, 1.0, 0, 'Go gently, %s. The winds are with you.', 'AzimarLines:bless' FROM DUAL WHERE @e IS NOT NULL;
+INSERT INTO weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, spell_Id) SELECT @e, 63, 19, 0.2, 1, 4497 FROM DUAL WHERE @e IS NOT NULL;
+INSERT INTO weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, spell_Id) SELECT @e, 64, 19, 0.2, 1, 6115 FROM DUAL WHERE @e IS NOT NULL;
+INSERT INTO weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, test_String) SELECT @e, 65, 0, 0, 1, 'AzimarWeapon' FROM DUAL WHERE @e IS NOT NULL;
+INSERT INTO weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, test_String) SELECT @e, 66, 0, 0, 0, 'AzimarLines:weapon' FROM DUAL WHERE @e IS NOT NULL;
+INSERT INTO weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message, test_String) SELECT @e, 67, 8, 1.0, 0, 'Go gently, %s. The winds are with you.', 'AzimarLines:bless' FROM DUAL WHERE @e IS NOT NULL;
 SET @e = NULL; INSERT INTO weenie_properties_emote (object_Id, category, probability, quest) SELECT class_Id, 5, 0.02, NULL FROM weenie WHERE class_Id = 901631;
 SET @e = IF(ROW_COUNT() > 0, LAST_INSERT_ID(), NULL);
 INSERT INTO weenie_properties_emote_action (emote_Id, `order`, type, delay, extent, message, test_String) SELECT @e, 0, 8, 0, 0, 'The winds are kind today.', 'AzimarLines:idle' FROM DUAL WHERE @e IS NOT NULL;

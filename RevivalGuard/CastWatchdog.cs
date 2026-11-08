@@ -24,7 +24,7 @@ namespace RevivalGuard
     /// on the player's own action queue so it runs on the thread that owns the cast. Switch: rg_cast_watchdog.
     /// With the server body off walkable ground (ServerFooting) neither the turn nor the gesture can play, so a cast is
     /// failed once the body has been off it cast.unfooted_seconds (2 s), not after the full 10 s (report 261023-0014).
-    /// On walkable ground a gesture with no motion-done past its own length plus cast.footed_grace_seconds (3 s) is finished
+    /// On walkable ground a gesture with no motion-done past its own length plus cast.footed_grace_seconds (1 s; 3 s until 261107-0013) is finished
     /// the way that callback finishes it, so the spell lands (report 261024-0003, CastWatchdogRule.FinishNow).
     /// A cast in its turn with the body standing still on walkable ground and the heading fixed for 1.5 s will never
     /// complete the turn (261029-0010, often on a slope): it ends then, with no mana or components spent
@@ -37,7 +37,10 @@ namespace RevivalGuard
         const string P_STALL = "rg_cast_turn_stall";
         static double CAST_STUCK => Tunables.D("cast.stuck_seconds", 10.0);
         static double UNFOOTED => Tunables.D("cast.unfooted_seconds", 2.0);
-        static double FOOTED_GRACE => Tunables.D("cast.footed_grace_seconds", 3.0);
+        // 1 s, was 3 (ticket 261107-0013): Mark the Noble's self heals stalled this way 171 times in one night (gesture 0.3 s,
+        // finished at 3.3-3.4 s), so each heal took about 5.8 s from cast to cast and could not keep up with an Armored
+        // Tusker. A body whose gesture has not finished a second past its own length is not going to finish it.
+        static double FOOTED_GRACE => Tunables.D("cast.footed_grace_seconds", 1.0);
         static double s_Next;
         static readonly System.Collections.Generic.Dictionary<uint, double> s_Unfooted = new System.Collections.Generic.Dictionary<uint, double>();
 

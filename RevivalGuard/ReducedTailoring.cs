@@ -58,6 +58,7 @@ namespace RevivalGuard
                 if (source == null || !(source.GetProperty(FROM_REDUCED) ?? false) || !IsReduced(target)) return true;
                 Mod.Log.Info($"[RevivalGuard] ReducedTailoring: refused {source.Name} (0x{source.Guid.Full:X8}, from a reduced item) "
                              + $"onto reduced {target.Name} (0x{target.Guid.Full:X8}) for {player?.Name}");
+                TailoringWords.Say(player, $"This look came from a reduced piece, and your {target.Name} is reduced too. Put the look on a plain single-slot piece first, then take it from that piece with a new kit.");
                 player?.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
                 return false;
             }

@@ -4,15 +4,18 @@ using System.Linq;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
+using ACE.Entity.Models;
 using ACE.Server.Command;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Factories;
 using ACE.Server.Managers;
 using ACE.Server.Network;
+using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Network.Structure;
 using ACE.Server.WorldObjects;
+using ACE.Server.WorldObjects.Managers;
 using HarmonyLib;
 
 namespace RevivalGuard
@@ -188,6 +191,7 @@ namespace RevivalGuard
             if (now - s_Last < 1.0) return;
             double dt = Math.Min(now - s_Last, 2.0);
             s_Last = now;
+            SyncAll(now);
             if (!Open) { lock (s_Lock) { if (s_Guests.Count > 0 || s_Call != null) { s_Guests.Clear(); s_Call = null; } } return; }
 
             var inside = PlayerManager.GetAllOnline().Where(InClub).ToList();
@@ -346,8 +350,87 @@ namespace RevivalGuard
             }
             p.SetProperty(BUFF_PCT, pct);
             p.SetProperty(BUFF_UNTIL, (long)(now + BUFF_S));
-            p.EnqueueBroadcast(new GameMessageScript(p.Guid, PlayScript.EnchantUpGreen));
-            Say(p, $"Party buff: +{pct:P0} experience from creatures for 1 hour{with}. More dancers on a call make it bigger, up to +{CAP:P0}.");
+            var spell = Show(p, pct, BUFF_S);
+            // what everyone around sees: the retail spell's own landing effect, then retail's wedding sparkle a beat later
+            var fx = spell != null && spell.TargetEffect != PlayScript.Invalid ? spell.TargetEffect : PlayScript.EnchantUpGreen;
+            p.EnqueueBroadcast(new GameMessageScript(p.Guid, fx));
+            var chain = new ActionChain();
+            chain.AddDelaySeconds(1.0);
+            chain.AddAction(p, () => p.EnqueueBroadcast(new GameMessageScript(p.Guid, PlayScript.WeddingBliss)));
+            chain.EnqueueChain();
+            string big = $"Party buff! +{pct:P0} experience from creatures for 1 hour";
+            p.Session?.Network?.EnqueueSend(new GameEventCommunicationTransientString(p.Session, big));
+            Say(p, $"Party buff: +{pct:P0} experience from creatures for 1 hour{with}. It shows in your spell effects as {spell?.Name ?? "Augmented Understanding"}. "
+                + $"More dancers on a call make it bigger, up to +{CAP:P0}.");
+            Mod.Log.Info($"[RevivalGuard] NightClubParty: {p.Name} got the party buff {pct:P0} for 1 h (shown as {spell?.Name ?? "nothing"}, effect {fx})");
+        }
+
+        // ---- the buff in the spell effects list ---------------------------------------------------------------------
+        // PARTY BUFF ON THE EFFECTS LIST (owner 2026-11-06: make the award obvious). Retail's own XP enchantment,
+        // Augmented Understanding (the trinket spell, category TrinketXPRaising), is put on the player with the player as
+        // caster, its value set to the buff's size and its time to the buff's time left. It is display only: the XP
+        // still comes from NightClubPartyXp (creature kills only), and NightClubPartyXpBonus keeps this entry out of
+        // ACE's trinket XP bonus, so a real Augmented Understanding trinket works exactly as before. II for +5%,
+        // III for +6% and up. Enchantment timers run only while online and the buff runs on the clock, so Sync (every
+        // 10 s, and at login) puts the entry back after a death, retimes it after a logout, and takes it off at the end.
+
+        static readonly uint[] SHOW_SPELLS = { 5153, 5154, 5137 };      // Augmented Understanding I, II, III
+        static uint ShowSpell(double pct) => pct >= 0.06 - 1e-9 ? 5137u : 5154u;
+        const double QUIET_AFTER_S = 2 * 3600;                          // a buff that ended longer ago than this ends silently
+        static double s_NextSync;
+
+        internal static bool IsShow(PropertiesEnchantmentRegistry e, WorldObject owner) =>
+            e != null && owner != null && e.CasterObjectId == owner.Guid.Full && Array.IndexOf(SHOW_SPELLS, (uint)e.SpellId) >= 0;
+
+        static PropertiesEnchantmentRegistry ShowEntry(Player p) =>
+            p.EnchantmentManager?.GetEnchantments(SpellCategory.TrinketXPRaising).FirstOrDefault(e => IsShow(e, p));
+
+        static Spell Show(Player p, double pct, double left)
+        {
+            try
+            {
+                var old = ShowEntry(p);
+                if (old != null) p.EnchantmentManager.Remove(old, false);
+                var spell = new Spell(ShowSpell(pct));
+                if (spell.NotFound) { Mod.Log.Warn($"[RevivalGuard] NightClubParty: spell {ShowSpell(pct)} not found"); return null; }
+                var e = p.EnchantmentManager.Add(spell, p, null)?.Enchantment;
+                if (e == null) return spell;
+                e.StartTime = 0;
+                e.Duration = Math.Max(1, left);
+                e.StatModValue = (float)pct;
+                p.ChangesDetected = true;
+                p.Session?.Network?.EnqueueSend(new GameEventMagicUpdateEnchantment(p.Session, new ACE.Server.Network.Structure.Enchantment(p, e)));
+                return spell;
+            }
+            catch (Exception ex) { Mod.Log.Warn($"[RevivalGuard] NightClubParty: show buff on {p?.Name}: {ex.Message}"); return null; }
+        }
+
+        /// <summary>On the player's own thread: the effects-list entry matches the buff, or the buff has ended.</summary>
+        static void Sync(Player p)
+        {
+            if (p?.EnchantmentManager == null || p.GetProperty(BUFF_PCT) == null) return;
+            double now = Now;
+            long until = p.GetProperty(BUFF_UNTIL) ?? 0;
+            var e = ShowEntry(p);
+            if (until <= now)
+            {
+                if (e != null) p.EnchantmentManager.Remove(e);
+                p.RemoveProperty(BUFF_PCT);
+                p.RemoveProperty(BUFF_UNTIL);
+                if (now - until < QUIET_AFTER_S) Say(p, "Your Night Club party buff has worn off. Dance on the DJ's next call at the Night Club for another.");
+                return;
+            }
+            double pct = BuffNow(p), left = until - now;
+            if (e == null || (uint)e.SpellId != ShowSpell(pct) || Math.Abs(e.Duration + e.StartTime - left) > 30 || Math.Abs(e.StatModValue - pct) > 1e-4)
+                Show(p, pct, left);
+        }
+
+        static void SyncAll(double now)
+        {
+            if (now < s_NextSync) return;
+            s_NextSync = now + 10;
+            foreach (var p in PlayerManager.GetAllOnline())
+                if (p?.GetProperty(BUFF_PCT) != null) { var q = p; Later(q, () => Sync(q)); }
         }
 
         internal static double BuffNow(Player p)
@@ -361,6 +444,7 @@ namespace RevivalGuard
         {
             long until = p.GetProperty(BUFF_UNTIL) ?? 0;
             if (until > Now) Say(p, $"Night Club party buff: +{BuffNow(p):P0} experience from creatures, {Mins(until - Now)} left.");
+            Later(p, () => Sync(p));
         }
 
         static string Mins(double s) { int m = Math.Max(1, (int)Math.Round(s / 60)); return m == 1 ? "1 minute" : $"{m} minutes"; }
@@ -436,7 +520,7 @@ namespace RevivalGuard
                 var qm = me?.QuestManager;
                 if (qm == null) return;
                 qm.Erase(TONIGHT);
-                if (verb == "reset") { qm.Erase(NIGHTS); qm.Erase(TROPHY); me.RemoveProperty(BUFF_PCT); me.RemoveProperty(BUFF_UNTIL); }
+                if (verb == "reset") { qm.Erase(NIGHTS); qm.Erase(TROPHY); me.RemoveProperty(BUFF_PCT); me.RemoveProperty(BUFF_UNTIL); var se = ShowEntry(me); if (se != null) me.EnchantmentManager.Remove(se, false); }
                 lock (s_Lock) if (s_Guests.TryGetValue(me.Guid.Full, out var g)) { g.Secs = 0; g.Said = 0; g.CountedAt = 0; }
                 Say(me, verb == "reset" ? "Night Club: your nights, trophy flag, tonight and party buff are cleared." : "Night Club: tonight is forgotten; dance a minute to count another night.");
                 return;
@@ -522,6 +606,27 @@ namespace RevivalGuard
                 }
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] NightClubParty xp: {e.Message}"); }
+        }
+    }
+
+    /// <summary>ACE's trinket XP bonus (EnchantmentManager.GetXPBonus: the strongest TrinketXPRaising enchantment) without
+    /// the party buff's effects-list entry, which is display only (NightClubParty.Show). Same code as ACE's otherwise.</summary>
+    [HarmonyPatch(typeof(EnchantmentManager), nameof(EnchantmentManager.GetXPBonus))]
+    static class NightClubPartyXpBonus
+    {
+        static bool Prefix(EnchantmentManager __instance, ref float __result)
+        {
+            try
+            {
+                var all = __instance.GetEnchantments(SpellCategory.TrinketXPRaising);
+                if (!all.Any(e => NightClubParty.IsShow(e, __instance.WorldObject))) return true;
+                var modifier = 0.0f;
+                foreach (var e in all.Where(e => !NightClubParty.IsShow(e, __instance.WorldObject)).OrderByDescending(i => i.PowerLevel).Take(1))
+                    modifier += e.StatModType.HasFlag(EnchantmentTypeFlags.Multiplicative) ? e.StatModValue - 1.0f : e.StatModValue;
+                __result = modifier;
+                return false;
+            }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] NightClubParty xp bonus: {e.Message}"); return true; }
         }
     }
 

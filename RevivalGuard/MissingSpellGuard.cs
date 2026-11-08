@@ -43,19 +43,22 @@ namespace RevivalGuard
                 Mod.Log.Error("[RevivalGuard] MissingSpellGuard: Vendor.LoadInventoryItem not found; the shop half is off");
                 return false;
             }
-            static bool Prefix(Vendor __instance, uint weenieClassId)
+            static bool Prefix(Vendor __instance, uint weenieClassId) => !LeftOffShop(__instance?.Name, weenieClassId);
+        }
+
+        /// <summary>A shop item to leave off the list: a scroll whose spell does not exist. Also used by VendorPrewarm.</summary>
+        internal static bool LeftOffShop(string vendorName, uint weenieClassId)
+        {
+            try
             {
-                try
-                {
-                    var w = DatabaseManager.World.GetCachedWeenie(weenieClassId);
-                    if (w == null || w.WeenieType != WeenieType.Scroll) return true;
-                    var spell = w.GetProperty(PropertyDataId.Spell);
-                    if (spell == null || !SpellMissing(spell.Value)) return true;
-                    Say(weenieClassId, $"{__instance?.Name} sells scroll {weenieClassId} whose spell {spell.Value} does not exist; left off the shop list instead of crashing");
-                    return false;
-                }
-                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] MissingSpellGuard: shop: {e.Message}"); return true; }
+                var w = DatabaseManager.World.GetCachedWeenie(weenieClassId);
+                if (w == null || w.WeenieType != WeenieType.Scroll) return false;
+                var spell = w.GetProperty(PropertyDataId.Spell);
+                if (spell == null || !SpellMissing(spell.Value)) return false;
+                Say(weenieClassId, $"{vendorName} sells scroll {weenieClassId} whose spell {spell.Value} does not exist; left off the shop list instead of crashing");
+                return true;
             }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] MissingSpellGuard: shop: {e.Message}"); return false; }
         }
 
         [HarmonyPatch]

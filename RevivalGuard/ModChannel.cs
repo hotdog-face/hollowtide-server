@@ -70,6 +70,7 @@ namespace RevivalGuard
             SmallHitbox.Hello(session);             // weenies that collide smaller than their spheres (Azimar)
             AzimarTheme.Hello(session);             // Azimar's festival theme, for his hats and sparkles
             FestivalChannel.Hello(session);         // the running festivals (the Lightbringer's red water)
+            TreeStatsUpload.Hello(session);         // the TreeStats switch's state (and that the feature is here)
             SendRecalls(session);                   // the lifestone, for the tracker's recall routes
         }
 

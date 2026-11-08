@@ -32,9 +32,10 @@ namespace RevivalGuard
             public long Start;
             public readonly List<(string phase, double ms)> Phases = new List<(string, double)>(8);
             public readonly List<(string what, double ms)> Gens = new List<(string, double)>(4);
-            public int PhaseCalls, GenCalls;   // every phase report / generator call, named or not
+            public readonly List<(string what, double ms)> Acts = new List<(string, double)>(4);
+            public int PhaseCalls, GenCalls, ActCalls;   // every phase report / generator call / queued action, named or not
             public double GenMs;               // all generator calls together
-            public void Reset(long start) { Start = start; Phases.Clear(); Gens.Clear(); PhaseCalls = GenCalls = 0; GenMs = 0; }
+            public void Reset(long start) { Start = start; Phases.Clear(); Gens.Clear(); Acts.Clear(); PhaseCalls = GenCalls = ActCalls = 0; GenMs = 0; }
         }
 
         [ThreadStatic] internal static Frame t_Frame;   // non-null only while a landblock tick runs on this thread
@@ -81,6 +82,8 @@ namespace RevivalGuard
                 if (f.GenCalls > 0) sb.Append($"; {f.GenCalls} generator calls {f.GenMs:F0} ms");
                 if (f.Gens.Count > 0)
                     sb.Append("; slowest ").Append(string.Join(", ", f.Gens.OrderByDescending(g => g.ms).Take(3).Select(g => $"{g.what} {g.ms:F0} ms")));
+                if (f.Acts.Count > 0)
+                    sb.Append($"; {f.ActCalls} actions, slowest ").Append(string.Join(", ", f.Acts.OrderByDescending(a => a.ms).Take(3).Select(a => $"{a.what} {a.ms:F0} ms")));
                 if (held > 0) sb.Append($" ({held} more slow ticks here since the last line)");
                 Mod.Log.Warn(sb.ToString());
             }
@@ -94,6 +97,34 @@ namespace RevivalGuard
             f.PhaseCalls++;
             if (seconds * 1000 < NoteMs) return;
             f.Phases.Add((phase.StartsWith("Landblock_Tick_") ? phase.Substring(15) : phase, seconds * 1000));
+        }
+
+        /// <summary>One queued action (ActionEventDelegate.Act) on a ticking landblock: the slow ones are named by the
+        /// delegate's method (a lambda's name carries its enclosing method) and its target object.</summary>
+        internal static void Act(ACE.Server.Entity.Actions.ActionEventDelegate a, long start)
+        {
+            var f = t_Frame;
+            if (f == null || start == 0) return;
+            double ms = Ms(start);
+            f.ActCalls++;
+            if (ms < NoteMs) return;
+            try
+            {
+                var m = a?.Action?.Method;
+                var t = a?.Action?.Target;
+                string target = t is WorldObject two ? $"{two.Name} 0x{two.Guid.Full:X8}" : t?.GetType().Name;
+                string what = $"{m?.DeclaringType?.FullName}.{m?.Name}" + (target != null ? $" on {target}" : "");
+                Keep(f.Acts, what, ms);
+            }
+            catch { }
+        }
+
+        static void Keep(List<(string what, double ms)> list, string what, double ms)
+        {
+            if (list.Count < 8) { list.Add((what, ms)); return; }
+            int min = 0;
+            for (int i = 1; i < list.Count; i++) if (list[i].ms < list[min].ms) min = i;
+            if (ms > list[min].ms) list[min] = (what, ms);
         }
 
         internal static void Generator(WorldObject wo, string kind, long start)
@@ -171,5 +202,14 @@ namespace RevivalGuard
         static bool Prepare(MethodBase original) => original != null || TargetMethod() != null;
         static void Prefix(out long __state) => __state = LandblockTickWatch.t_Frame != null ? Stopwatch.GetTimestamp() : 0;
         static void Postfix(WorldObject __instance, long __state) { try { LandblockTickWatch.Generator(__instance, "regen", __state); } catch { } }
+    }
+
+    [HarmonyPatch]
+    static class LandblockTickWatchAct
+    {
+        static MethodBase TargetMethod() => AccessTools.Method(typeof(ACE.Server.Entity.Actions.ActionEventDelegate), nameof(ACE.Server.Entity.Actions.ActionEventDelegate.Act));
+        static bool Prepare(MethodBase original) => original != null || TargetMethod() != null;
+        static void Prefix(out long __state) => __state = LandblockTickWatch.t_Frame != null ? Stopwatch.GetTimestamp() : 0;
+        static void Postfix(ACE.Server.Entity.Actions.ActionEventDelegate __instance, long __state) { try { LandblockTickWatch.Act(__instance, __state); } catch { } }
     }
 }

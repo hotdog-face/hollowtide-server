@@ -38,6 +38,7 @@ namespace RevivalGuard
         static bool Refuse(Player player, WorldObject item)
         {
             if (!IsFullRobe(item)) return true;
+            TailoringWords.Say(player, $"Robes and guises cannot be tailored, so the {item.Name} cannot take or give a look.");
             player?.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
             return false;
         }

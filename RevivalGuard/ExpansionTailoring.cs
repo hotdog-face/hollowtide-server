@@ -1,4 +1,5 @@
 using ACE.Entity.Enum;
+using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.WorldObjects;
 using HarmonyLib;
@@ -29,8 +30,24 @@ namespace RevivalGuard
     {
         const uint WCID_LO = 900000, WCID_HI = 999999;
 
+        /// <summary>One of ours WHOSE LOOK TAILORING CANNOT CARRY. 2026-11-06 (owner, live: "my koji's beast mask not
+        /// being able to be tailored with a kit feels broken and wrong"): the test used to be the wcid range alone, so it
+        /// also refused our COPIES of retail items (the Staff Base mask wall 903300-903352, the owner's suit pieces such
+        /// as Koji's Beast 907718, showcase and keepsake copies), whose setup, clothing table, palette and icon are the
+        /// retail weenie's own and move through a kit like any retail piece. Retail let every mask be tailored like head
+        /// armour (AC wiki, Tailoring). Now an item of ours is refused only when its look really lives on our weenie:
+        /// it carries anim-part rows (worn armour drawn by ApplyOwnAnimParts) or an expansion icon (0x06FF....); every one
+        /// of the 44 items with a client-side w(wcid).glb model has one or both (checked against ace_world 2026-11-06).</summary>
         internal static bool IsOurs(WorldObject wo)
-            => wo != null && wo.WeenieClassId >= WCID_LO && wo.WeenieClassId <= WCID_HI;
+        {
+            if (wo == null || wo.WeenieClassId < WCID_LO || wo.WeenieClassId > WCID_HI) return false;
+            if (CarriesOurLook(wo)) return true;
+            if (wo.Biota?.PropertiesAnimPart != null && wo.Biota.PropertiesAnimPart.Count > 0) return true;
+            var weenie = ACE.Database.DatabaseManager.World.GetCachedWeenie(wo.WeenieClassId);
+            if (weenie?.PropertiesAnimPart != null && weenie.PropertiesAnimPart.Count > 0) return true;
+            var icon = weenie?.GetProperty(ACE.Entity.Enum.Properties.PropertyDataId.Icon) ?? 0;
+            return (icon >> 16) == 0x06FF;
+        }
 
         static bool CarriesOurLook(WorldObject wo)
             => wo != null && ((wo.IconId >> 16) == 0x06FF);
@@ -38,6 +55,9 @@ namespace RevivalGuard
         static bool Refuse(Player player, WorldObject source, WorldObject target, bool applying)
         {
             if (!IsOurs(target) && !(applying && CarriesOurLook(source))) return true;
+            TailoringWords.Say(player, IsOurs(target)
+                ? $"The {target.Name} is drawn from art a tailoring kit cannot carry, so it cannot be tailored."
+                : $"This look comes from art a tailoring kit cannot carry, so it cannot go on the {target.Name}.");
             player?.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
             return false;
         }

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using ACE.Database.Models.Auth;
+using ACE.Server.Entity;
 using ACE.Server.Managers;
 using ACE.Server.Network;
 using ACE.Server.Network.Enum;
@@ -83,15 +84,6 @@ namespace RevivalGuard
                 bool local = IsLocal(addr);
                 string key = addr.ToString();
 
-                if (!local && s_Fails.TryGetValue(key, out var f))
-                    lock (f)
-                        if (DateTime.UtcNow < f.LockedUntil)
-                        {
-                            session.Terminate(SessionTerminationReason.NotAuthorizedPasswordMismatch,
-                                new GameMessageBootAccount(" because of too many failed logins; try again in a few minutes"));
-                            return false;
-                        }
-
                 if (account == null) return true;   // ACE answers "account does not exist" itself
 
                 if (s_GateOn && account.AccessLevel > 0 && !local && !s_Allow.Contains(key) && !InLiveAllow(key))
@@ -105,8 +97,7 @@ namespace RevivalGuard
                     if (loginRequest != null && loginRequest.NetAuthType == NetAuthType.AccountPassword
                         && !account.PasswordMatches(loginRequest.Password))
                         Fail(key);
-                    session.Terminate(SessionTerminationReason.NotAuthorizedPasswordMismatch,
-                        new GameMessageBootAccount(BAD_PASSWORD));
+                    Boot(session, BAD_PASSWORD);
                     return false;
                 }
 
@@ -131,10 +122,64 @@ namespace RevivalGuard
             Mod.Log.Warn("[RevivalGuard] " + why);
             try
             {
-                session?.Terminate(SessionTerminationReason.NotAuthorizedPasswordMismatch, new GameMessageBootAccount(BAD_PASSWORD));
+                if (session != null) Boot(session, BAD_PASSWORD);
             }
             catch (Exception e) { Mod.Log.Error("[RevivalGuard] StaffLoginGate: could not end the session: " + e.Message); }
             return false;
+        }
+
+        /// <summary>Refuse a login the way ACE refuses a wrong password: its ConnectRequest first, then the boot. ACE sends
+        /// the ConnectRequest before any of its own refusals (AuthenticationHandler.AccountSelectCallback), and the client
+        /// can read a boot only on that connection. Without it the boot reached no one, the client resent its LoginRequest
+        /// and said the server did not respond (Mastacho, 2026-11-07, locked out after 8 wrong passwords).</summary>
+        static void Boot(Session session, string reason)
+        {
+            var net = session.Network;
+            var cd = net?.ConnectionData;
+            if (cd?.ServerSeed != null && cd.ClientSeed != null)
+            {
+                var connect = new PacketOutboundConnectRequest(Timers.PortalYearTicks, cd.ConnectionCookie, net.ClientId, cd.ServerSeed, cd.ClientSeed);
+                cd.DiscardSeeds();   // ACE's order: built, seeds discarded, sent
+                net.EnqueueSend(connect);
+            }
+            session.Terminate(SessionTerminationReason.NotAuthorizedPasswordMismatch, new GameMessageBootAccount(reason));
+        }
+
+        /// <summary>A locked-out address is refused before ACE looks the account up. Checked in AccountSelectCallback it
+        /// came after DoLogin's auto-create, so a mistyped name made a new empty account even while locked out ("Mastacho",
+        /// a character's name typed as the account, 2026-11-07).</summary>
+        [HarmonyPatch]
+        static class LockedOut
+        {
+            static System.Reflection.MethodBase TargetMethod() =>
+                AccessTools.Method("ACE.Server.Network.Handlers.AuthenticationHandler:DoLogin");
+
+            static bool Prepare(System.Reflection.MethodBase original)
+            {
+                if (original != null || TargetMethod() != null) return true;
+                Mod.Log.Error("[RevivalGuard] StaffLoginGate: AuthenticationHandler.DoLogin not found; login lockouts are off");
+                return false;
+            }
+
+            static bool Prefix(Session session)
+            {
+                try
+                {
+                    var addr = Gateway.RealAddress(session?.EndPointC2S);
+                    if (addr == null || IsLocal(addr) || !s_Fails.TryGetValue(addr.ToString(), out var f)) return true;
+                    DateTime until;
+                    lock (f) until = f.LockedUntil;
+                    if (DateTime.UtcNow >= until) return true;
+                    int min = Math.Max(1, (int)Math.Ceiling((until - DateTime.UtcNow).TotalMinutes));
+                    Boot(session, $" because of too many wrong passwords from your connection; try again in {min} minute{(min == 1 ? "" : "s")}");
+                    return false;
+                }
+                catch (Exception e)
+                {
+                    Mod.Log.Error("[RevivalGuard] StaffLoginGate lockout: " + e.Message);
+                    return true;
+                }
+            }
         }
 
         static void Fail(string key)

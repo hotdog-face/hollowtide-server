@@ -254,6 +254,10 @@ namespace RevivalGuard
             var itemName = ent.PropertiesString != null && ent.PropertiesString.TryGetValue(PropertyString.Name, out var n) ? n : "item";
             var valid = ints.TryGetValue(PropertyInt.ValidLocations, out int vlRaw) ? (EquipMask)vlRaw : EquipMask.None;
 
+            // Retail reduces multi-slot armour only, and only to a slot it already covers (TailoringParity): a
+            // single-slot piece (pauldrons, tassets, or one reduced already) would otherwise move to another slot here.
+            if (TailoringParity.BodySlots(valid) <= 1) { why = $"{itemName} covers a single slot already ({(uint)valid:X}); retail reduces multi-slot armour only"; return null; }
+
             EquipMask to = EquipMask.None;
             CoverageMask cover = CoverageMask.Unknown;
             switch (spec.Reduce)

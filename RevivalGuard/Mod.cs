@@ -69,12 +69,15 @@ namespace RevivalGuard
             AccountCreationCap.Register();
             RetailWelcome.Register();
             LoginTokens.Register();
+            PasswordRecovery.Register();
             LfgBoard.Register();
             FeatureBoard.Register();
             ItemLock.Register();
             AutoStack.Register();
+            TreeStatsUpload.Register();   // characters on treestats.net (off without treestats.json)
             RagdollCorpse.Register();
             Mercenaries.Register();
+            MercKit.Register();
             Mansions.Register();
             TrophyMounts.Register();
             ServerFirsts.Register();

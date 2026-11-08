@@ -126,6 +126,28 @@ namespace RevivalGuard
                 "Who is online, where, and how long since they moved.", "[name]");
             CommandManager.TryAddCommand(Stuck, "stuck", AccessLevel.Sentinel, CommandHandlerFlag.None,
                 "Players who have stopped moving, or whose teleport never finished.", "[minutes]");
+            // Owner ticket 261106-0031: "an admin only feature i want is to see other players represented as dots on my
+            // map". Developer and up. The client's map asks this every few seconds while its admin switch is on and
+            // the map is open, and keeps the replies out of chat (AcStaffPlayerMap).
+            CommandManager.TryAddCommand(WhoMap, "whomap", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld,
+                "Every online player's place, for the admin map's player dots (machine-readable).", "");
+        }
+
+        /// <summary>`[WhoMap] begin N`, then lines of up to 8 `name|cell|x|y|kind` joined by `;` (kind o outdoors,
+        /// b in a building on the surface, d in a dungeon, whose block is not on the map), then `[WhoMap] end`.</summary>
+        static void WhoMap(Session session, params string[] parameters)
+        {
+            var online = PlayerManager.GetAllOnline().Where(p => p.Location != null && p.Name != null).ToList();
+            Say(session, $"[WhoMap] begin {online.Count}");
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            foreach (var chunk in online.Select((p, i) => (p, i)).GroupBy(t => t.i / 8))
+                Say(session, "[WhoMap] " + string.Join(";", chunk.Select(t =>
+                {
+                    var l = t.p.Location;
+                    char kind = !l.Indoors ? 'o' : (t.p.CurrentLandblock?.IsDungeon ?? true) ? 'd' : 'b';
+                    return $"{t.p.Name}|{l.Cell:X8}|{l.PositionX.ToString("0.#", inv)}|{l.PositionY.ToString("0.#", inv)}|{kind}";
+                })));
+            Say(session, "[WhoMap] end");
         }
 
         static void Say(Session s, string text) =>

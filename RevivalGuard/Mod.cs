@@ -64,6 +64,7 @@ namespace RevivalGuard
             Broker.Register();
             DressingRoom.Register();
             DiscordBridge.Register();
+            DerethChatHost.Register();   // the cross-server Dereth channel (off without dereth-chat.json)
             ItemLink.Register();
             PerfStat.Register();
             AccountCreationCap.Register();
@@ -77,6 +78,7 @@ namespace RevivalGuard
             TreeStatsUpload.Register();   // characters on treestats.net (off without treestats.json)
             RagdollCorpse.Register();
             Mercenaries.Register();
+            BorgSwitch.Register();        // @borg on|off|status: the Borg's off switch (admin panel)
             MercKit.Register();
             Mansions.Register();
             TrophyMounts.Register();
@@ -110,6 +112,7 @@ namespace RevivalGuard
 
         public void Dispose()
         {
+            DerethChat.Bridge.Stop();
             m_Harmony?.UnpatchAll(ID);
             Log.Info("[RevivalGuard] unloaded");
         }
@@ -175,6 +178,7 @@ namespace RevivalGuard
             public ushort SnapStamp; public DateTime SnapAt; public int StaleDrops;   // the last snap-back's ForcePosition sequence
             public ACE.Entity.Position ReqPos; public ushort ReqStamp;               // the newest AutonomousPosition and its echoed sequence
             public int ForceBefore = -1;   // ACE's ForcePosition sequence when a report was let through to it (-1: none)
+            public int Unheard; public DateTime UnheardSince; public bool DesyncLogged;   // snaps in a row the client never echoed
         }
         internal static readonly ConditionalWeakTable<Player, State> s_State = new ConditionalWeakTable<Player, State>();
 
@@ -214,12 +218,18 @@ namespace RevivalGuard
         /// <summary>A report the client sent before our snap-back reached it (its echoed ForcePosition sequence is older than
         /// the snap's): dropped quietly. The stamp comes from the AutonomousPosition that stored this very Position object,
         /// or from the MoveToState that did.</summary>
+        /// <summary>The ForcePosition sequence the report carrying <paramref name="pos"/> echoed, or -1 when unknown.</summary>
+        static int ReportStamp(Player p, State st, ACE.Entity.Position pos)
+        {
+            if (ReferenceEquals(st.ReqPos, pos)) return st.ReqStamp;
+            if (p.CurrentMoveToState != null && ReferenceEquals(p.CurrentMoveToState.Position, pos)) return p.CurrentMoveToState.ForcePositionSequence;
+            return -1;
+        }
+
         static bool StaleAfterSnap(Player p, State st, ACE.Entity.Position pos, DateTime now)
         {
             if (st.SnapAt == default) return false;
-            int stamp = -1;
-            if (ReferenceEquals(st.ReqPos, pos)) stamp = st.ReqStamp;
-            else if (p.CurrentMoveToState != null && ReferenceEquals(p.CurrentMoveToState.Position, pos)) stamp = p.CurrentMoveToState.ForcePositionSequence;
+            int stamp = ReportStamp(p, st, pos);
             if (stamp < 0) return false;
             double since = (now - st.SnapAt).TotalSeconds;
             if (!MovementBudget.StaleAfterSnap((ushort)stamp, st.SnapStamp, since, STALE_WINDOW)) return false;
@@ -237,6 +247,12 @@ namespace RevivalGuard
             st.ForceBefore = -1;
             if (forceUpdate || p.Teleporting || p.Location == null || newPosition == null)
             { st.Pos = null; st.At = now; return true; }
+            // A report that echoes our newest snap (or later) shows the client heard it: the unheard count starts again.
+            if (st.Unheard > 0)
+            {
+                int heard = ReportStamp(p, st, newPosition);
+                if (heard >= 0 && !MovementBudget.StaleAfterSnap((ushort)heard, st.SnapStamp, 0, 1)) { st.Unheard = 0; st.DesyncLogged = false; }
+            }
             if (StaleAfterSnap(p, st, newPosition, now)) { __result = false; return false; }   // no offence, no new snap
             if (st.Pos == null || st.At == default)
             {
@@ -296,6 +312,20 @@ namespace RevivalGuard
                 var seq = p.Sequences.GetNextSequence(SequenceType.ObjectForcePosition);
                 if (seq != null && seq.Length >= 2) { st.SnapStamp = BitConverter.ToUInt16(seq, 0); st.SnapAt = now; st.StaleDrops = 0; }
                 p.SendUpdatePosition();
+                // A CLIENT THAT NEVER HEARS THE SNAP-BACKS (ticket 261108-0014, 2026-11-08): Olivia's browser client died in a
+                // dungeon and never took the lifestone teleport; for over an hour it kept running in the dungeon and echoed
+                // ForcePosition sequence 0 through 1,100+ snaps. Every snap put her back at the Holtburg lifestone and every report
+                // started her running again, so the players there saw her run and snap back on a loop. A client that echoes none
+                // of our snaps for this long is out of step with the server and only a relog brings it back (as TeleportWatchdog's
+                // last arm does): it re-enters where the server has it.
+                if (st.Unheard++ == 0) st.UnheardSince = now;
+                if (MovementBudget.Desynced(st.Unheard, (now - st.UnheardSince).TotalSeconds) && !st.DesyncLogged)
+                {
+                    st.DesyncLogged = true;
+                    Mod.Log.Warn($"[RevivalGuard] movement desync: {p.Name} (0x{p.Guid.Full:X8}) echoed none of {st.Unheard} snap-backs in "
+                        + $"{(now - st.UnheardSince).TotalSeconds:F0} s (its client is not applying the server's positions); forcing a relog at {p.Location.ToLOCString()}");
+                    if (p.Session != null) p.Session.LogOffPlayer(true); else p.LogOut();
+                }
                 // The server's position stands AS OF NOW: measuring the next attempt from the last
                 // accepted update instead would let a cheater who keeps trying earn a longer and longer
                 // window (up to MAX_DT) and so a steady ~2x speed.
@@ -361,6 +391,12 @@ namespace RevivalGuard
         /// <summary>A position report sent before the client saw the snap-back: its ForcePosition sequence is older than the
         /// one the snap carried (16-bit, wrapping). Only within <paramref name="window"/> seconds of the snap, so a client
         /// that never echoes the sequence is judged normally again after that.</summary>
+        /// <summary>Snap-backs in a row the client never echoed, over how long, before it counts as out of step with the
+        /// server (MovementGuard forces a relog). An honest client echoes a snap in its next report, well under a second.</summary>
+        public const int DESYNC_SNAPS = 10;
+        public const double DESYNC_SECONDS = 30.0;
+        public static bool Desynced(int unheardSnaps, double secondsSinceFirst) => unheardSnaps >= DESYNC_SNAPS && secondsSinceFirst >= DESYNC_SECONDS;
+
         public static bool StaleAfterSnap(ushort reportStamp, ushort snapStamp, double sinceSnap, double window)
         {
             if (sinceSnap < 0 || sinceSnap > window) return false;

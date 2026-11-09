@@ -99,6 +99,7 @@ namespace RevivalGuard
                         if (wo != null && !player.TryAddToInventory(wo)) wo.Destroy();
                     }
                     Mod.Log.Info($"[RevivalGuard] town start: {player.Name} given the Academy coat, portal gem and two Oil of Rendering");
+                    Feedback.SkipAcademy(player);   // no Academy, so no "How was the Training Academy?" at minute 3
                 }
                 catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] town kit: {e.Message}"); }
             }

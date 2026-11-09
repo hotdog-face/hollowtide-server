@@ -264,7 +264,8 @@ namespace RevivalGuard
         /// <summary>Level (once), kit, buffs: in that order, a moment apart.</summary>
         internal static void Ready(Player p, string why)
         {
-            if (!On || p == null || !Mercenaries.IsMerc(p)) return;
+            // the Borg earn their gear (owner 2026-11-08): no merc kit for an "... of Borg" character (BorgKit dresses them)
+            if (!On || p == null || !Mercenaries.IsMerc(p) || BorgSwitch.IsBorg(p)) return;
             bool leveled = false;
             var chain = new ActionChain();
             chain.AddDelaySeconds(why == "login" ? 8.0 : 12.0);   // a lifestone return: past the portal space
@@ -318,7 +319,7 @@ namespace RevivalGuard
                 try
                 {
                     var p = __instance;
-                    if (p == null || !Mercenaries.IsMerc(p)) return;
+                    if (p == null || !Mercenaries.IsMerc(p) || BorgSwitch.IsBorg(p)) return;
                     int n;
                     lock (Sessions) { n = ++s_Next; Sessions[p.Guid.Full] = n; }
                     Ready(p, "login");

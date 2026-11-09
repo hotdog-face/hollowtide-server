@@ -75,7 +75,7 @@ namespace RevivalGuard
         {
             try
             {
-                if (target == null || !Mercenaries.IsMerc(target)) return;
+                if (target == null || !Mercenaries.IsMerc(target) || BorgSwitch.IsBorg(target)) return;   // the Borg earn their gear (BorgKit)
                 bool start = false;
                 lock (s_Lock)
                 {

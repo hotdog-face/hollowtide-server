@@ -43,7 +43,7 @@ namespace RevivalGuard
     /// (not saved: a respawn drops it). "template" writes a create-list datafix snippet beside the mod
     /// (dressing-room/&lt;name&gt;.sql). Outfits are saved for all staff in dressing-room/outfits.json.
     /// </summary>
-    public static class DressingRoom
+    public static partial class DressingRoom
     {
         public const uint TAILOR = 908200, MANNEQUIN = 908201, TRUNK = 908206;
         static bool IsMannequin(uint wcid) => wcid >= 908202 && wcid <= 908204;   // the room's dressed mannequins
@@ -73,7 +73,19 @@ namespace RevivalGuard
             public List<uint[]> Pl { get; set; }
         }
 
-        sealed class Look { public uint W; public string N; public uint Loc; public uint Cb; public int Pal; public double Sh; public int Cov; public uint Ic; public int It; public int Fx; }
+        sealed class Look
+        {
+            public uint W; public string N; public uint Loc; public uint Cb; public int Pal; public double Sh; public int Cov; public uint Ic; public int It; public int Fx;
+            // every weenie folded into this look (owner 261108-0036): their names and retail set ids, so Match set finds the
+            // set whichever copy's name or id carries it
+            public HashSet<string> Names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            public HashSet<int> Sets = new HashSet<int>();
+            // its styles: one weenie per distinct ClothingTable or texture under the same model (Ancient Armored Helm's three
+            // tables), the representative first; the panel shows them as a Style row of icons
+            public List<Look> Styles = new List<Look>();
+            public HashSet<string> StyleKeys = new HashSet<string>();
+        }
+        static Dictionary<uint, Look> s_LookOfW;   // every folded weenie -> its look
 
         sealed class Fit
         {
@@ -218,6 +230,8 @@ namespace RevivalGuard
                             .GroupBy(x => x.ObjectId).ToDictionary(g => g.Key, g => string.Join(",", g.OrderBy(x => x.Index).ThenBy(x => x.OldId).Select(x => $"{x.Index}:{x.OldId:X}>{x.NewId:X}")));
                         var pls = ctx.WeeniePropertiesPalette.Select(x => new { x.ObjectId, x.SubPaletteId, x.Offset, x.Length }).ToList()
                             .GroupBy(x => x.ObjectId).ToDictionary(g => g.Key, g => string.Join(",", g.OrderBy(x => x.Offset).Select(x => $"{x.SubPaletteId:X}@{x.Offset}+{x.Length}")));
+                        var setIds = ctx.WeeniePropertiesInt.Where(i => i.Type == (ushort)PropertyInt.EquipmentSetId).Select(i => new { i.ObjectId, i.Value }).ToList()
+                            .GroupBy(i => i.ObjectId).ToDictionary(g => g.Key, g => g.First().Value);
                         var setups = ctx.WeeniePropertiesDID.Where(d => d.Type == (ushort)PropertyDataId.Setup).Select(d => new { d.ObjectId, d.Value }).ToList()
                             .GroupBy(d => d.ObjectId).ToDictionary(g => g.Key, g => g.First().Value);
                         // ours with no ClothingBase but parts of their own: worn as their setup (ACE's AddSetupAsClothingBase)
@@ -237,31 +251,52 @@ namespace RevivalGuard
                             if (cbs.TryGetValue(d.ObjectId, out var c0) && c0 == 0) icons[d.ObjectId] = d.Value;
                         foreach (var n0 in ctx.WeeniePropertiesString.Where(x => x.ObjectId >= OURS && x.Type == (ushort)PropertyString.Name).ToList())
                             if (cbs.TryGetValue(n0.ObjectId, out var c1) && c1 == 0) names[n0.ObjectId] = n0.Value;
-                        // one row per LOOK, not per ClothingBase: the same retail look under twenty names shows once (under its
-                        // lowest weenie id), but pieces that differ by setup, own parts, textures, palettes, colour template or
-                        // icon are different looks and each shows
-                        var seen = new HashSet<string>();
+                        // ONE ROW PER LOOK (owner 261108-0036: "pwylls crown is there twice ... simplify it with one listing of same
+                        // items. even ones that are the same but different tints or colors"). A look is what draws on the body: the
+                        // ClothingTable (the setup only when there is none) and the weenie's own part, texture and palette rows.
+                        // Colour template, shade and icon are tints: the colour picker offers every template the table has. The
+                        // look shows under its lowest weenie id, so a copy of ours (Pwyll's Crown 903331) folds into retail's.
+                        var bySig = new Dictionary<string, Look>();
+                        var byW = new Dictionary<uint, Look>();
                         foreach (var kv in cbs.OrderBy(k => k.Key))
                         {
                             if (!locs.TryGetValue(kv.Key, out var loc) || (loc & LOOK_MASK) == 0 || (loc & ~LOOK_MASK & 0x7FFFFFFF) != 0) continue;
-                            string sig = string.Join("|", kv.Value, loc, pals.TryGetValue(kv.Key, out var p0) ? p0 : 0, icons.TryGetValue(kv.Key, out var i0) ? i0 : 0,
-                                setups.TryGetValue(kv.Key, out var s0) ? s0 : 0, aps.TryGetValue(kv.Key, out var a0) ? a0 : "",
-                                tms.TryGetValue(kv.Key, out var t0) ? t0 : "", pls.TryGetValue(kv.Key, out var q0) ? q0 : "");
-                            // ours always show under their own names (masks, costume pieces, showcase and owner suits), even
-                            // when one looks exactly like the retail piece it was cloned from
-                            if (!seen.Add(kv.Key >= OURS ? "#" + kv.Key : sig)) continue;
-                            list.Add(new Look
+                            string ownRows = string.Join("|", aps.TryGetValue(kv.Key, out var a0) ? a0 : "", tms.TryGetValue(kv.Key, out var t0) ? t0 : "", pls.TryGetValue(kv.Key, out var q0) ? q0 : "");
+                            // the look: the table's parts and textures per body (its colour templates are tints), or the setup when there is none
+                            string model = kv.Value != 0 ? ModelSig(kv.Value) : "setup " + (setups.TryGetValue(kv.Key, out var s0) ? s0 : 0);
+                            string sig = string.Join("|", model, loc, aps.TryGetValue(kv.Key, out var a1) ? a1 : "");
+                            string style = string.Join("|", kv.Value, ownRows);
+                            string nm = names.TryGetValue(kv.Key, out var n) && !string.IsNullOrWhiteSpace(n) ? n : "#" + kv.Key;
+                            var look = new Look
                             {
-                                W = kv.Key, Cb = kv.Value, Loc = loc,
-                                N = names.TryGetValue(kv.Key, out var n) && !string.IsNullOrWhiteSpace(n) ? n : "#" + kv.Key,
+                                W = kv.Key, Cb = kv.Value, Loc = loc, N = nm,
                                 Pal = pals.TryGetValue(kv.Key, out var pt) ? pt : 0,
                                 Sh = shades.TryGetValue(kv.Key, out var sh) ? sh : 0,
                                 Cov = covs.TryGetValue(kv.Key, out var cv) ? cv : 0,
                                 Ic = icons.TryGetValue(kv.Key, out var ic) ? ic : 0,
                                 It = types.TryGetValue(kv.Key, out var it) ? it : 0,
                                 Fx = fxs.TryGetValue(kv.Key, out var fx) ? fx : 0,
-                            });
+                            };
+                            if (!bySig.TryGetValue(sig, out var had)) { had = look; bySig[sig] = had; list.Add(had); }
+                            had.Names.Add(nm);
+                            if (setIds.TryGetValue(kv.Key, out var hs) && hs != 0) had.Sets.Add(hs);
+                            if (had.StyleKeys.Add(style)) had.Styles.Add(look);
+                            byW[kv.Key] = had;
                         }
+                        // then by name: the same name in the same slots is the same thing to the owner ("effectively exactly the same",
+                        // 261108-0036), even where retail baked each colour into its own copy of the model (Armored Sclavus Mask x3)
+                        // or made two shapes under one name (Ancient Armored Helm): one listing, each version a style
+                        var byName = new Dictionary<string, Look>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var l in list.ToList())
+                        {
+                            string key = l.N.Trim() + "|" + l.Loc + "|" + (l.Cb == 0 ? "own" : "table");
+                            if (!byName.TryGetValue(key, out var into)) { byName[key] = l; continue; }
+                            into.Names.UnionWith(l.Names); into.Sets.UnionWith(l.Sets);
+                            foreach (var st in l.Styles) if (!into.Styles.Any(x => x.W == st.W)) into.Styles.Add(st);
+                            foreach (var w in byW.Where(e => e.Value == l).Select(e => e.Key).ToList()) byW[w] = into;
+                            list.Remove(l);
+                        }
+                        lock (s_Lock) s_LookOfW = byW;
                         list.Sort((a, b) => string.Compare(a.N, b.N, StringComparison.OrdinalIgnoreCase));
                         Mod.Log.Info($"[RevivalGuard] DressingRoom: {list.Count} looks from {cbs.Count} weenies with a ClothingBase");
                     }
@@ -269,6 +304,7 @@ namespace RevivalGuard
                     List<Session> wake;
                     lock (s_Lock) { s_Catalog = list; s_Loading = null; wake = s_Waiting.ToList(); s_Waiting.Clear(); }
                     foreach (var s in wake) ModChannel.Send(s, "dress", "{\"ready\":1}");
+                    RealReady();   // then the real retail outfits (Inspire), in the background
                 });
             }
         }
@@ -283,12 +319,196 @@ namespace RevivalGuard
             }
             if (cat == null) { StartCatalog(); ModChannel.Send(p.Session, "dress", "{\"loading\":1}"); return; }
             var terms = (words ?? "").ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var hits = cat.Where(l => (slot == 0 || (l.Loc & slot) != 0) && terms.All(t => l.N.ToLowerInvariant().Contains(t) || l.W.ToString() == t)).ToList();
+            var hits = cat.Where(l => (slot == 0 || (l.Loc & slot) != 0) && terms.All(t => l.N.ToLowerInvariant().Contains(t) || l.W.ToString() == t) && DrawsOn(l, p)).ToList();
             per = Math.Clamp(per, 8, 80);
             int pages = Math.Max(1, (hits.Count + per - 1) / per);
             page = Math.Clamp(page, 0, pages - 1);
             var rows = hits.Skip(page * per).Take(per).Select(l => new object[] { l.W, l.N, l.Loc, l.Ic, l.It, l.Fx });
             ModChannel.Send(p.Session, "dress", JsonSerializer.Serialize(new { list = new { slot, page, pages, total = hits.Count, q = words ?? "", rows } }));
+        }
+
+        // ---- which looks draw on this body (owner 261108-0037: "soldiers head metimorphi ... when equipped it seems to have
+        // no appearance"). The Metamorphi pieces are Olthoi player armour: their ClothingTable (0x100006C3) dresses only the
+        // Olthoi body (setup 0x02000041), a heritage this shard removed, so on any playable body there is nothing to draw,
+        // in retail too (ClothingTable::BuildObjDesc). The wardrobe lists only looks that draw on the viewer's body, by ACE's
+        // own lookup (Creature.CalculateObjDesc): the table holds the body's setup, or the setup its alternates map to, with
+        // at least one part. An entry with no part is retail hiding the piece on that body (helmets on a Tumerok).
+        static readonly Dictionary<uint, HashSet<uint>> s_Bodies = new Dictionary<uint, HashSet<uint>>();
+
+        static HashSet<uint> BodiesOf(uint cb)
+        {
+            lock (s_Bodies)
+            {
+                if (s_Bodies.TryGetValue(cb, out var had)) return had;
+                HashSet<uint> set = null;
+                try
+                {
+                    var t = DatManager.PortalDat.ReadFromDat<ClothingTable>(cb);
+                    set = new HashSet<uint>(t.ClothingBaseEffects.Where(e => e.Value.CloObjectEffects.Count > 0).Select(e => e.Key));
+                }
+                catch { }
+                s_Bodies[cb] = set;
+                return set;
+            }
+        }
+
+        /// <summary>The setup ACE looks up in a ClothingTable for this body (Creature.CalculateObjDesc's switch).</summary>
+        static uint TableSetup(uint s) => (SetupConst)s switch
+        {
+            SetupConst.UmbraenMaleCrownGen or SetupConst.UmbraenMaleNoCrown or SetupConst.UmbraenMaleVoid => (uint)SetupConst.UmbraenMaleCrown,
+            SetupConst.UmbraenFemaleNoCrown or SetupConst.UmbraenFemaleVoid => (uint)SetupConst.UmbraenFemaleCrown,
+            SetupConst.PenumbraenMaleCrownGen or SetupConst.PenumbraenMaleNoCrown or SetupConst.PenumbraenMaleVoid => (uint)SetupConst.PenumbraenMaleCrown,
+            SetupConst.PenumbraenFemaleNoCrown or SetupConst.PenumbraenFemaleVoid => (uint)SetupConst.PenumbraenFemaleCrown,
+            SetupConst.UndeadMaleUndeadGen or SetupConst.UndeadMaleSkeleton or SetupConst.UndeadMaleSkeletonNoFlame
+                or SetupConst.UndeadMaleZombie or SetupConst.UndeadMaleZombieNoFlame => (uint)SetupConst.UndeadMaleUndead,
+            SetupConst.UndeadFemaleUndeadGen or SetupConst.UndeadFemaleSkeleton or SetupConst.UndeadFemaleSkeletonNoFlame
+                or SetupConst.UndeadFemaleZombie or SetupConst.UndeadFemaleZombieNoFlame => (uint)SetupConst.UndeadFemaleUndead,
+            SetupConst.AnakshayMale => (uint)SetupConst.HumanMale,
+            SetupConst.AnakshayFemale => (uint)SetupConst.HumanFemale,
+            _ => s,
+        };
+
+        static bool DrawsOn(Look l, Creature c)
+        {
+            if (l.Cb == 0 || c == null) return true;   // worn as its own setup's parts (ACE's AddSetupAsClothingBase)
+            var set = BodiesOf(l.Cb);
+            if (set == null) return true;              // unreadable: list it rather than hide it
+            uint s = c.SetupTableId;
+            return set.Contains(s) || set.Contains(TableSetup(s));
+        }
+
+        /// <summary>The wardrobe as this body sees it (the catalogue, filtered by DrawsOn).</summary>
+        static List<Look> Drawable(Player p)
+        {
+            List<Look> cat; lock (s_Lock) cat = s_Catalog;
+            return cat == null ? new List<Look>() : cat.Where(l => DrawsOn(l, p)).ToList();
+        }
+
+        // ---- Random (owner 261108-0038: "give me a random button to make starting tailors in the dressing room") ----
+        static readonly uint[] SUIT = { 0x1, 0x200, 0x400, 0x800, 0x1000, 0x20, 0x2000, 0x4000, 0x100 };   // head, chest, girth, arms, hands, legs, feet
+        static readonly Random s_Rng = new Random();
+
+        /// <summary>A random piece of armour or clothing for each body part, in a random colour template and shade; each
+        /// fits with the others (nothing takes another off). One Undo step.</summary>
+        static void RandomSuit(Player p, Fit f)
+        {
+            var cat = Drawable(p);
+            if (cat.Count == 0) { f.Msg = "The wardrobe is still being read. Try again in a moment."; return; }
+            f.Pieces.Clear();
+            foreach (var slot in SUIT.OrderBy(_ => s_Rng.Next()))
+            {
+                if (f.Pieces.Any(x => (ELoc(x) & slot) != 0)) continue;
+                var fits = cat.Where(l => (l.Loc & slot) != 0).Select(FromLook).Where(x => !f.Pieces.Any(o => Clash(o, x))).ToList();
+                if (fits.Count == 0) continue;
+                var x = fits[s_Rng.Next(fits.Count)];
+                var pals = PalettesOf(x.Cb);
+                if (pals.Count > 1) x.Pal = (int)(uint)pals[s_Rng.Next(pals.Count)][0];
+                if (ShadesOf(x.Cb)) x.Sh = Math.Round(s_Rng.NextDouble(), 2);
+                Put(f, x);
+            }
+            f.Msg = $"A random suit of {f.Pieces.Count} pieces. Random again for another; Undo goes back.";
+        }
+
+        // ---- Match set (owner 261108-0041: "ability to make a matching suit around one piece of armor that grabs and sets the
+        // things that are meant to go with it") ----
+        static readonly HashSet<string> SLOT_WORDS = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "helm", "helmet", "coif", "cap", "hat", "basinet", "armet", "heaume", "crown", "mask", "cowl", "hood", "kabuton", "circlet",
+            "breastplate", "cuirass", "hauberk", "coat", "shirt", "jerkin", "tunic", "vest", "robe", "jacket", "doublet", "blouse", "top",
+            "girth", "tassets", "belt", "pauldrons", "vambraces", "bracers", "sleeves", "gauntlets", "gloves", "mitts", "handwraps",
+            "greaves", "leggings", "pants", "breeches", "trousers", "tights", "skirt", "kilt", "sollerets", "boots", "shoes", "sandals",
+            "slippers", "jumpsuit", "pair", "a", "an", "of",
+        };
+        static readonly HashSet<string> GRADE_WORDS = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "greater", "lesser", "superior", "ancient", "major", "minor", "fine", "heavy", "light" };
+
+        /// <summary>A piece's family: its name less the words that name the body part ("Helm of the Dark Lord" and
+        /// "Breastplate of the Dark Lord" are both "the dark lord"); with grades dropped too when <paramref name="loose"/>.</summary>
+        static string Family(string name, bool loose)
+        {
+            var w = (name ?? "").Replace("'s ", " ").Split(new[] { ' ', ',', '-' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(t => !SLOT_WORDS.Contains(t) && !(loose && GRADE_WORDS.Contains(t))).Select(t => t.ToLowerInvariant());
+            return string.Join(" ", w);
+        }
+
+        /// <summary>From the piece in the selected slot, the other pieces of its set: retail's set id when it has one, else
+        /// the same family of names (Family; loosened when the strict one finds nothing). The biggest pieces first, each
+        /// only where it fits beside the piece and those already chosen, in the piece's colour when they have it. Pieces
+        /// of the outfit in slots the set has nothing for stay. One Undo step.</summary>
+        static void MatchSet(Player p, Fit f, Piece anchor)
+        {
+            var cat = Drawable(p);
+            if (cat.Count == 0) { f.Msg = "The wardrobe is still being read. Try again in a moment."; return; }
+            Dictionary<uint, Look> byW; lock (s_Lock) byW = s_LookOfW;
+            var me = byW != null && byW.TryGetValue(anchor.W, out var mine) ? mine : LookOf(anchor.W);
+            var sets = me?.Sets ?? new HashSet<int>();
+            var names = me?.Names.Count > 0 ? me.Names : new HashSet<string> { anchor.N };
+            List<Look> Find(Func<Look, bool> same) => cat.Where(l => l != me && l.W != anchor.W && same(l)).ToList();
+            var mates = sets.Count > 0 ? Find(l => l.Sets.Overlaps(sets)) : new List<Look>();
+            string how = "set";
+            foreach (bool loose in new[] { false, true })
+            {
+                if (mates.Count > 0) break;
+                var fam = new HashSet<string>(names.Select(n => Family(n, loose)).Where(x => x.Length > 0));
+                if (fam.Count == 0) continue;
+                mates = Find(l => l.Names.Any(n => fam.Contains(Family(n, loose))));
+                how = "family";
+            }
+            var chosen = new List<Piece> { anchor };
+            foreach (var l in mates.OrderByDescending(l => System.Numerics.BitOperations.PopCount(l.Loc)).ThenBy(l => l.W))
+            {
+                var x = FromLook(l);
+                if (chosen.Any(o => Clash(o, x))) continue;
+                if (PalettesOf(x.Cb).Any(q => (uint)q[0] == (uint)anchor.Pal)) { x.Pal = anchor.Pal; x.Sh = anchor.Sh; }
+                chosen.Add(x);
+            }
+            if (chosen.Count == 1) { f.Msg = $"Found nothing made to go with the {anchor.N}."; return; }
+            foreach (var x in chosen.Skip(1)) Put(f, x);
+            f.Msg = $"Matched {chosen.Count - 1} piece{(chosen.Count == 2 ? "" : "s")} to the {anchor.N} (by its {(how == "set" ? "armour set" : "name")}). Undo goes back.";
+        }
+
+        /// <summary>Whether shade can change this look (owner 261108-0040): some colour template's palette set has more
+        /// than one palette to pick from. Cached per ClothingTable.</summary>
+        static readonly Dictionary<uint, bool> s_Shades = new Dictionary<uint, bool>();
+        static bool ShadesOf(uint cb)
+        {
+            if (cb == 0) return false;
+            lock (s_Shades)
+            {
+                if (s_Shades.TryGetValue(cb, out var had)) return had;
+                bool any = false;
+                try
+                {
+                    var t = DatManager.PortalDat.ReadFromDat<ClothingTable>(cb);
+                    foreach (var e in t.ClothingSubPalEffects.Values)
+                        foreach (var sub in e.CloSubPalettes)
+                            if (DatManager.PortalDat.ReadFromDat<PaletteSet>(sub.PaletteSet).PaletteList.Count > 1) { any = true; break; }
+                }
+                catch { }
+                return s_Shades[cb] = any;
+            }
+        }
+
+        /// <summary>A ClothingTable's look: the parts and textures it puts on each body, without its colour templates (owner
+        /// 261108-0036: looks that differ only by tint are one listing). Two tables that are copies of each other fold;
+        /// a different texture (Celdon over the leather mesh) is a different look. Unreadable tables stay their own look.</summary>
+        static string ModelSig(uint cb)
+        {
+            try
+            {
+                var t = DatManager.PortalDat.ReadFromDat<ClothingTable>(cb);
+                return string.Join(";", t.ClothingBaseEffects.OrderBy(e => e.Key).Select(e => e.Key.ToString("X") + ":" +
+                    string.Join(",", e.Value.CloObjectEffects.OrderBy(o => o.Index).Select(o => $"{o.Index}={o.ModelId:X}" +
+                        string.Concat(o.CloTextureEffects.Select(x => $"/{x.OldTexture:X}>{x.NewTexture:X}"))))));
+            }
+            catch { return "cb " + cb; }
+        }
+
+        /// <summary>The styles of the look this weenie is part of, when it has more than one: [weenie, icon, item type, ui effects].</summary>
+        static List<object[]> StylesOf(uint w)
+        {
+            Dictionary<uint, Look> m; lock (s_Lock) m = s_LookOfW;
+            if (m == null || !m.TryGetValue(w, out var l) || l.Styles.Count < 2) return new List<object[]>();
+            return l.Styles.Select(x => new object[] { x.W, x.Ic, x.It, x.Fx }).ToList();
         }
 
         static Look LookOf(uint wcid)
@@ -314,7 +534,7 @@ namespace RevivalGuard
         /// <summary>The palette templates this look's ClothingTable has (the only ones it can show), with ACE's names and a
         /// swatch: the colour that template gives the look's first sub-palette at this shade, read the way CalculateObjDesc
         /// picks it (the PaletteSet's palette for the shade), at the middle of that sub-palette's colour range.</summary>
-        static List<object[]> PalettesOf(uint cb, double shade = 0)
+        static List<object[]> PalettesOf(uint cb, double shade = 0, long keep = -1)
         {
             var r = new List<object[]>();
             if (cb == 0) return r;
@@ -332,9 +552,19 @@ namespace RevivalGuard
                     long colors = subs.Count == 0 ? 0 : subs[0].Ranges.Sum(g => (long)g.NumColors);
                     if (distinct > bestDistinct || (distinct == bestDistinct && colors > bestColors)) { best = j; bestDistinct = distinct; bestColors = colors; }
                 }
-                foreach (var k in t.ClothingSubPalEffects.Keys.OrderBy(k => k))
+                // owner 261108-0040 ("rynthid tenticle cape shows lots of options but cant be changed"): a template that
+                // gives exactly the colours an earlier one gives is not a choice, so it is listed once (the worn one wins);
+                // a look whose templates all give the same colours has one entry and the panel hides its Colour row
+                string Colours(CloSubPalEffect e) => string.Join(";", e.CloSubPalettes.Select(c => c.PaletteSet.ToString("X") + "@" + string.Join(",", c.Ranges.Select(g => g.Offset + "+" + g.NumColors))));
+                var seen = new Dictionary<string, int>();
+                foreach (var k in t.ClothingSubPalEffects.Keys.OrderBy(k => k == keep ? -1L : k))
+                {
+                    if (seen.ContainsKey(Colours(t.ClothingSubPalEffects[k]))) continue;
+                    seen[Colours(t.ClothingSubPalEffects[k])] = r.Count;
                     r.Add(new object[] { k, Enum.IsDefined(typeof(PaletteTemplate), (int)k) ? Spaced(((PaletteTemplate)(int)k).ToString()) : "Template " + k,
                                          Swatch(t.ClothingSubPalEffects[k], shade, best) });
+                }
+                r.Sort((a, b) => ((uint)a[0]).CompareTo((uint)b[0]));
             }
             catch { }
             return r;
@@ -521,7 +751,9 @@ namespace RevivalGuard
                     return new
                     {
                         w = x.W, n = x.N, loc = ELoc(x), full = x.Loc, rd = x.Rd, pal = x.Pal, sh = Math.Round(x.Sh, 3), ly = x.Ly, ic = IconFor(x), it = x.It, fx = x.Fx,
-                        pals = PalettesOf(x.Cb, x.Sh),
+                        pals = PalettesOf(x.Cb, x.Sh, x.Pal),
+                        shades = ShadesOf(x.Cb) ? 1 : 0,
+                        styles = StylesOf(x.W),
                         cover = ReduceChoices(x.Loc).Select(c => new object[] { c.Loc, c.Short, c.Long }),
                     };
                 }),
@@ -602,6 +834,11 @@ namespace RevivalGuard
                             break;
                         }
                     case "drop": { var x = At(1); if (x != null) f.Pieces.Remove(x); break; }
+                    case "random": RandomSuit(p, f); break;
+                    case "inspire": Inspire(p, f); break;
+                    case "remix": Remix(p, f); break;
+                    case "realstats": f.Msg = RealReady() ? s_RealStats : NotReady(); look = false; break;
+                    case "match": { var x = At(1); if (x == null) f.Msg = "Pick a piece to build the set around first."; else MatchSet(p, f, x); break; }
                     case "clear": f.Pieces.Clear(); break;
                     case "worn": LoadWorn(p, f); break;
                     case "save":

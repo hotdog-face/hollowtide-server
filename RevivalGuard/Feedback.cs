@@ -16,7 +16,8 @@ namespace RevivalGuard
     /// `/answer <text>` (the client sends it to the ticket desk as kind "answer", and TicketDesk files it
     /// with the question it answers) or simply ignores it. Nothing is ever asked twice.
     ///
-    ///   academy  out of the Training Academy (RecallsDisabled cleared) within the first 20 hours played
+    ///   academy  out of the Training Academy (RecallsDisabled cleared) within the first 20 hours played; never
+    ///            to a character made in town (SkipAcademy)
     ///   lvl20    level 20 or more
     ///   10h      10 hours played
     ///
@@ -65,14 +66,23 @@ namespace RevivalGuard
             }
         }
 
-        static void MarkAsked(Player p, string key)
+        static void MarkAsked(Player p, string key, string note = null)
         {
             lock (s_Lock)
             {
+                Asked(p, key);   // loads the file first, so a mark made before any question is not lost on load
                 s_Asked.Add($"{p.Guid.Full:X8}/{key}");
                 Directory.CreateDirectory(Dir);
-                File.AppendAllText(Path.Combine(Dir, "asked.tsv"), $"{p.Guid.Full:X8}\t{key}\t{DateTime.UtcNow:o}\n");
+                File.AppendAllText(Path.Combine(Dir, "asked.tsv"), $"{p.Guid.Full:X8}\t{key}\t{DateTime.UtcNow:o}" + (note != null ? "\t" + note : "") + "\n");
             }
+        }
+
+        /// <summary>A character made in town never saw the Training Academy (live 2026-11-02: "never seen the training
+        /// academy"): its academy question is closed at creation, marked "town start" in asked.tsv (not asked).</summary>
+        internal static void SkipAcademy(Player p)
+        {
+            try { MarkAsked(p, "academy", "town start, not asked"); }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] feedback: town start mark: {e.Message}"); }
         }
 
         static bool Due(Player p, string key)

@@ -126,7 +126,14 @@ namespace RevivalGuard
             // ONE LINE, the names after the count (owner 2026-10-14: "its still spamming"): every client hides the reply
             // to its own automatic @pop by the "Current world population:" line, so names on a line of their own showed
             // in chat each poll on any client older than 0.1.41. A name holds no digits, so the count still parses.
-            Say($"Current world population: {names.Count:N0}" + (names.Count > 0 ? " (" + string.Join(", ", names) + ")" : ""));
+            // THE BORG ARE DISCLOSED HERE (docs/proposals/the-borg.md): named after the players, never counted. NO DIGITS in
+            // this clause: the client reads every digit after "Current world population:" as the count (Program.AcClient.
+            // Decode.cs TryParsePop), and a separate line would show in chat on every automatic poll.
+            List<string> bots;
+            try { bots = PlayerManager.GetAllOnline().Where(BorgSwitch.IsBorg).Select(p => p.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(); }
+            catch { bots = new List<string>(); }
+            string borg = bots.Count == 0 ? "" : ". Also online, the Borg, a guild of bots and not players: " + new string(string.Join(", ", bots).Where(c => !char.IsDigit(c)).ToArray());
+            Say($"Current world population: {names.Count:N0}" + (names.Count > 0 ? " (" + string.Join(", ", names) + ")" : "") + borg);
             return false;
         }
     }

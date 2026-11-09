@@ -24,5 +24,7 @@
   <ItemGroup>
     <!-- The feature request board's starting list (FeatureBoard), used once on a shard with no board file. -->
     <EmbeddedResource Include="FeatureRequestsSeed.json" LogicalName="RevivalGuard.FeatureRequestsSeed.json" />
+    <!-- Real retail outfits from the packet captures, for the Dressing Room's Inspire (tools/dressing-room/outfits_extract.py). -->
+    <EmbeddedResource Include="RetailOutfits.json" LogicalName="RevivalGuard.RetailOutfits.json" />
   </ItemGroup>
 </Project>

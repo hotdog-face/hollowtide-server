@@ -109,6 +109,8 @@ namespace RevivalGuard
                         new GameMessageBootAccount(" because that account name is reserved; choose another"));
                     return false;
                 }
+                if (loginRequest.NetAuthType == NetAuthType.AccountPassword && BorgSwitch.RefuseLogin(session, loginRequest.Account))
+                    return false;   // the Borg's off switch (BorgSwitch)
                 if (s_Cap <= 0) return true;
                 if (!ConfigManager.Config.Server.Accounts.AllowAutoAccountCreation) return true;
                 if (loginRequest.NetAuthType != NetAuthType.AccountPassword || loginRequest.Password == "") return true;

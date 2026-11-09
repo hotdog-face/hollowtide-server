@@ -33,7 +33,8 @@ namespace RevivalGuard
 
         internal static bool IsReduced(WorldObject wo)
         {
-            if (wo == null || wo.ItemWorkmanship == null) return false;   // only loot armour can be reduced
+            if (wo == null) return false;
+            if (wo.ItemWorkmanship == null && !SuitReduction.WeenieIsOutfit(wo)) return false;   // loot armour, and outfits (SuitReduction, owner-approved)
             var now = (uint)(wo.ValidLocations ?? EquipMask.None);
             if (now == 0) return false;
             var weenie = DatabaseManager.World.GetCachedWeenie(wo.WeenieClassId);

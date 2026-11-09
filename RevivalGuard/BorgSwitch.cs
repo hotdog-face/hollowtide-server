@@ -31,7 +31,7 @@ namespace RevivalGuard
         public static bool On => !System.IO.File.Exists(OffFile);
 
         /// <summary>ONLY "... of Borg" COUNTS (Hollowtide session 2026-11-08): the Hollow Company's mercs (Brannoc and Sefa
-        /// the Mercenary) are on the same allowlisted accounts, and stay untouched by /pop's Borg line and by @borg off
+        /// the Mercenary) are on the same allowlisted accounts, and stay untouched by the Borg rules (/pop counts them out, @borg off leaves them)
         /// until they are renamed "of Borg".</summary>
         public static bool IsBorgName(string name) =>
             name != null && name.TrimEnd().EndsWith(" of Borg", StringComparison.OrdinalIgnoreCase);

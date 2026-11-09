@@ -624,14 +624,23 @@ namespace RevivalGuard
         /// <summary>What the Main, Lower and Middle reduction tools would leave of a piece in these slots, exactly as
         /// ACE's Tailoring.TailorReduceArmor picks (docs/findings/tailoring-reduction-2026-11-06.md). A piece in one
         /// slot has no choice (TailoringParity refuses the tools on it). Each choice: (slots, button, tooltip).</summary>
-        static List<(uint Loc, string Short, string Long)> ReduceChoices(uint loc)
+        static List<(uint Loc, string Short, string Long)> ReduceChoices(uint loc, uint wcid = 0)
         {
             var r = new List<(uint, string, string)>();
             if (System.Numerics.BitOperations.PopCount(loc & REDUCIBLE) < 2) return r;
             // full robes and guises (every body armour slot) cannot be tailored or reduced (RobeTailoring, retail T9):
-            // a hooded robe keeps its head, so it takes a helm off
+            // a hooded robe keeps its head, so it takes a helm off. EXCEPT the no-spell outfits (Dapper Suit etc.), which
+            // the owner let reduce like a hauberk (SuitReduction, 2026-11-08): Main keeps the chest, Middle the upper legs.
             const uint FULL = (uint)(EquipMask.ChestArmor | EquipMask.AbdomenArmor | EquipMask.UpperArmArmor | EquipMask.LowerArmArmor | EquipMask.UpperLegArmor | EquipMask.LowerLegArmor);
-            if ((loc & FULL) == FULL) return r;
+            if ((loc & FULL) == FULL)
+            {
+                if (OutfitWeenie(wcid))
+                {
+                    r.Add(((uint)EquipMask.ChestArmor, "Chest", "Chest only (an Armor Main Reduction Tool)"));
+                    r.Add(((uint)EquipMask.UpperLegArmor, "Upper", "Upper legs only (an Armor Middle Reduction Tool)"));
+                }
+                return r;
+            }
             bool Has(EquipMask m) => ((EquipMask)loc & m) == m;
             // Main: chest, else upper arms, else abdomen
             if (Has(EquipMask.ChestArmor)) r.Add(((uint)EquipMask.ChestArmor, "Chest", "Chest only (an Armor Main Reduction Tool)"));
@@ -649,6 +658,15 @@ namespace RevivalGuard
             // a choice that is the whole piece is no choice (two slots where a tool keeps both cannot happen, but be safe)
             r.RemoveAll(c => c.Item1 == (loc & REDUCIBLE));
             return r;
+        }
+
+        /// <summary>A full-body outfit SuitReduction lets reduce: not loot, no spells on its weenie.</summary>
+        static bool OutfitWeenie(uint wcid)
+        {
+            if (wcid == 0 || !SuitReduction.On) return false;
+            var w = ACE.Database.DatabaseManager.World.GetCachedWeenie(wcid);
+            if (w == null || (w.PropertiesInt != null && w.PropertiesInt.ContainsKey(PropertyInt.ItemWorkmanship))) return false;
+            return w.PropertiesSpellBook == null || w.PropertiesSpellBook.Count == 0;
         }
 
         static Piece FromLook(Look l) => new Piece { W = l.W, N = l.N, Loc = l.Loc, Cov = l.Cov, Cb = l.Cb, Pal = l.Pal, Sh = l.Sh, Ly = 0 };
@@ -684,12 +702,19 @@ namespace RevivalGuard
             // a piece in the slot being dressed is simply replaced; the others are the chosen pieces this would wipe
             bool Replaced(Piece o) => sel != 0 ? (ELoc(o) & sel) != 0 : ELoc(o) == ELoc(x);
             List<Piece> Lost(Piece y) => f.Pieces.Where(o => Clash(o, y) && !Replaced(o)).ToList();
-            var lost = Lost(x);
+            // OWNER 2026-11-08 (report 261109-0011): "if i select a slot in the dressing room it should only effect that
+            // slot as if it were reduced". A piece picked for one slot is worn reduced to the reduction that covers that
+            // slot whenever there is one, so the rest of the outfit stays on (Covers > Full wears the whole piece).
+            var full = Lost(x);
             var kept = new List<Piece>();
-            if (lost.Count > 0)
+            if (sel != 0 && (x.Loc & REDUCIBLE & ~sel) != 0)
+                foreach (var c in ReduceChoices(x.Loc, x.W))
+                    if ((c.Loc & sel) != 0) { var y = Copy(x); y.Rd = c.Loc; kept = full.Where(o => !Lost(y).Contains(o)).ToList(); x = y; break; }
+            var lost = Lost(x);
+            if (lost.Count > 0 && x.Rd == 0)
             {
                 Piece best = null; var bestLost = lost;
-                foreach (var c in ReduceChoices(x.Loc))
+                foreach (var c in ReduceChoices(x.Loc, x.W))
                 {
                     if (sel != 0 && (c.Loc & sel) == 0) continue;
                     var y = Copy(x); y.Rd = c.Loc;
@@ -702,6 +727,7 @@ namespace RevivalGuard
             string Names(List<Piece> l) => l.Count <= 2 ? string.Join(" and ", l.Select(o => o.N)) : $"{l[0].N}, {l[1].N} and {l.Count - 2} more";
             var msg = new List<string>();
             if (kept.Count > 0) msg.Add($"Kept your {Names(kept)}: the {x.N} is reduced to {SlotName(x.Rd)} (Covers, Full for all of it).");
+            else if (x.Rd != 0 && sel != 0) msg.Add($"The {x.N} is reduced to {SlotName(x.Rd)}, so only this slot changed (Covers, Full for all of it).");
             if (lost.Count > 0) msg.Add($"Took off the {Names(lost)}: the {x.N} covers {BodyOf(lost, x)} too. Undo puts {(lost.Count == 1 ? "it" : "them")} back.");
             if (msg.Count > 0) f.Msg = string.Join(" ", msg);
         }
@@ -754,7 +780,7 @@ namespace RevivalGuard
                         pals = PalettesOf(x.Cb, x.Sh, x.Pal),
                         shades = ShadesOf(x.Cb) ? 1 : 0,
                         styles = StylesOf(x.W),
-                        cover = ReduceChoices(x.Loc).Select(c => new object[] { c.Loc, c.Short, c.Long }),
+                        cover = ReduceChoices(x.Loc, x.W).Select(c => new object[] { c.Loc, c.Short, c.Long }),
                     };
                 }),
                 // each saved outfit as a tile: its name and the icon of its chest piece (else its first)
@@ -828,7 +854,7 @@ namespace RevivalGuard
                             // reduce <piece> <slots>: 0 = the whole piece again
                             var x = At(1);
                             if (x == null || a.Length < 3 || !uint.TryParse(a[2], out var to)) break;
-                            if (to != 0 && !ReduceChoices(x.Loc).Any(c => c.Loc == to)) { f.Msg = "That piece cannot be reduced to those slots."; break; }
+                            if (to != 0 && !ReduceChoices(x.Loc, x.W).Any(c => c.Loc == to)) { f.Msg = "That piece cannot be reduced to those slots."; break; }
                             x.Rd = to;
                             f.Pieces.Remove(x); Put(f, x);   // the whole piece again takes back slots another piece may hold
                             break;
@@ -912,7 +938,7 @@ namespace RevivalGuard
                 var x = new Piece { W = w.WeenieClassId, N = w.Name, Loc = (uint)(w.ValidLocations ?? 0), Cov = (int)(w.ClothingPriority ?? 0), Cb = w.ClothingBase ?? 0, Pal = w.PaletteTemplate ?? 0, Sh = w.Shade ?? 0, Ly = w.TopLayerPriority == true ? 1 : w.TopLayerPriority == false ? -1 : 0, Ic = w.IconId, It = (int)w.ItemType, Fx = (int)(w.UiEffects ?? 0) };
                 // a reduced piece: its weenie's own slots, reduced to the ones it is worn in
                 var own = LookOf(w.WeenieClassId);
-                if (own != null && own.Loc != x.Loc && ReduceChoices(own.Loc).Any(r => r.Loc == x.Loc)) { x.Rd = x.Loc; x.Loc = own.Loc; x.Cov = own.Cov; }
+                if (own != null && own.Loc != x.Loc && ReduceChoices(own.Loc, own.W).Any(r => r.Loc == x.Loc)) { x.Rd = x.Loc; x.Loc = own.Loc; x.Cov = own.Cov; }
                 ReadRows(w, x);
                 Put(f, x);
             }

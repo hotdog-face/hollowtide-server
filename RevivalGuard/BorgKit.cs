@@ -69,11 +69,36 @@ namespace RevivalGuard
             // CLOTHING LAYERS (a shirt and pants both cover the abdomen, boots and pants the lower leg): only armour, or the
             // same kind of item already worn there (a weapon, a second shirt), keeps a piece off; ACE's own rules decide the rest
             var under = p.EquippedObjects.Values.Where(o => ((o.CurrentWieldedLocation ?? 0) & at) != 0
-                && (o.ItemType == ItemType.Armor || o.ItemType == wo.ItemType && wo.ItemType != ItemType.Clothing
+                // the kit's own Leather Boots are ItemType.Armor and cover the lower leg (0x180) as Pants do (0xC4): they
+                // kept every man's Pants off (live 2026-11-08: Cranius, Maximus, Nexus in no pants). Kit never blocks kit.
+                && (o.ItemType == ItemType.Armor && !KIT.Contains(o.WeenieClassId) || o.ItemType == wo.ItemType && wo.ItemType != ItemType.Clothing
                     || o.ValidLocations == wo.ValidLocations)).ToList();
             string why = at == EquipMask.None ? "no slot" : under.Count > 0 ? "slot taken: " + string.Join(", ",
                 under.Select(o => $"{o.Name} {o.CurrentWieldedLocation}")) : null;
-            if (why == null && !p.TryEquipObjectWithNetworking(wo, at)) why = "equip refused";
+            // INTO THE PACK FIRST, THEN WIELDED AS A PLAYER WOULD (owner report 261109-0015, "sefa showed up missing pieces
+            // in inspect"): TryEquipObjectWithNetworking on a new object sends the wearer only the wield events, never the
+            // object, so the wearer's own client had no name or look for it. Created in the pack, the client is told of it;
+            // GetAndWieldItem then moves it on with every message a wield sends.
+            if (why == null)
+            {
+                if (!p.TryCreateInInventoryWithNetworking(wo)) why = "pack full";
+                else
+                {
+                    // A MOMENT LATER (shard2 2026-11-09): wielded in the same tick, the wearer's client had the wield before
+                    // the new object and left it in the pack ("dressed" on the server, nothing worn in his own view)
+                    var chain = new ActionChain();
+                    chain.AddDelaySeconds(1.5);
+                    chain.AddAction(p, () =>
+                    {
+                        if (PlayerManager.GetOnlinePlayer(p.Guid) != p) return;
+                        p.HandleActionGetAndWieldItem(wo.Guid.Full, at);
+                        if (p.EquippedObjects.ContainsKey(wo.Guid)) return;
+                        Mod.Log.Info($"[RevivalGuard] BorgKit: {p.Name} can't wear {wo.Name} ({at}): wield refused");
+                        p.TryConsumeFromInventoryWithNetworking(wo);
+                    });
+                    chain.EnqueueChain();
+                }
+            }
             if (why != null) { Mod.Log.Info($"[RevivalGuard] BorgKit: {p.Name} can't wear {wo.Name} ({at}): {why}"); wo.Destroy(); return false; }
             given.Add(wo.Name);
             return true;

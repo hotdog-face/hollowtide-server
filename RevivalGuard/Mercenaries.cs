@@ -16,7 +16,11 @@ namespace RevivalGuard
     /// THE HOLLOW COMPANY IS NEVER COUNTED AS PEOPLE (owner, 2026-10-07: "a feature, not some deceptive plan
     /// to fake population"). The mercenaries (tools/mercs, docs/MERCENARIES.md) are real game sessions on
     /// accounts named hcmerc*, so ACE counts them as players everywhere. This leaves them out of:
-    ///   * the login screen's "N online" (PopulationQuery),
+    ///   * the login screen's "N online" (PopulationQuery) and the radar's (/pop's count), EXCEPT THE BORG: the owner
+    ///     2026-11-08, "i want the borg to count in the population count under the radar". The Borg (BorgSwitch.IsBorg,
+    ///     on the same accounts) count there (ShownOnline) and /pop lists them with the players (their "of Borg" names
+    ///     tell them apart: owner 2026-11-08); the Hollow Company
+    ///     stays out. Everything else (the event director, telemetry, restarts) still uses RealOnline, people only.
     ///   * the world-event director's minimum-players check (EventDirector),
     ///   * the gameplay telemetry (Telemetry marks them "merc":1, and the reports skip them),
     /// and /pop, which names everyone online but them.
@@ -68,6 +72,14 @@ namespace RevivalGuard
             catch { return PlayerManager.GetOnlineCount(); }
         }
 
+        /// <summary>The "N online" players see (the login screen, the browser's /pop, the radar): real players plus the
+        /// Borg (owner 2026-11-08), never the Hollow Company. Not for anything that needs people (use RealOnline).</summary>
+        public static int ShownOnline()
+        {
+            try { return PlayerManager.GetAllOnline().Count(p => !IsMerc(p) || BorgSwitch.IsBorg(p)); }
+            catch { return PlayerManager.GetOnlineCount(); }
+        }
+
         public static int MercsOnline()
         {
             try { return PlayerManager.GetAllOnline().Count(IsMerc); }
@@ -109,14 +121,18 @@ namespace RevivalGuard
 
     /// <summary>/pop: WHO is online, not only how many (owner, 2026-10-13: "make /pop list all players online for all
     /// players. dont include the mercenaries in that"). Every player's name, sorted, a dozen to a line; the Hollow
-    /// Company is neither counted nor named.</summary>
+    /// Company is neither counted nor named. The Borg are counted and listed with the players (owner 2026-11-08).</summary>
     [HarmonyPatch(typeof(PlayerCommands), nameof(PlayerCommands.HandlePop))]
     public static class MercenaryPop
     {
         static bool Prefix(Session session)
         {
+            // THE BORG ARE LISTED AND COUNTED WITH THE PLAYERS (owner 2026-11-08: "in the /pop command just include borg
+            // along side normal players the word borg in their names is enough to distinguish them"; "i want the borg to
+            // count in the population count under the radar"): one sorted list, the "of Borg" names tell them apart. The
+            // Hollow Company stays out of the count and the list.
             List<string> names;
-            try { names = PlayerManager.GetAllOnline().Where(p => !Mercenaries.IsMerc(p)).Select(p => p.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(); }
+            try { names = PlayerManager.GetAllOnline().Where(p => !Mercenaries.IsMerc(p) || BorgSwitch.IsBorg(p)).Select(p => p.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(); }
             catch { names = new List<string>(); }
             void Say(string line)
             {
@@ -126,14 +142,7 @@ namespace RevivalGuard
             // ONE LINE, the names after the count (owner 2026-10-14: "its still spamming"): every client hides the reply
             // to its own automatic @pop by the "Current world population:" line, so names on a line of their own showed
             // in chat each poll on any client older than 0.1.41. A name holds no digits, so the count still parses.
-            // THE BORG ARE DISCLOSED HERE (docs/proposals/the-borg.md): named after the players, never counted. NO DIGITS in
-            // this clause: the client reads every digit after "Current world population:" as the count (Program.AcClient.
-            // Decode.cs TryParsePop), and a separate line would show in chat on every automatic poll.
-            List<string> bots;
-            try { bots = PlayerManager.GetAllOnline().Where(BorgSwitch.IsBorg).Select(p => p.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(); }
-            catch { bots = new List<string>(); }
-            string borg = bots.Count == 0 ? "" : ". Also online, the Borg, a guild of bots and not players: " + new string(string.Join(", ", bots).Where(c => !char.IsDigit(c)).ToArray());
-            Say($"Current world population: {names.Count:N0}" + (names.Count > 0 ? " (" + string.Join(", ", names) + ")" : "") + borg);
+            Say($"Current world population: {names.Count:N0}" + (names.Count > 0 ? " (" + string.Join(", ", names) + ")" : ""));
             return false;
         }
     }

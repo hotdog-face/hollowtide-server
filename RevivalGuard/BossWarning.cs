@@ -50,7 +50,7 @@ namespace RevivalGuard
             s_Registered = true;
             try
             {
-                var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
+                var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_ON)) b[P_ON] = new Property<bool>(false, "RevivalGuard BossWarning: boss_shadowfall before big boss hits, and the Unbound Queen's telegraphed Brood Slam (ours, not retail)");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] BossWarning: property default not registered: {e.Message}"); }
@@ -129,14 +129,6 @@ namespace RevivalGuard
 
         static IEnumerable<Player> Near(Creature q) =>
             PlayerManager.GetAllOnline().Where(p => p.Location != null && p.CurrentLandblock == q.CurrentLandblock && p.Location.DistanceTo(q.Location) <= HEAR);
-
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
-        {
-            var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Select(f => f.GetValue(ro)).OfType<IDictionary<string, Property<T>>>().FirstOrDefault();
-            return inner ?? throw new MissingFieldException("ReadOnlyDictionary", "inner dictionary");
-        }
     }
 
     [HarmonyPatch(typeof(Creature), nameof(Creature.Monster_Tick))]

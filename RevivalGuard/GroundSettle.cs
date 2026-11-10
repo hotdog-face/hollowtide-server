@@ -21,7 +21,7 @@ namespace RevivalGuard
     [HarmonyPatch(typeof(Player), nameof(Player.UpdateObjectPhysics))]
     static class GroundSettle
     {
-        const string P_ON = "rg_ground_settle";
+        internal const string P_ON = "rg_ground_settle";
         static double s_LastLog;
 
         static void Postfix(Player __instance)

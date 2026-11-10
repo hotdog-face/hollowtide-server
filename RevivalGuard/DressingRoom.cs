@@ -324,7 +324,7 @@ namespace RevivalGuard
             per = Math.Clamp(per, 8, 80);
             int pages = Math.Max(1, (hits.Count + per - 1) / per);
             page = Math.Clamp(page, 0, pages - 1);
-            var rows = hits.Skip(page * per).Take(per).Select(l => new object[] { l.W, l.N, l.Loc, l.Ic, l.It, l.Fx });
+            var rows = hits.Skip(page * per).Take(per).Select(l => new object[] { l.W, l.N, l.Loc, ShownIcon(l), l.It, l.Fx });
             ModChannel.Send(p.Session, "dress", JsonSerializer.Serialize(new { list = new { slot, page, pages, total = hits.Count, q = words ?? "", rows } }));
         }
 
@@ -509,7 +509,7 @@ namespace RevivalGuard
         {
             Dictionary<uint, Look> m; lock (s_Lock) m = s_LookOfW;
             if (m == null || !m.TryGetValue(w, out var l) || l.Styles.Count < 2) return new List<object[]>();
-            return l.Styles.Select(x => new object[] { x.W, x.Ic, x.It, x.Fx }).ToList();
+            return l.Styles.Select(x => new object[] { x.W, ShownIcon(x), x.It, x.Fx }).ToList();
         }
 
         static Look LookOf(uint wcid)
@@ -787,7 +787,7 @@ namespace RevivalGuard
                 {
                     var face = k.Value.FirstOrDefault(x => (x.Loc & (uint)EquipMask.ChestArmor) != 0) ?? k.Value.FirstOrDefault(x => (x.Loc & (uint)EquipMask.ChestWear) != 0) ?? k.Value.FirstOrDefault();
                     if (face != null) Iconify(face);
-                    return new object[] { k.Key, face?.Ic ?? 0, face?.It ?? 0 };
+                    return new object[] { k.Key, face != null ? IconFor(face) : 0u, face?.It ?? 0 };
                 }),
                 msg = f.Msg ?? "",
                 target,
@@ -977,6 +977,11 @@ namespace RevivalGuard
             catch { }
             return own;
         }
+
+        /// <summary>The icon a look's row shows: the one the item shows in game (IconFor), not its weenie's raw Icon. Owner
+        /// ticket 261110-0006: the Amethyst Oculus (table 0x1000057A, template 13: a purple eye, 0x060034A0) listed under its
+        /// weenie's white helm 0x06002A58, which nothing in game shows.</summary>
+        static uint ShownIcon(Look l) => IconFor(new Piece { W = l.W, Cb = l.Cb, Pal = l.Pal, Ic = l.Ic });
 
         /// <summary>A made or tailored piece shows the icon of the look it carries (IconFor), and ACE keeps it.</summary>
         static void SetIcon(WorldObject wo, Piece x)

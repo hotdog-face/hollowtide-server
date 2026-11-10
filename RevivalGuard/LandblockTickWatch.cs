@@ -90,12 +90,13 @@ namespace RevivalGuard
             catch (Exception e) { TickGuard.Report("LandblockTickWatch", e); }
         }
 
-        internal static void Phase(string phase, double seconds)
+        internal static void Phase(ServerPerformanceMonitor.CumulativeEventHistoryType type, double seconds)
         {
             var f = t_Frame;
             if (f == null) return;
             f.PhaseCalls++;
             if (seconds * 1000 < NoteMs) return;
+            string phase = type.ToString();   // named only past the threshold: this runs for every phase of every tick
             f.Phases.Add((phase.StartsWith("Landblock_Tick_") ? phase.Substring(15) : phase, seconds * 1000));
         }
 
@@ -182,7 +183,7 @@ namespace RevivalGuard
         static bool Prepare(MethodBase original) => original != null || TargetMethod() != null;
         static void Prefix(ServerPerformanceMonitor.CumulativeEventHistoryType eventHistoryType, double seconds)
         {
-            try { if (LandblockTickWatch.t_Frame != null) LandblockTickWatch.Phase(eventHistoryType.ToString(), seconds); } catch { }
+            try { LandblockTickWatch.Phase(eventHistoryType, seconds); } catch { }
         }
     }
 

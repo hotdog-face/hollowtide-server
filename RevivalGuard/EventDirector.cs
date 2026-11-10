@@ -820,25 +820,17 @@ namespace RevivalGuard
         {
             try
             {
-                var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
+                var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_ENABLED)) b[P_ENABLED] = new Property<bool>(false, "EventDirector: rotate live events (Olthoi swarms, eruptions, raids, festival events); off until staff turn it on");
                 if (!b.ContainsKey(P_FROSTFELL)) b[P_FROSTFELL] = new Property<bool>(true, "EventDirector: while Frostfell runs, its own events (Present Raids, Holtburg snowmen, Stonehold Scold) run even with rg_event_director off");
                 if (!b.ContainsKey(P_FESTIVALS)) b[P_FESTIVALS] = new Property<bool>(true, "EventDirector: festival-only events (Pumpkin Lords, Unhappy Snowmen ...) get a slot after every event_director_festival_every year-round events while their festival runs");
                 if (!b.ContainsKey(P_OMENS)) b[P_OMENS] = new Property<bool>(false, "EventDirector: put the Season 1 Omens shadow raids (omens-*) in the rotation");
-                var d = Inner(DefaultPropertyManager.DefaultDoubleProperties);
+                var d = MonsterAi.Inner(DefaultPropertyManager.DefaultDoubleProperties);
                 foreach (var (key, def, desc) in s_Doubles) if (!d.ContainsKey(key)) d[key] = new Property<double>(def, desc);
-                var s = Inner(DefaultPropertyManager.DefaultStringProperties);
+                var s = MonsterAi.Inner(DefaultPropertyManager.DefaultStringProperties);
                 if (!s.ContainsKey(P_SKIP)) s[P_SKIP] = new Property<string>("", "EventDirector: catalogue keys to leave out of the rotation, comma separated");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] EventDirector: switches not registered with @modify* ({e.Message}); they are still read"); }
-        }
-
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
-        {
-            var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Select(f => f.GetValue(ro)).OfType<IDictionary<string, Property<T>>>().FirstOrDefault();
-            return inner ?? throw new MissingFieldException("ReadOnlyDictionary", "inner dictionary");
         }
 
         // ---- words ------------------------------------------------------------------------------
@@ -870,6 +862,35 @@ namespace RevivalGuard
         }
 
         static string Levels(Entry e) => e.Levels.Contains(' ') ? $"levels {e.Levels}" : $"level {e.Levels}";
+
+        /// <summary>What @events says, as lines for the Holtburg Notice Board (NoticeBoard): the event running now
+        /// and the next one. Empty when nothing runs and nothing is scheduled.</summary>
+        internal static List<string> BoardLines()
+        {
+            var lines = new List<string>();
+            var now = Now;
+            lock (s_Lock)
+            {
+                var st = s_State;
+                if (st == null) return lines;
+                var cur = Find(st.Current);
+                if (cur != null && !s_Suspended)
+                    lines.Add($"Live event now: {cur.Title}, near {cur.Where} ({Levels(cur)}). {Left(st.EndsAt - now)}");
+                else
+                {
+                    var natural = Catalogue.FirstOrDefault(e => e.Stop.Any(IsOn));
+                    if (natural != null) lines.Add($"Live event now: {natural.Title}, near {natural.Where} ({Levels(natural)}).");
+                }
+                if (!Running || AnniversaryNight.On) return lines;
+                if (cur == null)
+                {
+                    var next = PeekNext(now);
+                    if (next != null && st.NextAt > 0) lines.Add($"Next live event: {next.Title}, {In(st.NextAt - now)}.");
+                }
+                else lines.Add($"The next live event follows {In(st.EndsAt + Gap * 60 - now)}.");
+            }
+            return lines;
+        }
 
         // ---- commands ---------------------------------------------------------------------------
 

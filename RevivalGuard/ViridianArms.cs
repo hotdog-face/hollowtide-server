@@ -53,20 +53,12 @@ namespace RevivalGuard
             if (Interlocked.Exchange(ref s_Registered, 1) == 1) return;
             try
             {
-                var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
+                var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_PARTS)) b[P_PARTS] = new Property<bool>(false, "ViridianArms: send a 900000+ weapon's own anim_part rows in its ObjDesc (our client only)");
                 if (!b.ContainsKey(P_SET)) b[P_SET] = new Property<bool>(false, "ViridianArms: the Viridian Grove Set's bonus (EquipmentSetId 900)");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] ViridianArms: switches not registered with @modifybool ({e.Message}); both stay off"); }
             Mod.Log.Info("[RevivalGuard] ViridianArms: weapon part rows (expansion_weapon_parts) and set 900 (viridian_set_bonus), both default off");
-        }
-
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
-        {
-            var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Select(f => f.GetValue(ro)).OfType<IDictionary<string, Property<T>>>().FirstOrDefault();
-            return inner ?? throw new MissingFieldException("ReadOnlyDictionary", "inner dictionary");
         }
 
         static List<Spell> Tier(int pieces)

@@ -207,7 +207,7 @@ namespace RevivalGuard
             s_Registered = true;
             try
             {
-                var d = Inner(DefaultPropertyManager.DefaultDoubleProperties);
+                var d = MonsterAi.Inner(DefaultPropertyManager.DefaultDoubleProperties);
                 foreach (var (key, def, desc) in s_Doubles) if (!d.ContainsKey(key)) d[key] = new Property<double>(def, desc);
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] AlligatorBoss: tuning not registered with @modifydouble ({e.Message}); defaults apply"); }
@@ -215,14 +215,6 @@ namespace RevivalGuard
                 "Old Snapjaw, the Blackmire alligator boss (RevivalGuard): status, reset (respawn him fresh), go (to his lair).",
                 "[status | reset | go]");
             Mod.Log.Info("[RevivalGuard] AlligatorBoss: Old Snapjaw (900400) death roll, trophy, @snapjaw");
-        }
-
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
-        {
-            var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Select(f => f.GetValue(ro)).OfType<IDictionary<string, Property<T>>>().FirstOrDefault();
-            return inner ?? throw new MissingFieldException("ReadOnlyDictionary", "inner dictionary");
         }
 
         // ------------------------------------------------------------------ the patches

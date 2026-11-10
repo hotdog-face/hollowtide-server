@@ -149,7 +149,7 @@ namespace RevivalGuard
             s_Registered = true;
             try
             {
-                var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
+                var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_ON)) b[P_ON] = new Property<bool>(false, "RevivalGuard Land Control: keep the keeps' holders and timers across restarts (retail Land Control itself is world data)");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] LandControl: property default not registered: {e.Message}"); }
@@ -587,14 +587,6 @@ namespace RevivalGuard
             if (session?.Player == null) { foreach (var line in text.Split('\n')) Console.WriteLine(line); return; }
             foreach (var line in text.Split('\n'))
                 session.Network.EnqueueSend(new GameMessageSystemChat(line, ChatMessageType.Broadcast));
-        }
-
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
-        {
-            var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Select(f => f.GetValue(ro)).OfType<IDictionary<string, Property<T>>>().FirstOrDefault();
-            return inner ?? throw new MissingFieldException("ReadOnlyDictionary", "inner dictionary");
         }
     }
 

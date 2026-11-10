@@ -107,9 +107,9 @@ namespace RevivalGuard
             s_Registered = true;
             try
             {
-                var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
+                var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_ON)) b[P_ON] = new Property<bool>(false, "RevivalGuard CombatArena: open retail's Derethian Combat Arena at Baishi and run its statue schedule");
-                var d = Inner(DefaultPropertyManager.DefaultDoubleProperties);
+                var d = MonsterAi.Inner(DefaultPropertyManager.DefaultDoubleProperties);
                 if (!d.ContainsKey(P_BONUS)) d[P_BONUS] = new Property<double>(0.25, "RevivalGuard CombatArena: chance per night hour that the bonus Statue of Extreme Illumination (834 luminance) stands");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] CombatArena: properties not registered ({e.Message}); read with defaults"); }
@@ -415,14 +415,6 @@ namespace RevivalGuard
 
         static void Say(Player p, string line) =>
             p?.Session?.Network.EnqueueSend(new GameMessageSystemChat(line, ChatMessageType.Broadcast));
-
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
-        {
-            var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Select(f => f.GetValue(ro)).OfType<IDictionary<string, Property<T>>>().FirstOrDefault();
-            return inner ?? throw new MissingFieldException("ReadOnlyDictionary", "inner dictionary");
-        }
     }
 
     /// <summary>The schedule, from the world loop. Its Prepare registers the feature, so Mod.cs needs

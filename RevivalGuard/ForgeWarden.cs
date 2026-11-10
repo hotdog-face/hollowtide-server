@@ -82,9 +82,9 @@ namespace RevivalGuard
             if (Interlocked.Exchange(ref s_Registered, 1) == 1) return;
             try
             {
-                var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
+                var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_ON)) b[P_ON] = new Property<bool>(true, "ForgeWarden: the Forge-Warden's scripted fight (summons, shields, overload)");
-                var d = Inner(DefaultPropertyManager.DefaultDoubleProperties);
+                var d = MonsterAi.Inner(DefaultPropertyManager.DefaultDoubleProperties);
                 foreach (var (key, def, desc) in s_Doubles) if (!d.ContainsKey(key)) d[key] = new Property<double>(def, desc);
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] ForgeWarden: switches not registered with @modify* ({e.Message}); defaults apply"); }
@@ -101,14 +101,6 @@ namespace RevivalGuard
                 "The Forge-Warden of Ispar (RevivalGuard): state of the nearest Warden, or set its health to test a phase.",
                 "[status | hp <percent> | reset | pulse | kill]");
             Mod.Log.Info("[RevivalGuard] ForgeWarden: forge summons, crystal shields, overload pulse (weenie 900300, forge_warden_* properties, @forgewarden)");
-        }
-
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
-        {
-            var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Select(f => f.GetValue(ro)).OfType<IDictionary<string, Property<T>>>().FirstOrDefault();
-            return inner ?? throw new MissingFieldException("ReadOnlyDictionary", "inner dictionary");
         }
 
         static bool On => PropertyManager.GetBool(P_ON, true).Item;

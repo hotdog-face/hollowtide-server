@@ -979,10 +979,10 @@ namespace RevivalGuard
             s_Registered = true;
             try
             {
-                var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
+                var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_ON)) b[P_ON] = new Property<bool>(false, "RevivalGuard DuelistAi: Varrow the Unbowed (901050) fights like a PK duelist. Off = an ordinary ACE monster");
                 if (!b.ContainsKey(P_LOG)) b[P_LOG] = new Property<bool>(false, "RevivalGuard DuelistAi: log every decision ([Duelist] lines in ACE_Log.txt)");
-                var d = Inner(DefaultPropertyManager.DefaultDoubleProperties);
+                var d = MonsterAi.Inner(DefaultPropertyManager.DefaultDoubleProperties);
                 foreach (var (key, def, desc) in s_Doubles) if (!d.ContainsKey(key)) d[key] = new Property<double>(def, desc);
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] DuelistAi: switches not registered with @modify* ({e.Message}); defaults apply"); }
@@ -991,14 +991,6 @@ namespace RevivalGuard
                 "Varrow the Unbowed, the duelist boss (RevivalGuard DuelistAi): switches and counters; 'trace [sec]' logs his decisions; 'reset' respawns him fresh; 'go' takes you to the arena.",
                 "[trace [seconds] | trace off | reset | go]");
             Mod.Log.Info($"[RevivalGuard] DuelistAi: Varrow the Unbowed ({WCID}) utility brain, {(PropertyManager.GetBool(P_ON, false).Item ? "ON" : "off")} ({P_ON}), @duelist");
-        }
-
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
-        {
-            var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Select(f => f.GetValue(ro)).OfType<IDictionary<string, Property<T>>>().FirstOrDefault();
-            return inner ?? throw new MissingFieldException("ReadOnlyDictionary", "inner dictionary");
         }
 
         // ------------------------------------------------------------------ the patches (declared on Creature)

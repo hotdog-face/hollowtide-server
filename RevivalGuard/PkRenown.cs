@@ -520,7 +520,7 @@ namespace RevivalGuard
         internal static void Register()
         {
             CommandManager.TryAddCommand(Command, "pkboard", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
-                "The player-killer board: renown ladder, bounties and Shadow Shrines.", "[ladder | bounties | shrines]");
+                "The player-killer board: renown ladder, bounties, Shadow Shrines and PK Night.", "[ladder | bounties | shrines | night]");
         }
 
         static void Command(Session session, params string[] parameters)
@@ -533,7 +533,7 @@ namespace RevivalGuard
             {
                 // An open window asking for its refresh after the features were turned off is told
                 // to close, quietly; anyone else gets the one line.
-                if (refresh) { if (ModChannel.Capable(session)) ModChannel.Send(session, "pkboard", "{\"open\":0,\"on\":{\"renown\":0,\"bounty\":0,\"shrines\":0}}"); return; }
+                if (refresh) { if (ModChannel.Capable(session)) ModChannel.Send(session, "pkboard", "{\"open\":0,\"on\":{\"renown\":0,\"bounty\":0,\"shrines\":0,\"night\":0}}"); return; }
                 PkCommon.Say(p, "The player-killer board is not open on this world.");
                 return;
             }
@@ -542,6 +542,7 @@ namespace RevivalGuard
                 if (PkRenown.On) PkCommon.Say(p, "@pkladder shows the renown ladder.");
                 if (PkBounty.On) PkCommon.Say(p, "@bounty lists the bounties.");
                 if (PkShrines.On) PkCommon.Say(p, "@shrines shows who holds the Shadow Shrines.");
+                if (PkNight.On) PkCommon.Say(p, "@pknight shows PK Night: the next spot, or the standings now.");
                 return;
             }
             Send(session, !refresh, refresh ? null : tab);
@@ -556,10 +557,11 @@ namespace RevivalGuard
             var sb = new StringBuilder("{\"open\":").Append(open ? 1 : 0).Append(",\"now\":").Append(PkCommon.Now());
             if (!string.IsNullOrEmpty(tab)) sb.Append(",\"tab\":").Append(PkCommon.Q(tab));
             sb.Append(",\"on\":{\"renown\":").Append(PkRenown.On ? 1 : 0).Append(",\"bounty\":").Append(PkBounty.On ? 1 : 0)
-              .Append(",\"shrines\":").Append(PkShrines.On ? 1 : 0).Append('}');
+              .Append(",\"shrines\":").Append(PkShrines.On ? 1 : 0).Append(",\"night\":").Append(PkNight.On ? 1 : 0).Append('}');
             if (PkRenown.On) PkRenown.AppendJson(sb, p.Guid.Full);
             if (PkBounty.On) PkBounty.AppendJson(sb, p);
             if (PkShrines.On) PkShrines.AppendJson(sb, p);
+            if (PkNight.On) PkNight.AppendJson(sb, p);
             sb.Append('}');
             ModChannel.Send(session, "pkboard", sb.ToString());
         }

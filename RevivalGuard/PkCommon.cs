@@ -37,6 +37,8 @@ namespace RevivalGuard
             (P_BOUNTY, false, "PK expansion: player-posted bounties in pyreals, escrowed (RevivalGuard PkBounty)"),
             (P_SHRINES, false, "PK expansion: capturable Shadow Shrines with an allegiance XP boon (RevivalGuard PkShrines)"),
             (P_IGNORE_IP, false, "PK expansion: count kills between characters on one connection address (a test aid; leave false)"),
+            (PkNight.P_ON, false, "PK Night: every Sunday 7 PM Pacific, hold the spot for an hour (RevivalGuard PkNight; docs/proposals/pk-night.md)"),
+            (PkNight.P_DISCORD, false, "PK Night: post the start and the result to Discord (DiscordBridge.Announce)"),
         };
         static readonly (string key, long def, string desc)[] s_Longs =
         {
@@ -45,6 +47,8 @@ namespace RevivalGuard
             (PkBounty.P_MIN_AMOUNT, 10000, "PK expansion: smallest bounty, pyreals"),
             (PkBounty.P_MAX_AMOUNT, 2000000, "PK expansion: largest total bounty on one head, pyreals"),
             (PkShrines.P_ATTUNE, 60, "PK expansion: seconds a player killer must hold a Shadow Shrine uncontested to take it"),
+            (PkNight.P_RADIUS, PkNight.DEFAULT_RADIUS, "PK Night: metres from the spot's centre within which a player killer holds it"),
+            (PkNight.P_TOKEN, 0, "PK Night: the weenie given to each winner (0 = none; the owner picks one)"),
         };
         static readonly (string key, double def, string desc)[] s_Doubles =
         {
@@ -60,6 +64,7 @@ namespace RevivalGuard
         {
             (PkShrines.P_HOURS, "", "PK expansion: UTC hours the shrines can be taken, e.g. 18-23 or 2-4,20-22; empty = always"),
             (PkRenown.P_SEASON, "Season 1", "PK expansion: the name of the current PK season"),
+            (PkNight.P_TITLE, "KingofDarktide", "PK Night: the retail CharacterTitle the winners earn (an enum name; none = no title)"),
         };
 
         /// <summary>Make every key an ordinary ACE property (@modifybool / @modifylong / @fetch...):
@@ -69,24 +74,28 @@ namespace RevivalGuard
         {
             try
             {
-                var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
+                var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 foreach (var (k, d, t) in s_Bools) if (!b.ContainsKey(k)) b[k] = new Property<bool>(d, t);
-                var l = Inner(DefaultPropertyManager.DefaultLongProperties);
+                var l = MonsterAi.Inner(DefaultPropertyManager.DefaultLongProperties);
                 foreach (var (k, d, t) in s_Longs) if (!l.ContainsKey(k)) l[k] = new Property<long>(d, t);
-                var f = Inner(DefaultPropertyManager.DefaultDoubleProperties);
+                var f = MonsterAi.Inner(DefaultPropertyManager.DefaultDoubleProperties);
                 foreach (var (k, d, t) in s_Doubles) if (!f.ContainsKey(k)) f[k] = new Property<double>(d, t);
-                var s = Inner(DefaultPropertyManager.DefaultStringProperties);
+                var s = MonsterAi.Inner(DefaultPropertyManager.DefaultStringProperties);
                 foreach (var (k, d, t) in s_Strings) if (!s.ContainsKey(k)) s[k] = new Property<string>(d, t);
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] PK expansion: properties not registered with @modify* ({e.Message}); they are still read with their defaults"); }
         }
 
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
+        /// <summary>One bool switch of another module's made an ordinary ACE property the same way (TownCrier's rg_crier), so
+        /// `@modifybool` takes it on a shard that has never stored it; without this ACE answers "Unknown bool property".</summary>
+        internal static void RegisterBool(string key, bool def, string desc)
         {
-            var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Select(f => f.GetValue(ro)).OfType<IDictionary<string, Property<T>>>().FirstOrDefault();
-            return inner ?? throw new MissingFieldException("ReadOnlyDictionary", "inner dictionary");
+            try
+            {
+                var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
+                if (!b.ContainsKey(key)) b[key] = new Property<bool>(def, desc);
+            }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] {key}: not registered with @modifybool ({e.Message}); read with its default"); }
         }
 
         internal static bool On(string key) => PropertyManager.GetBool(key, false).Item;
@@ -94,7 +103,7 @@ namespace RevivalGuard
         internal static double Dbl(string key, double def) => PropertyManager.GetDouble(key, def).Item;
         internal static string Str(string key, string def) => PropertyManager.GetString(key, def).Item ?? def;
 
-        internal static bool AnyOn => On(P_RENOWN) || On(P_BOUNTY) || On(P_SHRINES);
+        internal static bool AnyOn => On(P_RENOWN) || On(P_BOUNTY) || On(P_SHRINES) || PkNight.On;
 
         // ------------------------------------------------------------------ the honour check
 

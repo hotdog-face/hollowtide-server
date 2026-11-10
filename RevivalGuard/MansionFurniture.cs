@@ -135,6 +135,7 @@ namespace RevivalGuard
             public List<WorldObject> Held = new List<WorldObject>();             // what the figure holds (weapon, shield)
             public bool Loaded, Loading;
             public int Retries;
+            public int Waited;   // landblock ticks this display's paced refresh has waited (RefreshPaced)
         }
 
         static readonly ConcurrentDictionary<uint, Display> s_Displays = new ConcurrentDictionary<uint, Display>();
@@ -235,7 +236,7 @@ namespace RevivalGuard
         {
             lock (d.Lock)
             {
-                if (d.Loaded) { d.Hook?.EnqueueAction(new ActionEventDelegate(() => Refresh(d))); return; }
+                if (d.Loaded) { d.Hook?.EnqueueAction(new ActionEventDelegate(() => RefreshPaced(d))); return; }
                 if (d.Loading) return;
                 d.Loading = true;
             }
@@ -260,7 +261,7 @@ namespace RevivalGuard
                                 Mod.Log.Info($"[RevivalGuard] MansionFurniture: {s_Spec[d.Wcid].Name} 0x{d.FurnitureGuid:X8} holds {d.Items.Count}: {string.Join(", ", d.Items.Select(i => i.Name))}");
                         }
                     }
-                    Refresh(d);
+                    RefreshPaced(d);
                 }
                 if (hook != null) hook.EnqueueAction(new ActionEventDelegate(Apply));
                 else Apply();
@@ -293,6 +294,34 @@ namespace RevivalGuard
             d.Wear = new List<WorldObject>();
         }
 
+        static readonly DisplayPaceRule s_Pace = new DisplayPaceRule(2.0);
+
+        /// <summary>A Refresh from the load path (first load, landblock reload, the 3 s retry), paced to at
+        /// most one display per landblock tick (DisplayPaceRule). All of a mansion's displays used to come
+        /// due in one tick: 0x576B ticks of 0.8-2.4 s on live. Player actions still Refresh at once.</summary>
+        static void RefreshPaced(Display d)
+        {
+            try
+            {
+                var hook = d.Hook;
+                var lb = hook?.CurrentLandblock;
+                if (lb == null || hook.Location == null) { Refresh(d); return; }   // not in the world: Refresh only schedules its retry
+                uint key = lb.Id.Raw;
+                if (!s_Pace.TryBegin(key, ACE.Common.Time.GetUnixTime()))
+                {
+                    d.Waited++;
+                    hook.EnqueueAction(new ActionEventDelegate(() => RefreshPaced(d)));   // behind End: the next tick
+                    return;
+                }
+                lb.EnqueueAction(new ActionEventDelegate(() => s_Pace.End(key)));
+                if (d.Waited > 0)
+                    Mod.Log.Info($"[RevivalGuard] MansionFurniture: paced {s_Spec[d.Wcid].Name} 0x{d.FurnitureGuid:X8} on 0x{key >> 16:X4} after {d.Waited} tick(s)");
+                d.Waited = 0;
+                Refresh(d);
+            }
+            catch (Exception e) { TickGuard.Report("MansionFurniture.RefreshPaced", e); }
+        }
+
         /// <summary>Make every copy again from the real items. Runs on the hook's landblock.</summary>
         static void Refresh(Display d)
         {
@@ -308,7 +337,7 @@ namespace RevivalGuard
                     {
                         var chain = new ActionChain();
                         chain.AddDelaySeconds(3);
-                        chain.AddAction(hook, () => Refresh(d));
+                        chain.AddAction(hook, () => RefreshPaced(d));
                         chain.EnqueueChain();
                     }
                     return;

@@ -52,7 +52,7 @@ namespace RevivalGuard
             s_Registered = true;
             try
             {
-                var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
+                var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_ON)) b[P_ON] = new Property<bool>(false, "RevivalGuard Knockback: big hits from the Unbound Queen knock our client's player back (ours, not retail)");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] Knockback: property default not registered: {e.Message}"); }
@@ -126,14 +126,6 @@ namespace RevivalGuard
                 sent ? $"[Knockback] knocked back at {h:F1} m/s (ours, not retail; switch {P_ON} is {(On ? "ON" : "off")}, @knockme ignores it)"
                      : "[Knockback] this client does not read the mod channel, so it cannot be knocked",
                 ChatMessageType.Broadcast));
-        }
-
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
-        {
-            var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Select(f => f.GetValue(ro)).OfType<IDictionary<string, Property<T>>>().FirstOrDefault();
-            return inner ?? throw new MissingFieldException("ReadOnlyDictionary", "inner dictionary");
         }
     }
 

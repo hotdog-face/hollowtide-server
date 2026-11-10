@@ -112,14 +112,24 @@ namespace RevivalGuard
             && !db.BiotaPropertiesIID.Any(p => p.Type == (ushort)PropertyInstanceId.Container || p.Type == (ushort)PropertyInstanceId.Wielder)
             && !db.BiotaPropertiesPosition.Any(p => p.PositionType == (ushort)PositionType.Location);
 
-        /// <summary>Into a character's pack: an online one gets the object now, an offline one finds it at login.</summary>
+        /// <summary>Into a character's pack: an online one gets the object on the world thread (Replay runs on a worker,
+        /// a console @orphans on the console thread), so true there means queued; an offline one finds it at login.</summary>
         static bool Return(Biota db, uint owner)
         {
             var online = PlayerManager.GetOnlinePlayer(owner);
             if (online != null)
             {
-                var wo = WorldObjectFactory.CreateWorldObject(db);
-                return wo != null && online.TryCreateInInventoryWithNetworking(wo);
+                WorldManager.EnqueueAction(new ACE.Server.Entity.Actions.ActionEventDelegate(() =>
+                {
+                    try
+                    {
+                        var wo = WorldObjectFactory.CreateWorldObject(db);
+                        if (wo == null || !online.TryCreateInInventoryWithNetworking(wo))
+                            Mod.Log.Warn($"[RevivalGuard] TradeSafe: 0x{db.Id:X8} could not go into {online.Name}'s pack; still ownerless (@orphans)");
+                    }
+                    catch (Exception e) { TickGuard.Report("TradeSafe.Return", e); }
+                }));
+                return true;
             }
             var biota = BiotaConverter.ConvertToEntityBiota(db, true);
             biota.PropertiesIID[PropertyInstanceId.Container] = owner;

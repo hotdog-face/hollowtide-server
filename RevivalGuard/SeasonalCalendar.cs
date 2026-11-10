@@ -381,6 +381,32 @@ namespace RevivalGuard
             return -1;
         }
 
+        /// <summary>What @festival tells a player, as lines for the Holtburg Notice Board (NoticeBoard): each
+        /// festival open now with its last day and hint, then those opening within lookAheadDays. A name that
+        /// appears twice in the table (Fireworks) is said once.</summary>
+        internal static List<string> BoardLines(int lookAheadDays = 45)
+        {
+            var local = RetailNow();
+            var lines = new List<string>();
+            var said = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var months = System.Globalization.CultureInfo.InvariantCulture.DateTimeFormat;
+            foreach (var f in Calendar.Where(f => IsActive(f, local)))
+            {
+                if (!said.Add(f.Name)) continue;
+                lines.Add($"{f.Name} is open now, until {months.GetMonthName(f.EndMonth)} {f.EndDay}."
+                    + (string.IsNullOrWhiteSpace(f.Hint) ? "" : " " + f.Hint.Trim()));
+            }
+            var coming = Calendar.Where(f => !IsActive(f, local))
+                                 .Select(f => new { f, d = DaysUntil(f, local) })
+                                 .Where(x => x.d > 0 && x.d <= lookAheadDays).OrderBy(x => x.d);
+            foreach (var x in coming)
+            {
+                if (!said.Add(x.f.Name)) continue;
+                lines.Add($"{x.f.Name} comes in {x.d} day{(x.d == 1 ? "" : "s")}.");
+            }
+            return lines;
+        }
+
         static string StateOf(string name)
         {
             if (!EventManager.IsEventAvailable(name)) return $"{name}=MISSING";
@@ -482,6 +508,8 @@ namespace RevivalGuard
                 Say(session, "No festival is running.");
                 if (next != null)
                     Say(session, $"Next is {next.f.Name}, in {next.d} day{(next.d == 1 ? "" : "s")}.");
+                var night = PkNight.FestivalLine();   // the weekly PK Night, when it is on
+                if (night != null) Say(session, night);
             }
             else
             {

@@ -62,10 +62,12 @@ namespace RevivalGuard
             ModChannel.Register();
             Mail.Register();
             Broker.Register();
+            TownCrier.Register();        // the Holtburg Town Crier's question desk (rg_crier, off by default)
             DressingRoom.Register();
             DiscordBridge.Register();
             DerethChatHost.Register();   // the cross-server Dereth channel (off without dereth-chat.json)
             ItemLink.Register();
+            NoticeBoard.Register();      // @noticeboard: the Holtburg board's pages, for a check from anywhere
             PerfStat.Register();
             AccountCreationCap.Register();
             RetailWelcome.Register();
@@ -93,7 +95,12 @@ namespace RevivalGuard
             PkBounty.Register();
             PkShrines.Register();
             PkBoard.Register();
-            try { Log.Info($"[RevivalGuard] PK expansion: renown {(PkRenown.On ? "ON" : "off")}, bounties {(PkBounty.On ? "ON" : "off")}, shrines {(PkShrines.On ? "ON" : "off")}"); }
+            PkNight.Register();           // Sunday 7 PM Pacific, hold the spot (rg_pk_night, off by default)
+            // Harmony-only guards with a switch read at its default: registered so @modifybool can turn them off on a
+            // shard that has never stored the key (ACE answers "Unknown bool property" otherwise; review 2026-11-10).
+            PkCommon.RegisterBool(HoltburgOnly.P_ON, true, "RevivalGuard HoltburgOnly: every new character starts in Holtburg whatever town the client asked for (false: the client's town)");
+            PkCommon.RegisterBool(GroundSettle.P_ON, true, "RevivalGuard GroundSettle: an at-rest PK body ACE left off the ground is ticked so it lands (false: ACE)");
+            try { Log.Info($"[RevivalGuard] PK expansion: renown {(PkRenown.On ? "ON" : "off")}, bounties {(PkBounty.On ? "ON" : "off")}, shrines {(PkShrines.On ? "ON" : "off")}, PK Night {(PkNight.On ? "ON" : "off")}"); }
             catch (Exception e) { Log.Warn($"[RevivalGuard] PK expansion: properties not readable yet ({e.Message})"); }
             try { NameGuard.LoadNow(); } catch (Exception e) { Log.Error($"[RevivalGuard] NameGuard: {e.Message}"); }   // says at start how many names are protected
             Log.Info("[RevivalGuard] loaded: movement, vendor, fellowship, flood and chat guards, "

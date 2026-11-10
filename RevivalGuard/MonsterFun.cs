@@ -196,13 +196,13 @@ namespace RevivalGuard
             if (Interlocked.Exchange(ref s_Registered, 1) == 1) return;
             try
             {
-                var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
+                var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_CHAMP)) b[P_CHAMP] = new Property<bool>(true, "MonsterFun: rare named champions (ours, docs/MONSTER-FUN.md)");
                 if (!b.ContainsKey(P_PHASES)) b[P_PHASES] = new Property<bool>(true, "MonsterFun: boss phases at 50% and 25% (ours)");
                 if (!b.ContainsKey(P_HEAVY)) b[P_HEAVY] = new Property<bool>(true, "MonsterFun: bosses' warned heavy area attack (ours)");
-                var d = Inner(DefaultPropertyManager.DefaultDoubleProperties);
+                var d = MonsterAi.Inner(DefaultPropertyManager.DefaultDoubleProperties);
                 foreach (var (key, def, desc) in s_Doubles) if (!d.ContainsKey(key)) d[key] = new Property<double>(def, desc);
-                var s = Inner(DefaultPropertyManager.DefaultStringProperties);
+                var s = MonsterAi.Inner(DefaultPropertyManager.DefaultStringProperties);
                 if (!s.ContainsKey(P_SKIP)) s[P_SKIP] = new Property<string>("2111", "MonsterFun: landblocks (hex, comma separated) that never get champions; 2111 = the Withered Atoll");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] MonsterFun: switches not registered with @modify* ({e.Message}); defaults apply"); }
@@ -580,14 +580,6 @@ namespace RevivalGuard
                 return;
             }
             Reply(session, $"[MonsterFun] champions {(ChampOn ? "ON" : "off")} (chance {D("rg_champion_chance")}, alive {AliveCount()}, made {s_Made}, slain {s_Slain}, skipped busy {s_SkippedBusy}, cap {s_SkippedCap}); phases {(PhasesOn ? "ON" : "off")} ({s_Phases} run); heavy {(HeavyOn ? "ON" : "off")} ({s_Heavies} started, {s_HeavyHits} players hit)");
-        }
-
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
-        {
-            var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Select(f => f.GetValue(ro)).OfType<IDictionary<string, Property<T>>>().FirstOrDefault();
-            return inner ?? throw new MissingFieldException("ReadOnlyDictionary", "inner dictionary");
         }
 
         internal static int Errors;

@@ -55,20 +55,12 @@ namespace RevivalGuard
             if (Interlocked.Exchange(ref s_Registered, 1) == 1) return;
             try
             {
-                var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
+                var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_SHIELD)) b[P_SHIELD] = new Property<bool>(false, "WardenforgedPlate: the Wardenforged Shield (901359) draws its own GfxObj in the hand (our client only)");
                 if (!b.ContainsKey(P_SET)) b[P_SET] = new Property<bool>(false, "WardenforgedPlate: the Wardenforged Plate set bonus (EquipmentSetId 901)");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] WardenforgedPlate: switches not registered with @modifybool ({e.Message}); both stay off"); }
             Mod.Log.Info("[RevivalGuard] WardenforgedPlate: shield part (wardenforged_shield_part) and set 901 (wardenforged_set_bonus), both default off");
-        }
-
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
-        {
-            var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Select(f => f.GetValue(ro)).OfType<IDictionary<string, Property<T>>>().FirstOrDefault();
-            return inner ?? throw new MissingFieldException("ReadOnlyDictionary", "inner dictionary");
         }
 
         static uint[] Tier(int pieces) => TIERS[Math.Clamp(pieces, 0, TIERS.Length - 1)];

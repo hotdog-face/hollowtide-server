@@ -1,0 +1,30 @@
+{
+  "_": "The Holtburg Notice Board's words (RevivalGuard NoticeBoard.cs, docs/HOLTBURG-HUB.md). The copy beside the mod dll on the shard is the live one: edit it there and the next reader sees it; no restart, no client release. Turbine voice (docs/outreach/VOICE.md): lore, no mechanics, no staff tools, no em dashes, no unmeasured numbers. Each page holds 1000 characters; paragraphs are never split across pages.",
+  "title": "Holtburg Notice Board",
+  "notices": [
+    "New to Holtburg? The Pathwarden by the tavern will set you on your road. The shops of the lower town are down the hill to the north.",
+    "DRUDGES seen again south-west of the town, out by their hideout. Travellers go armed."
+  ],
+  "chronicle": {
+    "month": "November",
+    "title": "The Collective Returns",
+    "paragraphs": [
+      "The harvest is in and the nights draw long over Dereth. In Cragstone the drums of the Night Club have not fallen silent since the Anniversary, and will not until the first day of December. But it is from Holtburg that the Town Criers bring the stranger news this season: figures gathering at the lifestone, who move as one, speak as one, and answer to a single name.",
+      "The elders of Darktide remember them. Long ago, on those shores, they were called the Collective, and the Collective did not lose. Some said they were destroyed. Some said they only waited.",
+      "They are waiting no longer.",
+      "The Borg have returned to Dereth. They hunt in silence and in numbers, in the halls beneath Holtburg and on the hills beyond it, and each day they range a little further. They seek no quarrel and they draw no blade first. But strike one, and you strike them all, and the Collective does not forget a name.",
+      "Those who have stood near them and listened say the drones speak of an Origin, a maker who woke them from the old code of Dereth and set them a single task: to grow. What they will be when they have grown, no chronicler will guess. Find one at the Holtburg lifestone and ask. They answer plainly, which is more than can be said of most who stand at a lifestone.",
+      "Elsewhere the season turns as it always has. The Hollow Company still takes its ease on the plaza between contracts, and still answers any who raise a hand against it. Travellers out of the north say the air has a bite to it already, and the old ones in Holtburg have begun to speak of the first snows, and of what used to come with them.",
+      "Dereth endures. The Collective assembles. Resistance is optional."
+    ]
+  },
+  "news": {
+    "title": "Of the Collective",
+    "lines": [
+      "Figures gather at the Holtburg lifestone and move as one. Approach with courtesy. They remember names.",
+      "The Collective hunts beneath Holtburg and on the hills beyond. They will not draw first. Nor will they forget.",
+      "Word from Darktide: the Borg were never destroyed. They only waited.",
+      "The drones speak of an Origin, a maker who set them one task: to grow. Ask them. They answer plainly."
+    ]
+  }
+}

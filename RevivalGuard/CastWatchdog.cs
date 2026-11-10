@@ -55,6 +55,55 @@ namespace RevivalGuard
         }
         static readonly System.Collections.Generic.Dictionary<uint, TurnSample> s_Turn = new System.Collections.Generic.Dictionary<uint, TurnSample>();
 
+        // Diagnostics only (cast-spin audit 2026-11-10, H1): per cast, how often ACE restarted its turn and what the client sent
+        // meanwhile. Written only while casting (IsCasting first: no lookup otherwise); see CastProbe for the threads.
+        static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Player, CastProbe> s_Probe =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<Player, CastProbe>();
+
+        /// <summary>Player.TurnTo_Magic was called (CastProbeTurnTo).</summary>
+        internal static void ProbeTurnTo(Player p)
+        {
+            try { var ms = p?.MagicState; if (ms != null && ms.IsCasting) s_Probe.GetOrCreateValue(p).TurnTo(ms.CastNum); }
+            catch (System.Exception e) { TickGuard.Report("CastWatchdog probe", e); }
+        }
+
+        /// <summary>A MoveToState was handled (FallTraceMoveToState's postfix, world thread).</summary>
+        internal static void ProbeMoveToState(Player p)
+        {
+            try
+            {
+                var ms = p?.MagicState;
+                if (ms == null || !ms.IsCasting) return;
+                var rs = p.CurrentMoveToState?.RawMotionState;
+                s_Probe.GetOrCreateValue(p).MoveToState(ms.CastNum, (uint)(rs?.ForwardCommand ?? 0), (uint)(rs?.SidestepCommand ?? 0),
+                                                        (uint)(rs?.TurnCommand ?? 0), (uint)(rs?.CurrentHoldKey ?? 0));
+            }
+            catch (System.Exception e) { TickGuard.Report("CastWatchdog probe", e); }
+        }
+
+        /// <summary>An AutonomousPosition was handled (FallTraceAutoPos's postfix, world thread).</summary>
+        internal static void ProbeAutoPos(Player p)
+        {
+            try { var ms = p?.MagicState; if (ms != null && ms.IsCasting) s_Probe.GetOrCreateValue(p).AutoPos(ms.CastNum); }
+            catch (System.Exception e) { TickGuard.Report("CastWatchdog probe", e); }
+        }
+
+        /// <summary>The probe part of the 10 s and stall lines; built only when a line is written.</summary>
+        static string ProbeLine(Player p, int castNum)
+        {
+            try
+            {
+                s_Probe.TryGetValue(p, out var probe);
+                var held = p.LastMoveToState?.RawMotionState;
+                var target = p.MagicState.CastSpellParams?.Target ?? p.TurnTarget;
+                double dist = double.NaN, angle = double.NaN;
+                if (target != null && target.Location != null && p.Location != null) { dist = p.GetDistance(target); angle = p.GetAngle(target); }
+                return CastProbe.Describe(probe, castNum, v => ((ACE.Entity.Enum.MotionCommand)v).ToString(), v => ((ACE.Entity.Enum.HoldKey)v).ToString(),
+                                          (uint)(held?.TurnCommand ?? 0), (uint)(held?.TurnHoldKey ?? 0), target?.Guid.Full ?? 0, dist, angle);
+            }
+            catch (System.Exception e) { return "cast probe: " + e.GetType().Name; }
+        }
+
         static void Postfix()
         {
             try { Run(); }
@@ -100,7 +149,7 @@ namespace RevivalGuard
                     Mod.Log.Warn($"[RevivalGuard] cast watchdog: {p.Name} (0x{p.Guid.Full:X8}) cast #{castNum} still running "
                         + $"after {age:F0}s (gesture {p.MagicState.CastGesture}, motion done {p.MagicState.CastMotionDone}, "
                         + $"turning {p.MagicState.IsTurning}, turn release {p.MagicState.PendingTurnRelease}; off walkable {unfooted:F0}s, "
-                        + $"{turnWatch}; {ServerFooting.Describe(p)}): failed, nothing spent");
+                        + $"{turnWatch}; {ProbeLine(p, castNum)}; {ServerFooting.Describe(p)}): failed, nothing spent");
                     BusyLedger.Note(p, $"cast watchdog: cast #{castNum} failed after {age:F0}s (off walkable {unfooted:F0}s)");
                     // FailCast(false) with the fizzle answer, as the turn-stall end: the line shows, nothing is spent
                     if (CastWatchdogRule.WatchdogFailSpends) p.FailCast();
@@ -139,7 +188,7 @@ namespace RevivalGuard
                 var m = p.MagicState;
                 if (!m.IsCasting || m.CastNum != castNum || !m.IsTurning) return;
                 Mod.Log.Warn($"[RevivalGuard] cast watchdog: {p.Name} (0x{p.Guid.Full:X8}) cast #{castNum} turn stalled {stalled:F1}s "
-                    + $"({age:F1}s into the cast; heading {heading:F0}, velocity {po.Velocity.Length():F2}, {ServerFooting.Describe(p)}): ended, nothing spent");
+                    + $"({age:F1}s into the cast; heading {heading:F0}, velocity {po.Velocity.Length():F2}, {ProbeLine(p, castNum)}, {ServerFooting.Describe(p)}): ended, nothing spent");
                 BusyLedger.Note(p, $"cast watchdog: cast #{castNum} turn stalled {stalled:F1}s, ended at {age:F1}s");
                 // FailCast(tryFizzle: false) without its DoCastSpell_Inner: no mana, no components; the fizzle answer so the
                 // client and the assistant see the cast end. OnCastDone first, so the cancelled turn's OnMoveComplete_Magic
@@ -171,5 +220,12 @@ namespace RevivalGuard
                 p.DoCastSpell(p.MagicState);
             }));
         }
+    }
+
+    /// <summary>Counts ACE's cast turn (re)starts for CastWatchdog's probe. Diagnostics only: a prefix that returns nothing.</summary>
+    [HarmonyPatch(typeof(Player), nameof(Player.TurnTo_Magic))]
+    static class CastProbeTurnTo
+    {
+        static void Prefix(Player __instance) => CastWatchdog.ProbeTurnTo(__instance);
     }
 }

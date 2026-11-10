@@ -78,7 +78,7 @@ namespace RevivalGuard
         static bool Prepare() { FallTrace.Register(); return true; }
         static void Postfix(Session session)
         {
-            try { var p = session?.Player; if (p != null) FallTrace.Report(p, p.RequestedLocation, p.LastContact, true); }
+            try { var p = session?.Player; if (p != null) { CastWatchdog.ProbeAutoPos(p); FallTrace.Report(p, p.RequestedLocation, p.LastContact, true); } }
             catch (Exception e) { Mod.Log.Warn("[RevivalGuard] FallTrace: " + e.Message); }
         }
     }
@@ -88,7 +88,7 @@ namespace RevivalGuard
     {
         static void Postfix(Session session)
         {
-            try { var p = session?.Player; if (p != null && !p.PKLogout) FallTrace.Report(p, p.CurrentMoveToState?.Position, false, false); }
+            try { var p = session?.Player; if (p != null && !p.PKLogout) { CastWatchdog.ProbeMoveToState(p); FallTrace.Report(p, p.CurrentMoveToState?.Position, false, false); } }
             catch (Exception e) { Mod.Log.Warn("[RevivalGuard] FallTrace: " + e.Message); }
         }
     }

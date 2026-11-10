@@ -168,7 +168,7 @@ namespace RevivalGuard
         {
             try
             {
-                var b = Inner(DefaultPropertyManager.DefaultBooleanProperties);
+                var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_ON)) b[P_ON] = new Property<bool>(false, "RevivalGuard WorldBossSchedule: world bosses rise on a fixed schedule with warnings, a map marker, a timed window and personal rewards (off: Bael'Zharon's 24 h after death)");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] WorldBossSchedule: property default not registered: {e.Message}"); }
@@ -884,14 +884,6 @@ namespace RevivalGuard
                 File.Move(tmp, s_Path, true);
             }
             catch (Exception e) { Mod.Log.Error($"[RevivalGuard] WorldBossSchedule: cannot write {s_Path}: {e.Message}"); }
-        }
-
-        static IDictionary<string, Property<T>> Inner<T>(ReadOnlyDictionary<string, Property<T>> ro)
-        {
-            var inner = typeof(ReadOnlyDictionary<string, Property<T>>)
-                .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Select(f => f.GetValue(ro)).OfType<IDictionary<string, Property<T>>>().FirstOrDefault();
-            return inner ?? throw new MissingFieldException("ReadOnlyDictionary", "inner dictionary");
         }
     }
 

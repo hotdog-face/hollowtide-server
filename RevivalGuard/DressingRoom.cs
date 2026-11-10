@@ -99,6 +99,7 @@ namespace RevivalGuard
             public readonly List<List<Piece>> Undo = new List<List<Piece>>(), Redo = new List<List<Piece>>();
             public string LastOp;
             public DateTime LastOpAt;
+            public RealOutfit LastReal;   // the retail outfit the last Inspire or Remix wore, for Not style (261109-0029)
         }
         const int HISTORY = 50;
 
@@ -117,7 +118,7 @@ namespace RevivalGuard
         internal static void Register()
         {
             CommandManager.TryAddCommand(Handle, "dress", STAFF, CommandHandlerFlag.RequiresWorld,
-                "Staff Dressing Room (the panel's own verbs).", "open | list <slot mask> <page> [words] | pick <wcid> | pal <i> <n> | shade <i> <0-1> | layer <i> <1|0|-1> | drop <i> | clear | worn | save <name> | load <name> | delete <name> | apply worn|new|npc <guid> | template <name> | close");
+                "Staff Dressing Room (the panel's own verbs).", "open | list <slot mask> <page> [words] | pick <wcid> | pal <i> <n> | shade <i> <0-1> | layer <i> <1|0|-1> | drop <i> | clear | worn | inspire | remix | notstyle [all] | save <name> | load <name> | delete <name> | apply worn|new|npc <guid> | template <name> | close");
         }
 
         static bool Staff(Player p) => p?.Session != null && p.Session.AccessLevel >= STAFF;
@@ -541,17 +542,10 @@ namespace RevivalGuard
             try
             {
                 var t = DatManager.PortalDat.ReadFromDat<ClothingTable>(cb);
-                // The swatch shows the sub-palette that changes from template to template. Many armours list a trim or
+                // The swatch shows the sub-palettes that change from template to template. Many armours list a trim or
                 // leather range first that every template shares, and that range made all their swatches the same tan.
-                int best = 0, bestDistinct = -1; long bestColors = -1;
-                int most = t.ClothingSubPalEffects.Values.Select(e => e.CloSubPalettes.Count).DefaultIfEmpty(0).Max();
-                for (int j = 0; j < most; j++)
-                {
-                    var subs = t.ClothingSubPalEffects.Values.Where(e => e.CloSubPalettes.Count > j).Select(e => e.CloSubPalettes[j]).ToList();
-                    int distinct = subs.Select(c => c.PaletteSet).Distinct().Count();
-                    long colors = subs.Count == 0 ? 0 : subs[0].Ranges.Sum(g => (long)g.NumColors);
-                    if (distinct > bestDistinct || (distinct == bestDistinct && colors > bestColors)) { best = j; bestDistinct = distinct; bestColors = colors; }
-                }
+                var dyed = DressingRoomSwatch.Dyed(t.ClothingSubPalEffects.Values
+                    .Select(e => (IReadOnlyList<uint>)e.CloSubPalettes.Select(c => c.PaletteSet).ToList()).ToList());
                 // owner 261108-0040 ("rynthid tenticle cape shows lots of options but cant be changed"): a template that
                 // gives exactly the colours an earlier one gives is not a choice, so it is listed once (the worn one wins);
                 // a look whose templates all give the same colours has one entry and the panel hides its Colour row
@@ -562,7 +556,7 @@ namespace RevivalGuard
                     if (seen.ContainsKey(Colours(t.ClothingSubPalEffects[k]))) continue;
                     seen[Colours(t.ClothingSubPalEffects[k])] = r.Count;
                     r.Add(new object[] { k, Enum.IsDefined(typeof(PaletteTemplate), (int)k) ? Spaced(((PaletteTemplate)(int)k).ToString()) : "Template " + k,
-                                         Swatch(t.ClothingSubPalEffects[k], shade, best) });
+                                         Swatch(t.ClothingSubPalEffects[k], shade, dyed) });
                 }
                 r.Sort((a, b) => ((uint)a[0]).CompareTo((uint)b[0]));
             }
@@ -570,18 +564,23 @@ namespace RevivalGuard
             return r;
         }
 
-        static string Swatch(CloSubPalEffect e, double shade, int pick = 0)
+        /// <summary>The colour this template gives the item at this shade (owner 261109-0030: "a grey square to show a blue
+        /// tinted item"): every palette entry it writes into the dyed ranges, averaged (DressingRoomSwatch), from the
+        /// palette the shade picks out of each set, as the worn item is drawn.</summary>
+        static string Swatch(CloSubPalEffect e, double shade, List<int> dyed)
         {
             try
             {
-                var sub = pick < e.CloSubPalettes.Count && e.CloSubPalettes[pick].Ranges.Count > 0
-                    ? e.CloSubPalettes[pick] : e.CloSubPalettes.FirstOrDefault(c => c.Ranges.Count > 0);
-                if (sub == null) return "";
-                var set = DatManager.PortalDat.ReadFromDat<PaletteSet>(sub.PaletteSet);
-                var pal = DatManager.PortalDat.ReadFromDat<Palette>(set.GetPaletteID(shade));
-                var rg = sub.Ranges[0];
-                int i = (int)Math.Min(rg.Offset + rg.NumColors / 2, (uint)Math.Max(0, pal.Colors.Count - 1));
-                return pal.Colors.Count == 0 ? "" : "#" + (pal.Colors[i] & 0xFFFFFF).ToString("X6");
+                var ranges = new List<(IReadOnlyList<uint>, uint, uint)>();
+                foreach (int j in dyed)
+                {
+                    if (j >= e.CloSubPalettes.Count) continue;
+                    var sub = e.CloSubPalettes[j];
+                    var set = DatManager.PortalDat.ReadFromDat<PaletteSet>(sub.PaletteSet);
+                    var pal = DatManager.PortalDat.ReadFromDat<Palette>(set.GetPaletteID(shade));
+                    foreach (var rg in sub.Ranges) ranges.Add((pal.Colors, rg.Offset, rg.NumColors));
+                }
+                return DressingRoomSwatch.Hex(DressingRoomSwatch.Average(ranges));
             }
             catch { return ""; }
         }
@@ -794,6 +793,8 @@ namespace RevivalGuard
                 target,
                 undo = f.Undo.Count,
                 redo = f.Redo.Count,
+                real = f.LastReal != null ? 1 : 0,          // Not style has a look to hide
+                rall = HideForAll(p) ? 1 : 0,               // and may hide it for all staff
             };
             ModChannel.Send(p.Session, "dress", JsonSerializer.Serialize(new { st }));
         }
@@ -843,6 +844,7 @@ namespace RevivalGuard
                             Push(to, Snap(f));
                             Restore(f, from[from.Count - 1]); from.RemoveAt(from.Count - 1);
                             f.LastOp = null;
+                            f.LastReal = null;   // the outfit on the doll may not be the last Inspire's: Not style waits for the next one
                             f.Msg = verb == "undo" ? "Undone." : "Redone.";
                             break;
                         }
@@ -860,13 +862,14 @@ namespace RevivalGuard
                             break;
                         }
                     case "drop": { var x = At(1); if (x != null) f.Pieces.Remove(x); break; }
-                    case "random": RandomSuit(p, f); break;
+                    case "random": RandomSuit(p, f); f.LastReal = null; break;
                     case "inspire": Inspire(p, f); break;
                     case "remix": Remix(p, f); break;
                     case "realstats": f.Msg = RealReady() ? s_RealStats : NotReady(); look = false; break;
+                    case "notstyle": NotStyle(p, f, a.Length > 1 && a[1].Equals("all", StringComparison.OrdinalIgnoreCase)); break;
                     case "match": { var x = At(1); if (x == null) f.Msg = "Pick a piece to build the set around first."; else MatchSet(p, f, x); break; }
-                    case "clear": f.Pieces.Clear(); break;
-                    case "worn": LoadWorn(p, f); break;
+                    case "clear": f.Pieces.Clear(); f.LastReal = null; break;
+                    case "worn": LoadWorn(p, f); f.LastReal = null; break;
                     case "save":
                         {
                             if (f.Pieces.Count == 0) { f.Msg = "Put something in the outfit first."; break; }
@@ -884,6 +887,7 @@ namespace RevivalGuard
                             var name = CleanName(rest);
                             if (!Outfits().TryGetValue(name, out var list)) { f.Msg = "No outfit by that name."; break; }
                             f.Pieces.Clear(); foreach (var x in list) Put(f, Copy(x));
+                            f.LastReal = null;
                             f.Msg = $"Loaded \"{name}\".";
                             break;
                         }

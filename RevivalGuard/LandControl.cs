@@ -630,8 +630,12 @@ namespace RevivalGuard
     {
         static void Postfix(Creature __instance, List<Creature> __result)
         {
-            if (__instance is Player || __result == null || __result.Count == 0 || !LandControl.On) return;
-            __result.RemoveAll(LandControl.Protected);
+            try
+            {
+                if (__instance is Player || __result == null || __result.Count == 0 || !LandControl.On) return;
+                __result.RemoveAll(LandControl.Protected);
+            }
+            catch (Exception e) { TickGuard.Report("LandControlNoTarget", e); }
         }
     }
 

@@ -143,6 +143,10 @@ namespace RevivalGuard
     static class KnockbackOnHit
     {
         static bool Prepare() { Knockback.Register(); return true; }
-        static void Postfix(Player __instance, WorldObject source, int __result) => Knockback.OnHit(__instance, source, __result);
+        static void Postfix(Player __instance, WorldObject source, int __result)
+        {
+            try { Knockback.OnHit(__instance, source, __result); }
+            catch (Exception e) { TickGuard.Report("Knockback", e); }   // landblock thread: never let it reach the world loop
+        }
     }
 }

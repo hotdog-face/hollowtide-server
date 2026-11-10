@@ -77,7 +77,8 @@ namespace RevivalGuard
             if (__state) transition.SpherePath.BuildingCheck = true;
         }
 
-        static void Postfix(ACE.Server.Physics.Animation.Transition transition, bool __state)
+        // A Finalizer, not a Postfix: it also runs when FindObjCollisions throws, so the flag never stays set.
+        static void Finalizer(ACE.Server.Physics.Animation.Transition transition, bool __state)
         {
             if (__state) transition.SpherePath.BuildingCheck = false;
         }

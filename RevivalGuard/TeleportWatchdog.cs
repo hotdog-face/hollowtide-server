@@ -118,8 +118,15 @@ namespace RevivalGuard
         /// <summary>When each player's client last sent LoginComplete (unix time), from <see cref="LoginCompleteSeen"/>.</summary>
         internal static readonly ConcurrentDictionary<uint, double> s_ClientArrived = new ConcurrentDictionary<uint, double>();
 
+        /// <summary>The thresholds are 20 s and more; the world loop calls Tick about every millisecond.</summary>
+        const double EVERY_SECONDS = 0.5;
+        static double s_Next;
+
         static void Postfix()
         {
+            var t = ACE.Common.Time.GetUnixTime();
+            if (t < s_Next) return;
+            s_Next = t + EVERY_SECONDS;
             try { Run(); }
             catch (System.Exception e) { TickGuard.Report("TeleportWatchdog", e); }
         }

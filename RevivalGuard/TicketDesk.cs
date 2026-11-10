@@ -147,9 +147,54 @@ namespace RevivalGuard
         /// way, but with no "received as ticket" line and no over-the-limit message (the board already answered).</summary>
         internal static void FileQuiet(Session session, Player player, string kind, string body) => File(session, player, kind, body, quiet: true);
 
+        // A BOT'S OWN AUTOMATIC REPORTS ARE NOT THE OWNER'S TICKETS (coordinator 2026-11-09, ticket 261109-0038: Cranius of
+        // Borg's client filed a watchdog "too busy" report into the live desk). The game's automatic and crash reports
+        // from a mercenary or Borg account (Mercenaries.IsMerc: the reserved allowlist) go to reports/bots/<yyyy-MM>/, with
+        // no ticket number and their own daily cap, for whoever works on the bots. Every reader of the desk globs
+        // reports/*/*.json, so they skip them. A report a person types on those accounts is still a ticket.
+        const int BOT_AUTO_PER_DAY = 60;
+        static readonly Dictionary<uint, (string day, int n)> s_BotDay = new Dictionary<uint, (string, int)>();
+
+        static bool FileBot(Session session, Player player, string kind, string body)
+        {
+            var now = DateTime.UtcNow;
+            string day = now.ToString("yyMMdd");
+            lock (s_Lock)
+            {
+                s_BotDay.TryGetValue(session.AccountId, out var c);
+                if (c.day != day) c = (day, 0);
+                if (c.n >= BOT_AUTO_PER_DAY) return true;
+                s_BotDay[session.AccountId] = (day, c.n + 1);
+            }
+            var rec = new Dictionary<string, object>
+            {
+                ["received_utc"] = now.ToString("o"),
+                ["kind"] = kind,
+                ["account"] = session.Account,
+                ["character"] = player.Name,
+                ["level"] = player.Level ?? 0,
+                ["server_location"] = player.Location?.ToLOCString() ?? "",
+                ["server_busy"] = SafeBusy(player),
+                ["report"] = body.Length > 60000 ? body.Substring(0, 60000) : body,
+            };
+            try
+            {
+                string dir = Path.Combine(Root, "bots", now.ToString("yyyy-MM"));
+                Directory.CreateDirectory(dir);
+                string name = $"{now:yyMMdd-HHmmss}-{session.AccountId}-{kind}.json";
+                System.IO.File.WriteAllText(Path.Combine(dir, name),
+                    JsonSerializer.Serialize(rec, new JsonSerializerOptions { WriteIndented = true }));
+                Mod.Log.Info($"[RevivalGuard] bot report: {kind} from {player.Name} -> reports/bots/{now:yyyy-MM}/{name}");
+            }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] bot report from {player.Name} not kept: {e.Message}"); }
+            return true;
+        }
+
         static void File(Session session, Player player, string kind, string body, bool quiet = false)
         {
             bool auto = kind == "auto" || kind == "crash";
+            if (auto && Mercenaries.IsMerc(player) && FileBot(session, player, kind, body))
+                return;
             uint account = session.AccountId;
             var now = DateTime.UtcNow;
             string id;

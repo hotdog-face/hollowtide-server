@@ -47,7 +47,8 @@ namespace RevivalGuard
         {
             if (p == null) return "";
             var now = DateTime.UtcNow;
-            var parts = new List<string> { $"busy {p.IsBusy}" };
+            // landblock NONE: nothing ticks this player (an unload took them with it, 261109-0037)
+            var parts = new List<string> { $"busy {p.IsBusy}", p.CurrentLandblock == null ? "landblock NONE" : $"landblock {p.CurrentLandblock.Id.Landblock:X4}" };
             try
             {
                 var ms = p.MagicState;

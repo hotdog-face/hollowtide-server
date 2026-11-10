@@ -130,8 +130,12 @@ namespace RevivalGuard
         {
             static void Postfix(WorldObject wo, bool __result)
             {
-                if (!__result || !(wo is Hook hook) || !SEED.ContainsKey(hook.Guid.Full)) return;
-                hook.EnqueueAction(new ActionEventDelegate(() => Seed(hook)));
+                try
+                {
+                    if (!__result || !(wo is Hook hook) || !SEED.ContainsKey(hook.Guid.Full)) return;
+                    hook.EnqueueAction(new ActionEventDelegate(() => Seed(hook)));
+                }
+                catch (Exception e) { TickGuard.Report("StaffBaseHooks.Added", e); }
             }
         }
 

@@ -46,6 +46,31 @@ namespace RevivalGuard
         static readonly ConcurrentDictionary<string, Seen> s_Seen = new ConcurrentDictionary<string, Seen>();
         static DateTime s_PruneAt;
 
+        // The per-address limit alone is no limit: a UDP source address can be made up, and each new one cost an
+        // auth-database read on the packet listener thread plus a table entry (audit 2026-11-09). So: a budget for all
+        // outside questions together, and a cap on the table. Over either, the question is dropped unanswered (a login
+        // screen asks again as the name is typed).
+        const int GLOBAL_PER_SECOND = 20;
+        const int MAX_SEEN = 5000;
+        static readonly object s_BudgetLock = new object();
+        static long s_BudgetSecond; static int s_BudgetUsed; static DateTime s_BudgetWarned;
+
+        static bool WithinBudget(DateTime now)
+        {
+            long second = now.Ticks / TimeSpan.TicksPerSecond;
+            lock (s_BudgetLock)
+            {
+                if (second != s_BudgetSecond) { s_BudgetSecond = second; s_BudgetUsed = 0; }
+                if (++s_BudgetUsed <= GLOBAL_PER_SECOND) return true;
+                if (now - s_BudgetWarned > WINDOW)
+                {
+                    s_BudgetWarned = now;
+                    Mod.Log.Warn($"[RevivalGuard] account query: more than {GLOBAL_PER_SECOND} outside questions in a second; dropping the rest");
+                }
+                return false;
+            }
+        }
+
         static System.Reflection.MethodBase TargetMethod() =>
             AccessTools.Method("ACE.Server.Network.Managers.NetworkManager:ProcessPacket");
 
@@ -71,11 +96,13 @@ namespace RevivalGuard
                 var now = DateTime.UtcNow;
                 var real = Gateway.RealAddress(endPoint);   // a browser player's own address, not the gateway's loopback
                 string key = real.ToString();
+                bool local = StaffLoginGate.IsLocal(real);
+                if (!local && (!WithinBudget(now) || (s_Seen.Count >= MAX_SEEN && !s_Seen.ContainsKey(key)))) return false;
                 var seen = s_Seen.GetOrAdd(key, _ => new Seen());
                 byte answer = 255;
                 // The shard's own network is not limited (the owner was told "slow down" on his
                 // first login after a test from the same Mac, 2026-10-01): StaffLoginGate.IsLocal.
-                if (!StaffLoginGate.IsLocal(real))
+                if (!local)
                 lock (seen)
                 {
                     if (now - seen.LastAnswer < PER_ANSWER) return false;

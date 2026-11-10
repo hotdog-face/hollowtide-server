@@ -21,7 +21,15 @@ namespace RevivalGuard
     {
         const float RANGE = 60f;
 
+        // Runs on landblock threads, where an escaped exception stops the world loop: the fellowship's member
+        // dictionary is ACE's plain Dictionary and can change under this walk when a fellow joins or drops.
         static void Postfix(DamageHistory __instance, WorldObject attacker, DamageType damageType, uint amount)
+        {
+            try { Share(__instance, attacker, damageType, amount); }
+            catch (System.Exception e) { TickGuard.Report("FellowDamage", e); }
+        }
+
+        static void Share(DamageHistory __instance, WorldObject attacker, DamageType damageType, uint amount)
         {
             if (amount == 0 || !(attacker is Player p) || p.Fellowship == null) return;
             var target = __instance.Creature;

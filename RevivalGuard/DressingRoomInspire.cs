@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using ACE.DatLoader;
 using ACE.DatLoader.FileTypes;
+using ACE.Entity.Enum;
 using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
@@ -22,10 +24,12 @@ namespace RevivalGuard
     ///    the shade that picks that palette from its set (PaletteSet.GetPaletteID run backwards).
     /// Inspire wears one of them (only pieces that draw on the viewer's body). Remix keeps a real outfit's colours and
     /// swaps each piece for another look in the same slots that has the same colour template. Each is one Undo step.
+    /// The file holds only looks the builder's style pass kept (outfit_style.py, ticket 261109-0029), and Not style hides
+    /// one more (DressingRoomHidden.cs).
     /// </summary>
     public static partial class DressingRoom
     {
-        sealed class RealOutfit { public List<Piece> P = new List<Piece>(); public int Seen; }
+        sealed class RealOutfit { public List<Piece> P = new List<Piece>(); public int Seen; public HashSet<string> Ids = new HashSet<string>(); }
         static List<RealOutfit> s_Real;
         static System.Threading.Tasks.Task s_RealLoading;
         static string s_RealStats = "";
@@ -97,6 +101,7 @@ namespace RevivalGuard
                 foreach (var x in o.GetProperty("t").EnumerateArray()) tex.Add((x[0].GetUInt32(), x[1].GetUInt32(), x[2].GetUInt32()));
                 var subs = o.GetProperty("c").EnumerateArray().Select(x => (Pal: x[0].GetUInt32(), Off: x[1].GetUInt32(), Len: x[2].GetUInt32())).ToList();
                 int seen = o.TryGetProperty("n", out var nn) ? nn.GetInt32() : 1;
+                string id = o.TryGetProperty("id", out var ii) ? ii.GetString() : null;   // outfits_extract.py's stable id
 
                 var cands = new HashSet<Cand>();
                 foreach (var kv in parts)
@@ -143,8 +148,9 @@ namespace RevivalGuard
                 if (chosen.Count < 2) { none++; continue; }
                 chosen.Sort((a, b) => ELoc(a).CompareTo(ELoc(b)));
                 string key = string.Join(";", chosen.Select(x => FormattableString.Invariant($"{x.W},{x.Pal},{x.Sh:0.##}")));
-                if (outs.TryGetValue(key, out var had)) had.Seen += seen;
-                else { var r = new RealOutfit { Seen = seen }; r.P.AddRange(chosen); outs[key] = r; }
+                if (!outs.TryGetValue(key, out var had)) { outs[key] = had = new RealOutfit(); had.P.AddRange(chosen); }
+                had.Seen += seen;
+                if (id != null) had.Ids.Add(id);
             }
             var list = outs.Values.OrderByDescending(r => r.Seen).ToList();
             s_RealStats = $"{list.Count} real outfits ({read} retail looks read, {none} with under two pieces we could name); "
@@ -200,13 +206,49 @@ namespace RevivalGuard
             pieces = null;
             List<RealOutfit> all; lock (s_Lock) all = s_Real;
             if (all == null || all.Count == 0) return null;
-            for (int tries = 0; tries < 40; tries++)
+            var hidden = Hidden();
+            uint me = p.Guid.Full;
+            List<RealOutfit> open;
+            lock (s_Lock) open = all.Where(r => !hidden.IsHidden(me, r.Ids)).ToList();   // less what this character or all staff hid
+            for (int tries = 0; tries < 40 && open.Count > 0; tries++)
             {
-                var r = all[s_Rng.Next(all.Count)];
+                var r = open[s_Rng.Next(open.Count)];
                 var on = OnBody(p, r);
                 if (on.Count >= 2) { pieces = on; return r; }
             }
             return null;
+        }
+
+        // ---- Not style (owner ticket 261109-0029: "inspire button needs a way to remove options that were not good tailors
+        // from players but just things they wore for practical reasons. not style") ----
+        static InspireHidden s_Hidden;
+        static string HiddenFile() => Path.Combine(Dir() ?? "", "inspire-hidden.json");
+        static InspireHidden Hidden() { lock (s_Lock) return s_Hidden ??= InspireHidden.Load(HiddenFile()); }
+
+        /// <summary>Hiding a look for all staff is the owner's (Admin and up); anyone in the room hides it for themselves.</summary>
+        static bool HideForAll(Player p) => p?.Session != null && p.Session.AccessLevel >= AccessLevel.Admin;
+
+        /// <summary>Not style: the outfit the last Inspire or Remix came from stops coming up (for this character, or for all
+        /// staff), and Inspire puts on another (one Undo step).</summary>
+        static void NotStyle(Player p, Fit f, bool everyone)
+        {
+            var r = f.LastReal;
+            if (r == null) { f.Msg = "Press Inspire first: Not style hides the look it put on."; return; }
+            if (r.Ids.Count == 0) { f.Msg = "This look has no id to hide it by (an older outfits file)."; return; }
+            everyone &= HideForAll(p);
+            var h = Hidden();
+            int left;
+            lock (s_Lock)
+            {
+                h.Hide(p.Guid.Full, r.Ids, everyone);
+                try { h.Save(HiddenFile()); }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] DressingRoom: inspire-hidden.json: {e.Message}"); }
+                left = s_Real?.Count(x => !h.IsHidden(p.Guid.Full, x.Ids)) ?? 0;
+            }
+            Mod.Log.Info($"[RevivalGuard] DressingRoom: not style ({(everyone ? "all staff" : p.Name)}): {string.Join(",", r.Ids)}");
+            Inspire(p, f);
+            f.Msg = (everyone ? "Hidden from Inspire for all staff. " : "Hidden from your Inspire. ")
+                + (f.LastReal == r || f.LastReal == null ? "No other look fits this body." : $"{left} looks left; here is another. Undo goes back.");
         }
 
         static string NotReady()
@@ -224,6 +266,7 @@ namespace RevivalGuard
             if (r == null) { f.Msg = "No real outfit fits this body."; return; }
             f.Pieces.Clear();
             foreach (var x in pieces) Put(f, x);
+            f.LastReal = r;
             int total; lock (s_Lock) total = s_Real.Count;
             Mod.Log.Info($"[RevivalGuard] DressingRoom: inspire {p.Name}: " + string.Join(", ", f.Pieces.Select(x => $"{x.N} ({x.W}) pal {x.Pal} sh {x.Sh:0.##}")));
             f.Msg = $"An outfit a retail player wore{(r.Seen > 1 ? $" (seen {r.Seen} times)" : "")}, one of {total}. Inspire again for another; Undo goes back.";
@@ -238,6 +281,7 @@ namespace RevivalGuard
             if (r == null) { f.Msg = "No real outfit fits this body."; return; }
             var cat = Drawable(p);
             f.Pieces.Clear();
+            f.LastReal = r;
             int swapped = 0;
             foreach (var x in pieces)
             {

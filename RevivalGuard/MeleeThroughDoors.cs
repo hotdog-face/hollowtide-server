@@ -121,6 +121,12 @@ namespace RevivalGuard
         {
             static bool Prefix(Player __instance, Creature target, WorldObject damageSource, ref DamageEvent __result)
             {
+                try { return Check(__instance, target, damageSource, ref __result); }
+                catch (Exception e) { TickGuard.Report("MeleeThroughDoors.PlayerHit", e); return true; }
+            }
+
+            static bool Check(Player __instance, Creature target, WorldObject damageSource, ref DamageEvent __result)
+            {
                 if (target == null || damageSource?.ProjectileSource != null) return true;   // a projectile: physics decides
                 if (!DoorBetween(__instance, target) && !OutOfReach(__instance, target, Player.StickyDistance + PLAYER_SLACK)) return true;
                 __result = null;                                                              // swung at a door, or at air
@@ -142,11 +148,15 @@ namespace RevivalGuard
         {
             static void Postfix(Creature attacker, Creature defender, WorldObject damageSource, DamageEvent __result)
             {
-                if (__result == null || attacker == null || attacker is Player || defender == null) return;
-                if (damageSource?.ProjectileSource != null) return;
-                if (!DoorBetween(attacker, defender) && !OutOfReach(attacker, defender, Creature.MaxMeleeRange + MONSTER_SLACK)) return;
-                __result.Evaded = true;
-                __result.Damage = 0f;
+                try
+                {
+                    if (__result == null || attacker == null || attacker is Player || defender == null) return;
+                    if (damageSource?.ProjectileSource != null) return;
+                    if (!DoorBetween(attacker, defender) && !OutOfReach(attacker, defender, Creature.MaxMeleeRange + MONSTER_SLACK)) return;
+                    __result.Evaded = true;
+                    __result.Damage = 0f;
+                }
+                catch (Exception e) { TickGuard.Report("MeleeThroughDoors.MonsterHit", e); }
             }
         }
     }

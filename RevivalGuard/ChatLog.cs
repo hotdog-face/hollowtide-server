@@ -23,7 +23,6 @@ namespace RevivalGuard
     static class ChatLog
     {
         static readonly string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ace", "reports", "chat");
-        static readonly object s_Lock = new object();
 
         public static void Write(string channel, string who, string text)
         {
@@ -31,12 +30,8 @@ namespace RevivalGuard
             {
                 if (string.IsNullOrWhiteSpace(text)) return;
                 var now = DateTime.UtcNow;
-                string line = $"{now.ToString("HH:mm:ss", CultureInfo.InvariantCulture)} [{channel}] {who ?? "?"}: {text.Replace('\n', ' ').Replace('\r', ' ')}\n";
-                lock (s_Lock)
-                {
-                    Directory.CreateDirectory(Dir);
-                    File.AppendAllText(Path.Combine(Dir, now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".log"), line);
-                }
+                string line = $"{now.ToString("HH:mm:ss", CultureInfo.InvariantCulture)} [{channel}] {who ?? "?"}: {text.Replace('\n', ' ').Replace('\r', ' ')}";
+                LogFiles.Shared.Enqueue(Path.Combine(Dir, now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".log"), line);
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] ChatLog: {e.Message}"); }
         }
@@ -93,6 +88,20 @@ namespace RevivalGuard
                 ChatLog.Write("Say", __instance.Name, message);
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] ChatLog speech: {e.Message}"); }
+        }
+    }
+
+    /// <summary>The mod's shared writer for high-volume logs (telemetry events, the chat log): a game thread queues the
+    /// line and never waits on the disk or on another thread's write (audit 2026-11-09). Flushed at process exit.</summary>
+    static class LogFiles
+    {
+        public static readonly BackgroundAppender Shared = Make();
+
+        static BackgroundAppender Make()
+        {
+            var a = new BackgroundAppender(m => Mod.Log.Warn($"[RevivalGuard] log writer: {m}"));
+            try { AppDomain.CurrentDomain.ProcessExit += (_, __) => a.Flush(2000); } catch { }
+            return a;
         }
     }
 }

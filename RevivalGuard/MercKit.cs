@@ -301,7 +301,8 @@ namespace RevivalGuard
             chain.AddDelaySeconds(REBUFF_MIN * 60);
             chain.AddAction(p, () =>
             {
-                if (PlayerManager.GetOnlinePlayer(p.Guid) != p || Sessions.TryGetValue(p.Guid.Full, out var s) && s != session) return;
+                bool newer; lock (Sessions) newer = Sessions.TryGetValue(p.Guid.Full, out var s) && s != session;   // a login writes it under this lock
+                if (PlayerManager.GetOnlinePlayer(p.Guid) != p || newer) return;
                 if (On && !p.IsDead) { try { Outfit(p); Buff(p); } catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] MercKit: rebuff {p.Name}: {e.Message}"); } }
                 Loop(p, session);
             });

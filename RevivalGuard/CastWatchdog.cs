@@ -44,7 +44,15 @@ namespace RevivalGuard
         static double s_Next;
         static readonly System.Collections.Generic.Dictionary<uint, double> s_Unfooted = new System.Collections.Generic.Dictionary<uint, double>();
 
-        sealed class TurnSample { public int CastNum; public double At, Since = double.NaN; public float Heading; public ACE.Server.Physics.Common.Position Pos; }
+        sealed class TurnSample
+        {
+            public int CastNum; public double At, Since = double.NaN; public float Heading; public ACE.Server.Physics.Common.Position Pos;
+            // for the 10 s line: why the turn-stall rule did not end this cast (audit 2026-11-09: 7 of 11 full fizzles read
+            // "turning True, velocity 0, walkable" and the rule fired once)
+            public double Rate, Speed, MaxRate, MaxSpeed; public int Samples, StalledSamples;
+            public string Describe() => Samples == 0 ? "turn watch: no samples"
+                : $"turn watch: {StalledSamples}/{Samples} samples stalled, heading rate {Rate:F0} (max {MaxRate:F0}) deg/s, speed {Speed:F2} (max {MaxSpeed:F2}) m/s";
+        }
         static readonly System.Collections.Generic.Dictionary<uint, TurnSample> s_Turn = new System.Collections.Generic.Dictionary<uint, TurnSample>();
 
         static void Postfix()
@@ -84,6 +92,7 @@ namespace RevivalGuard
                                             unfooted, UNFOOTED)) continue;
                 s_Unfooted.Remove(p.Guid.Full);
                 int castNum = ms.CastNum;
+                string turnWatch = s_Turn.TryGetValue(p.Guid.Full, out var tw) && tw.CastNum == castNum ? tw.Describe() : "turn watch: none";
                 p.EnqueueAction(new ActionEventDelegate(() =>
                 {
                     // the same cast, still running: anything else finished or replaced it meanwhile
@@ -91,7 +100,7 @@ namespace RevivalGuard
                     Mod.Log.Warn($"[RevivalGuard] cast watchdog: {p.Name} (0x{p.Guid.Full:X8}) cast #{castNum} still running "
                         + $"after {age:F0}s (gesture {p.MagicState.CastGesture}, motion done {p.MagicState.CastMotionDone}, "
                         + $"turning {p.MagicState.IsTurning}, turn release {p.MagicState.PendingTurnRelease}; off walkable {unfooted:F0}s, "
-                        + $"{ServerFooting.Describe(p)}): failed, nothing spent");
+                        + $"{turnWatch}; {ServerFooting.Describe(p)}): failed, nothing spent");
                     BusyLedger.Note(p, $"cast watchdog: cast #{castNum} failed after {age:F0}s (off walkable {unfooted:F0}s)");
                     // FailCast(false) with the fizzle answer, as the turn-stall end: the line shows, nothing is spent
                     if (CastWatchdogRule.WatchdogFailSpends) p.FailCast();
@@ -114,6 +123,13 @@ namespace RevivalGuard
             double moved = t.Pos == null ? 0 : t.Pos.Distance(po.Position);
             double turned = t.Pos == null ? 0 : CastTurnStallRule.HeadingDelta(t.Heading, heading);
             double stalled = CastTurnStallRule.Stalled(ms.IsTurning, ms.PendingTurnRelease, ServerFooting.Walkable(p), moved, turned, dt, ref t.Since, now);
+            if (dt > 0)
+            {
+                t.Rate = turned / dt; t.Speed = moved / dt; t.Samples++;
+                if (t.Rate > t.MaxRate) t.MaxRate = t.Rate;
+                if (t.Speed > t.MaxSpeed) t.MaxSpeed = t.Speed;
+                if (!double.IsNaN(t.Since)) t.StalledSamples++;
+            }
             t.At = now; t.Heading = heading; t.Pos = new ACE.Server.Physics.Common.Position(po.Position);
             if (!CastTurnStallRule.FailNow(stalled)) return false;
             s_Turn.Remove(id);

@@ -124,11 +124,8 @@ namespace RevivalGuard
                     if (loc != null) sb.Append(",\"lb\":\"").Append((loc.Cell >> 16).ToString("X4")).Append('"');
                 }
                 sb.Append(extra).Append('}');
-                lock (s_FileLock)
-                {
-                    Directory.CreateDirectory(Dir);
-                    File.AppendAllText(Path.Combine(Dir, now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".jsonl"), sb.Append('\n').ToString());
-                }
+                // off the game thread: every player's minute sample, each kill and death came through one lock and the disk
+                LogFiles.Shared.Enqueue(Path.Combine(Dir, now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".jsonl"), sb.ToString());
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] telemetry {ev}: {e.Message}"); }
         }

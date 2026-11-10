@@ -129,7 +129,7 @@ namespace RevivalGuard
                 if (Public(f, today, forced, out _, out var last)) lines.Add(LoginRunning(f, today, last));
             foreach (var f in SeasonalCalendar.Calendar)
             {
-                if (Window(f, today, out _, out _)) continue;
+                if (Window(f, today, out _, out _) || forced(f) == false) continue;
                 int d = SeasonalCalendar.DaysUntil(f, today);
                 if (d >= 1 && d <= UPCOMING_DAYS) lines.Add(LoginUpcoming(f, d));
             }

@@ -158,14 +158,20 @@ namespace RevivalGuard
         /// <summary>A forced state for the notices: true forced on, false forced off, null the calendar's.</summary>
         internal static bool? ForcedOn(Festival f)
         {
+            if (!Installed(f)) return false;   // a Pending festival without its rows is off for the notices too
             lock (s_Lock) return s_Forced.TryGetValue(f.Key, out var o) ? o.On : (bool?)null;
         }
+
+        /// <summary>A Pending festival (waiting for the owner's yes) counts only once every row it turns on exists in
+        /// ace_world: its datafix is the switch, so the mod can ship before the content does.</summary>
+        internal static bool Installed(Festival f) => !f.Pending || f.On.All(EventManager.IsEventAvailable);
 
         /// <summary>A file beside the dll, next to SeasonalOverrides.json (FestivalNotices keeps its state there).</summary>
         internal static string FileBeside(string name) => Path.Combine(Path.GetDirectoryName(OverridePath()), name);
 
         static bool IsActive(Festival f, DateTime local)
         {
+            if (!Installed(f)) return false;
             List<Festival> forcedOn;
             lock (s_Lock)
             {
@@ -302,6 +308,7 @@ namespace RevivalGuard
             int active = 0;
             foreach (var f in Calendar)
             {
+                if (!Installed(f)) { Mod.Log.Info($"[RevivalGuard] seasonal: {f.Name} is Pending, its rows are not in ace_world (off)"); continue; }
                 var forced = ForcedState(f);
                 bool natural = InWindow(f, local);
                 if (forced == null)
@@ -318,7 +325,7 @@ namespace RevivalGuard
             }
             if (active == 0)
             {
-                var next = Calendar.Select(f => new { f, d = DaysUntil(f, local) })
+                var next = Calendar.Where(Installed).Select(f => new { f, d = DaysUntil(f, local) })
                                    .Where(x => x.d >= 0).OrderBy(x => x.d).FirstOrDefault();
                 Mod.Log.Info("[RevivalGuard] seasonal: no festival is active at startup"
                     + (next != null ? $"; next is {next.f.Name} in {next.d} day{(next.d == 1 ? "" : "s")}" : ""));
@@ -340,6 +347,8 @@ namespace RevivalGuard
             var active = Calendar.Where(f => IsActive(f, local)).ToList();
             // ON beats OFF; a row a festival suppresses is On outside it (SeasonalCalendar.Table.cs Desired)
             var (wantOn, wantOff) = Desired(active);
+            // a Pending festival's missing rows are not news every minute (its datafix is not applied yet)
+            foreach (var f in Calendar) if (!Installed(f)) wantOff.ExceptWith(f.On);
 
             foreach (var name in wantOn) Set(name, true);
             foreach (var name in wantOff) Set(name, false);
@@ -503,7 +512,7 @@ namespace RevivalGuard
             var running = Calendar.Where(f => IsActive(f, local)).ToList();
             if (running.Count == 0)
             {
-                var next = Calendar.Select(f => new { f, d = DaysUntil(f, local) })
+                var next = Calendar.Where(Installed).Select(f => new { f, d = DaysUntil(f, local) })
                                    .Where(x => x.d >= 0).OrderBy(x => x.d).FirstOrDefault();
                 Say(session, "No festival is running.");
                 if (next != null)

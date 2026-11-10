@@ -23,12 +23,58 @@ namespace RevivalGuard
         /// </summary>
         public const string FROSTFELL = "frostfell";
 
-        public static bool DirectorOn(bool enabled, bool frostfellSwitch, bool frostfellActive) =>
-            enabled || (frostfellSwitch && frostfellActive);
+        /// <summary>RETIRED EVENTS RUN THEIR OWN TOO (owner 2026-11-01: every retired live event on a yearly automated
+        /// calendar, docs/EVENTS-RETIRED.md). The Bur Portal Summoning Ritual's assault is a director entry like the Present
+        /// Raids; while its festival is on it runs with rg_event_director off, behind rg_event_director_retired (default on).</summary>
+        public const string BUR_RITUAL = "burritual";
 
-        /// <summary>May this entry run in the rotation? Everything when the director is on; else only Frostfell's own.</summary>
-        public static bool EntryAllowed(bool enabled, string[] festivals) =>
-            enabled || (festivals != null && festivals.Any(f => string.Equals(f, FROSTFELL, StringComparison.OrdinalIgnoreCase)));
+        /// <summary>Aerbax's Prodigal Children (retail Jan 2008): its three waves near Yaraq are a director entry too
+        /// (docs/EVENT-TESTS/prodigal.md).</summary>
+        public const string PRODIGAL = "prodigal";
+
+        /// <summary>The House Mhoire Risings (retail Feb 2012): Lady Tairla near Dryreach and the Corrupted Pyre Oak near
+        /// Ayan Baqur, two director entries (docs/EVENT-TESTS/mhoire.md).</summary>
+        public const string MHOIRE = "mhoire";
+
+        /// <summary>The 2009 Hero Token raids (retail Mar and Apr 2009): two director entries at Hebian-To
+        /// (docs/EVENT-TESTS/hero-raids.md).</summary>
+        public const string HERO_RAIDS = "heroraids";
+
+        /// <summary>Captain Burnja Attacks the Windmill (retail Apr 2007): one director entry (docs/EVENT-TESTS/burnja.md).</summary>
+        public const string BURNJA = "burnja";
+
+        /// <summary>The Burun Raids (retail May 2004): five director entries, one per raided town (docs/EVENT-TESTS/burun-raids.md).</summary>
+        public const string BURUN_RAIDS = "burunraids";
+
+        /// <summary>The Viridian incursion at Baishi (retail Apr 2015): one director entry (docs/EVENT-TESTS/viridian-baishi.md).</summary>
+        public const string VIRIDIAN_BAISHI = "viridianbaishi";
+
+        /// <summary>Martine Attacks (retail May to Jun 2002): two director entries (docs/EVENT-TESTS/martine-attacks.md).</summary>
+        public const string MARTINE_ATTACKS = "martineattacks";
+
+        /// <summary>The revived retired events whose own entries run with rg_event_director off (rg_event_director_retired).</summary>
+        public static readonly string[] RETIRED = { BUR_RITUAL, PRODIGAL, MHOIRE, HERO_RAIDS, BURNJA, BURUN_RAIDS, VIRIDIAN_BAISHI, MARTINE_ATTACKS };
+
+        /// <summary>
+        /// FESTIVALS THAT RUN THEIR OWN EVENTS. Frostfell (above) and T'thuun's Marauders (2026-11-01, docs/EVENT-TESTS/
+        /// tthuun-marauders.md: the town raids ARE that festival, so its entries run while it is on even with the rotation
+        /// off). Each has its own staff switch, default on: rg_event_director_frostfell, rg_event_director_tthuun.
+        /// </summary>
+        public const string TTHUUN = "tthuun";
+
+        /// <summary>The festivals whose own director entries run with rg_event_director off (each behind its switch:
+        /// Frostfell's, T'thuun's, and rg_event_director_retired for every revived retired event).</summary>
+        public static readonly string[] SELF_RUN = new[] { FROSTFELL, TTHUUN }.Concat(RETIRED).ToArray();
+
+        /// <summary>The director runs: the rotation is on, or a self-running festival is on with its switch on.
+        /// selfRunning(key) = that festival is active and its switch is on.</summary>
+        public static bool DirectorOn(bool enabled, Func<string, bool> selfRunning) =>
+            enabled || (selfRunning != null && SELF_RUN.Any(selfRunning));
+
+        /// <summary>May this entry run? Everything with the rotation on; else only an entry of a self-running festival
+        /// whose switch is on (switchOn(key)).</summary>
+        public static bool EntryAllowed(bool enabled, string[] festivals, Func<string, bool> switchOn) =>
+            enabled || (festivals != null && festivals.Any(f => SELF_RUN.Contains(f, StringComparer.OrdinalIgnoreCase) && (switchOn == null || switchOn(f))));
 
         /// <summary>A boss lair inside the event's landblock box, widened by `margin` landblocks each way.</summary>
         public static bool LairNear((int x0, int y0, int x1, int y1) box, ushort lair, int margin)

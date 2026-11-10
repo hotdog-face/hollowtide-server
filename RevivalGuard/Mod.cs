@@ -88,6 +88,7 @@ namespace RevivalGuard
             MonsterAi.Register();
             MonsterFun.Register();
             EventDirector.Register();
+            ScavengerHunt.Register();
             ExtraDeathLines.Register();
             // The PK expansion (docs/PK-EXPANSION.md): every part off until its property is set.
             PkCommon.RegisterProperties();

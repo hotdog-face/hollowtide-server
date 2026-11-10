@@ -65,6 +65,7 @@ namespace RevivalGuard
             public (int x0, int y0, int x1, int y1) Box;   // landblock X/Y rectangle for "is anyone there"
             public string Announce, Victory, Withdraw;
             public string Lost, Defeat;            // a stage row that means the players lost, and what is said then (the Present Raids)
+            public bool HeldWins;                  // still running at the end of its time = the players held it (the Hero Token raids)
             public bool IsFestival => Festivals != null && Festivals.Length > 0;
         }
 
@@ -275,6 +276,323 @@ namespace RevivalGuard
                 Withdraw = "The Black Rabbits have hopped away from Eastham.",
                 Evidence = "902408, the Black Rabbit half of retail's Asheron's Island Harmless Gen 87091, x5 around Eastham, 2 each: Black Rabbit 87089 L4 (its Black Bunnies 87090 L2 come only while springbunnyevent is on); a Black Bunny's death leaves a Hulking Bunny 87088 L115 (3 xp), 1 in 12 a White Rabbit 87094 L666",
             },
+            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/bur-ritual.md): retail's Jan 2007 Bur Portal Summoning
+            // Ritual, Feb 2 to 8. Rows and gens from tools/gpubox-ace/gen_retired_feb2.py (2027-02-02-bur-1-ritual.sql).
+            new Entry
+            {
+                Key = "bur-ritual", Title = "The Falatacot Attack the Bur Portal Ritual", Where = "67.4N, 30.5E", Levels = "185",
+                Regions = new[] { "burportal" }, Box = (0xA4, 0xD2, 0xA6, 0xD4), Festivals = new[] { "burritual" }, Minutes = 60,
+                Start = new[] { "DirectorBurRitual" }, Stop = new[] { "DirectorBurRitual" },
+                Announce = LEAD + "The Falatacot are attacking Prince Borelean Strathelar's ritual at the Portal to Bur, near 67.4N, 30.5E, and Urdhinivix the Bloodletter comes with them. Speak with Hoshino Kei, then stand with the Prince. Who will heed the call?",
+                Victory = "Urdhinivix has fallen and the portal to Bur holds. Prince Borelean Strathelar has medals for those who defended him.",
+                Withdraw = "The Falatacot have fallen back from the Portal to Bur.",
+                Evidence = "903738 at 0xA5D30026 (the Portal to Bur's pedestals): Urdhinivix 903732 (a copy of Matriarch Mirta'kir 34755, L185, the wiki's stats) and 6 Falatacot Raiders 39171 L185",
+            },
+            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/prodigal.md): retail's Jan 2008 Aerbax's Prodigal
+            // Children, Feb 9 to 15: retail's three waves in the desert by Yaraq. Each wave's leader (ours) stops its row and
+            // starts the next as it dies; the Queen's death stops the last, which is the win (ProdigalChildren.Won: a Modified
+            // Hero Token to everyone near). Rows and gens from tools/gpubox-ace/gen_retired_feb9.py (2027-02-09-prodigal-1-*.sql).
+            new Entry
+            {
+                Key = "prodigal-children", Title = "Aerbax's Prodigal Children near Yaraq", Where = "22.4S, 1.5W", Levels = "160 to 999",
+                Regions = new[] { "yaraq" }, Box = (0x7C, 0x62, 0x7E, 0x64), Festivals = new[] { "prodigal" }, Minutes = 90,
+                Start = new[] { "DirectorProdigal1" },
+                Stop = new[] { "DirectorProdigal1", "DirectorProdigal2", "DirectorProdigal3" },
+                Stages = new[]
+                {
+                    ("DirectorProdigal2", "The Prodigal Monouga has fallen. Aerbax's second wave rises from the sands south of Yaraq: Children of the Prodigal Lord, Shadows, and the Prodigal Harbinger!"),
+                    ("DirectorProdigal3", "The Prodigal Harbinger has fallen. Aerbax sends its last and greatest creations: Claude the Dark Archmage and the Paradox-touched Olthoi Queen!"),
+                },
+                Announce = LEAD + "Aerbax has summoned its Prodigal Children in the desert just south of Yaraq, near 22.4S, 1.5W, to test them against the people of Dereth. Three waves are coming. Who will heed the call?",
+                Victory = "The Paradox-touched Olthoi Queen has fallen and Aerbax's Prodigal Children are scattered. Aerbax was amused. Those who stood near Yaraq have a Modified Hero Token for Vincadi in Old Yanshi.",
+                Withdraw = "Aerbax has called its Prodigal Children back from the desert near Yaraq.",
+                Evidence = "gens 903750-903752 at 0x7D630024 (rows DirectorProdigal1-3): retail's wave lists (wiki rev 475683); leaders Prodigal Monouga 903753 (ours), Prodigal Harbinger 903754 (copy of 36178), Paradox-touched Olthoi Queen 903755 (copy of 35888)",
+            },
+            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/mhoire.md): retail's Feb 25-26 2012 House Mhoire
+            // Risings, Feb 20 to Mar 6: two raids, retail's creature lists. The boss's death stops its row and starts a spoils
+            // row (retail's reward kit: a Luminance Wisp, a Chest of Mana Forge Keys and five Hero Tokens on the ground, each
+            // gone after 15 minutes); the spoils row is in Stop, so the entry runs its hour and ends with the Withdraw line
+            // either way. Rows and gens from tools/gpubox-ace/gen_retired_feb20.py (2027-02-20-mhoire-1-risings.sql).
+            new Entry
+            {
+                Key = "mhoire-tairla", Title = "Lady Tairla Mhoire Attacks near Dryreach", Where = "8.7S, 73.1E", Levels = "220 to 300",
+                Regions = new[] { "dryreach" }, Box = (0xD9, 0x73, 0xDB, 0x75), Festivals = new[] { "mhoire" }, Minutes = 60,
+                Start = new[] { "DirectorMhoireTairla" }, Stop = new[] { "DirectorMhoireTairla", "DirectorMhoireTairlaSpoils" },
+                Stages = new[]
+                {
+                    ("DirectorMhoireTairlaSpoils", "Lady Tairla Mhoire has fallen near Dryreach! Hero Tokens, a Chest of Mana Forge Keys and a Luminance Wisp wait where she fell, for a quarter of an hour."),
+                },
+                Announce = LEAD + "Lady Tairla Mhoire has risen from the Graveyard and attacks just south of Dryreach, near 8.7S, 73.1E, with Pyre Skeletons and Wights. Who will heed the call?",
+                Victory = "Lady Tairla Mhoire and her dead are laid to rest near Dryreach.",
+                Withdraw = "The corrupted dead of House Mhoire have crumbled away near Dryreach.",
+                Evidence = "903802 at 0xDA740035 (row DirectorMhoireTairla): Lady Tairla Mhoire 903800 (copy of 35393, L300, 200,000 health), 6 Pyre Skeletons 35097, 4 Wights 35091 (wiki rev 443457); spoils 903803 (DirectorMhoireTairlaSpoils): retail's kit 80520, 80523, 80525",
+            },
+            new Entry
+            {
+                Key = "mhoire-pyreoak", Title = "A Corrupted Pyre Oak near Ayan Baqur", Where = "60.6S, 87.3W", Levels = "200 to 300",
+                Regions = new[] { "ayanbaqur" }, Box = (0x11, 0x32, 0x13, 0x34), Festivals = new[] { "mhoire" }, Minutes = 60,
+                Start = new[] { "DirectorMhoirePyreOak" }, Stop = new[] { "DirectorMhoirePyreOak", "DirectorMhoirePyreOakSpoils" },
+                Stages = new[]
+                {
+                    ("DirectorMhoirePyreOakSpoils", "The Corrupted Pyre Oak has fallen near Ayan Baqur! Hero Tokens, a Chest of Mana Forge Keys and a Luminance Wisp wait where it stood, for a quarter of an hour."),
+                },
+                Announce = LEAD + "A Corrupted Pyre Oak has risen just east of Ayan Baqur, near 60.6S, 87.3W, with Pyre Skeletons, Pyre Champions, Pyre Minions and Corrupted Dreads. Who will heed the call?",
+                Victory = "The Corrupted Pyre Oak and its dead are laid to rest near Ayan Baqur.",
+                Withdraw = "The corrupted dead of House Mhoire have crumbled away near Ayan Baqur.",
+                Evidence = "903804 at 0x12330016 (row DirectorMhoirePyreOak): Corrupted Pyre Oak 903801 (copy of 38807, L300, 200,000 health), 4 Pyre Skeletons 35097, 2 Pyre Champions 35098, 4 Pyre Minions 35099, 2 Corrupted Dreads 35400 (wiki rev 443457); spoils 903805 (DirectorMhoirePyreOakSpoils): retail's kit 80520, 80523, 80525",
+            },
+            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/hero-raids.md): retail's 2009 Hero Token raids, Mar 14
+            // to 28: the two with retail creature lists, both at Hebian-To. No boss: holding the site to the end of the hour is
+            // the win (HeldWins), and HeroRaids.Won gives each defender near a Hero Token. Rows and gens from
+            // tools/gpubox-ace/gen_retired_mar14.py (2027-03-14-heroraids-1-hebian.sql).
+            new Entry
+            {
+                Key = "hero-knath-hebian", Title = "The K'nath Invade Hebian-To", Where = "39.6S, 83.3E", Levels = "220",
+                Regions = new[] { "hebian" }, Box = (0xE6, 0x4C, 0xE8, 0x4E), Festivals = new[] { "heroraids" }, Minutes = 60,
+                Start = new[] { "DirectorHeroKnath" }, Stop = new[] { "DirectorHeroKnath" }, HeldWins = true,
+                Announce = LEAD + "The K'nath are swarming into Hebian-To from the south, near 39.6S, 83.3E. Hold the town for the hour and every defender earns a Hero Token. Who will heed the call?",
+                Victory = "Hebian-To held against the K'nath! Every defender who stood there has a Hero Token for Pevilo ibn Djimin in Arwic.",
+                Withdraw = "The K'nath have drawn back from Hebian-To.",
+                Evidence = "903830 at 0xE74D0028 (row DirectorHeroKnath): retail's Apr 1 2009 list (wiki rev 443669), K'nath N'da 38009, R'ajed 38010, Y'nda 38011, Y'bot 38016 (L220)",
+            },
+            new Entry
+            {
+                Key = "hero-apostate-hebian", Title = "Apostates Spill into Hebian-To", Where = "39.6S, 83.1E", Levels = "185 to 499",
+                Regions = new[] { "hebian" }, Box = (0xE6, 0x4C, 0xE8, 0x4E), Festivals = new[] { "heroraids" }, Minutes = 60,
+                Start = new[] { "DirectorHeroApostate" }, Stop = new[] { "DirectorHeroApostate" }, HeldWins = true,
+                Announce = LEAD + "Apostates, Gotrok miners and a Tremendous Baby Monouga are pouring into Hebian-To from the south, near 39.6S, 83.1E. Hold the town for the hour and every defender earns a Hero Token. Who will heed the call?",
+                Victory = "Hebian-To held against the Apostates! Every defender who stood there has a Hero Token for Pevilo ibn Djimin in Arwic.",
+                Withdraw = "The Apostates have fled Hebian-To.",
+                Evidence = "903831 at 0xE74D0018 (row DirectorHeroApostate): retail's Mar 16 2009 'Not a Dungeon Filled With Monsters' list (wiki rev 465495), Apostate Servant 40499, Hea Apostate Shock Trooper 40495, Gotrok Aetherium Miner 40492, Tremendous Baby Monouga 80150",
+            },
+            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/burnja.md): retail's Apr 2007 Captain Burnja Attacks the
+            // Windmill, Mar 22 to 31: Burnja and his escorts at the old windmill's spot; his death stops the row (won). His
+            // windmill token goes to Jarvis Hammerstone for Knight of the Windmill (503). Rows and gens from
+            // tools/gpubox-ace/gen_retired_mar22.py (2027-03-22-burnja-1-windmill.sql).
+            new Entry
+            {
+                Key = "burnja-windmill", Title = "Captain Burnja Attacks the Windmill", Where = "25.0N, 45.5E", Levels = "135",
+                Regions = new[] { "windmill" }, Box = (0xB7, 0x9D, 0xB9, 0x9F), Festivals = new[] { "burnja" }, Minutes = 60,
+                Start = new[] { "DirectorBurnjaWindmill" }, Stop = new[] { "DirectorBurnjaWindmill" },
+                Announce = LEAD + "Captain Burnja and his Drudge Lurkers and Stalkers have come to the old windmill near Cragstone, at 25.0N, 45.5E, torches in hand. Who will heed the call?",
+                Victory = "Captain Burnja has fallen at the windmill. Jarvis Hammerstone in Cragstone will want to see his token.",
+                Withdraw = "Captain Burnja and his drudges have slunk away from the windmill.",
+                Evidence = "903902 at 0xB89E0016 (row DirectorBurnjaWindmill): Captain Burnja 903900 (copy of 87383, L135), 4 Drudge Lurkers 1608, 4 Drudge Stalkers 1609 (wiki rev 443260); his death stops the row",
+            },
+            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/burun-raids.md): retail's May 2004 Burun Raids, Jun 1 to
+            // 14: retail's own raid generators and rows (Event<Town>Vagrants High / Extreme / Uber) outside five towns, with a leader
+            // per tier (copies of Barluuk, Urgluuk, Jorgluuk) whose death stops his row; the third down wins. Rows and gens from
+            // tools/gpubox-ace/gen_retired_jun1.py (2027-06-01-burun-1-raids.sql).
+            new Entry
+            {
+                Key = "burun-hebianto", Title = "The Burun Raid Hebian-To", Where = "39.7S, 83.4E", Levels = "95 to 140",
+                Regions = new[] { "hebian" }, Box = (0xE6, 0x4C, 0xE8, 0x4E), Festivals = new[] { "burunraids" }, Minutes = 60,
+                Start = new[] { "EventHebiantoVagrantsHigh", "EventHebiantoVagrantsExtreme", "EventHebiantoVagrantsUber" }, Stop = new[] { "EventHebiantoVagrantsHigh", "EventHebiantoVagrantsExtreme", "EventHebiantoVagrantsUber" },
+                Announce = LEAD + "A Burun raiding party has come out of the swamps to raid Hebian-To, near 39.7S, 83.4E, led by Barluuk, Urgluuk and Jorgluuk. Who will heed the call?",
+                Victory = "The Burun raid on Hebian-To is broken and its leaders are dead. Their Burun Idols are for Translator Aun Laokhe in Arwic.",
+                Withdraw = "The Burun have gone back to the swamps from Hebian-To.",
+                Evidence = "retail's raid generators for Hebian-To (the EventHebiantoVagrants rows) twice each, and the three leader copies 903930-903932 (wiki rev 447715)",
+            },
+            new Entry
+            {
+                Key = "burun-sawato", Title = "The Burun Raid Sawato", Where = "28.3S, 58.9E", Levels = "95 to 140",
+                Regions = new[] { "sawato" }, Box = (0xC8, 0x5B, 0xCA, 0x5D), Festivals = new[] { "burunraids" }, Minutes = 60,
+                Start = new[] { "EventSawatoVagrantsHigh", "EventSawatoVagrantsExtreme", "EventSawatoVagrantsUber" }, Stop = new[] { "EventSawatoVagrantsHigh", "EventSawatoVagrantsExtreme", "EventSawatoVagrantsUber" },
+                Announce = LEAD + "A Burun raiding party has come out of the swamps to raid Sawato, near 28.3S, 58.9E, led by Barluuk, Urgluuk and Jorgluuk. Who will heed the call?",
+                Victory = "The Burun raid on Sawato is broken and its leaders are dead. Their Burun Idols are for Translator Aun Laokhe in Arwic.",
+                Withdraw = "The Burun have gone back to the swamps from Sawato.",
+                Evidence = "retail's raid generators for Sawato (the EventSawatoVagrants rows) twice each, and the three leader copies 903930-903932 (wiki rev 447715)",
+            },
+            new Entry
+            {
+                Key = "burun-shoushi", Title = "The Burun Raid Shoushi", Where = "33.4S, 72.4E", Levels = "95 to 140",
+                Regions = new[] { "shoushi" }, Box = (0xD8, 0x54, 0xDA, 0x56), Festivals = new[] { "burunraids" }, Minutes = 60,
+                Start = new[] { "EventShoushiVagrantsHigh", "EventShoushiVagrantsExtreme", "EventShoushiVagrantsUber" }, Stop = new[] { "EventShoushiVagrantsHigh", "EventShoushiVagrantsExtreme", "EventShoushiVagrantsUber" },
+                Announce = LEAD + "A Burun raiding party has come out of the swamps to raid Shoushi, near 33.4S, 72.4E, led by Barluuk, Urgluuk and Jorgluuk. Who will heed the call?",
+                Victory = "The Burun raid on Shoushi is broken and its leaders are dead. Their Burun Idols are for Translator Aun Laokhe in Arwic.",
+                Withdraw = "The Burun have gone back to the swamps from Shoushi.",
+                Evidence = "retail's raid generators for Shoushi (the EventShoushiVagrants rows) twice each, and the three leader copies 903930-903932 (wiki rev 447715)",
+            },
+            new Entry
+            {
+                Key = "burun-toutou", Title = "The Burun Raid Tou-Tou", Where = "27.8S, 95.5E", Levels = "95 to 140",
+                Regions = new[] { "toutou" }, Box = (0xF5, 0x5B, 0xF7, 0x5D), Festivals = new[] { "burunraids" }, Minutes = 60,
+                Start = new[] { "EventTouTouVagrantsHigh", "EventTouTouVagrantsExtreme", "EventTouTouVagrantsUber" }, Stop = new[] { "EventTouTouVagrantsHigh", "EventTouTouVagrantsExtreme", "EventTouTouVagrantsUber" },
+                Announce = LEAD + "A Burun raiding party has come out of the swamps to raid Tou-Tou, near 27.8S, 95.5E, led by Barluuk, Urgluuk and Jorgluuk. Who will heed the call?",
+                Victory = "The Burun raid on Tou-Tou is broken and its leaders are dead. Their Burun Idols are for Translator Aun Laokhe in Arwic.",
+                Withdraw = "The Burun have gone back to the swamps from Tou-Tou.",
+                Evidence = "retail's raid generators for Tou-Tou (the EventTouTouVagrants rows) twice each, and the three leader copies 903930-903932 (wiki rev 447715)",
+            },
+            new Entry
+            {
+                Key = "burun-yanshi", Title = "The Burun Raid Yanshi", Where = "13.1S, 46.0E", Levels = "95 to 140",
+                Regions = new[] { "yanshi" }, Box = (0xB7, 0x6E, 0xB9, 0x70), Festivals = new[] { "burunraids" }, Minutes = 60,
+                Start = new[] { "EventYanshiVagrantsHigh", "EventYanshiVagrantsExtreme", "EventYanshiVagrantsUber" }, Stop = new[] { "EventYanshiVagrantsHigh", "EventYanshiVagrantsExtreme", "EventYanshiVagrantsUber" },
+                Announce = LEAD + "A Burun raiding party has come out of the swamps to raid Yanshi, near 13.1S, 46.0E, led by Barluuk, Urgluuk and Jorgluuk. Who will heed the call?",
+                Victory = "The Burun raid on Yanshi is broken and its leaders are dead. Their Burun Idols are for Translator Aun Laokhe in Arwic.",
+                Withdraw = "The Burun have gone back to the swamps from Yanshi.",
+                Evidence = "retail's raid generators for Yanshi (the EventYanshiVagrants rows) twice each, and the three leader copies 903930-903932 (wiki rev 447715)",
+            },
+            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/viridian-baishi.md): retail's Apr 24 2015 Viridian
+            // incursion at Baishi, Jun 1 to 14: Zerzelikyr and the Viridian Rise's camp lists outside Baishi; his death stops the
+            // row (won). Rows and gens from tools/gpubox-ace/gen_retired_jun1b.py (2027-06-01-viridian-1-baishi.sql).
+            new Entry
+            {
+                Key = "viridian-baishi", Title = "Zerzelikyr Leads the Viridian Rise against Baishi", Where = "48.3S, 63.0E", Levels = "265 to 400",
+                Regions = new[] { "baishi" }, Box = (0xCD, 0x42, 0xCF, 0x44), Festivals = new[] { "viridianbaishi" }, Minutes = 60,
+                Start = new[] { "DirectorViridianBaishi" }, Stop = new[] { "DirectorViridianBaishi" },
+                Announce = LEAD + "Zerzelikyr, the Elder Gromnie Champion of the Viridian Rise, has come out of the thorns a couple of clicks from Baishi, near 48.3S, 63.0E, and the Rise's creatures are following him. Who will heed the call?",
+                Victory = "Zerzelikyr has fallen outside Baishi, and the Viridian Rise's creatures scatter back to the thorns.",
+                Withdraw = "Zerzelikyr and the Viridian Rise have withdrawn from Baishi.",
+                Evidence = "903951 at 0xCE430009 (row DirectorViridianBaishi): Zerzelikyr 903950 (copy of 72002, L400, 200,200 health, his loot) and copies of retail's camp lists 70842-70845 (A'nekshen, Zefir, Gromnie, Brier Wasp, L265-300) two each (wiki rev 473904)",
+            },
+            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/martine-attacks.md): retail's May to Jun 2002 Martine
+            // Attacks, Jun 1 to 7: Martine and four Virindi Renegades at one of two spots; the hour runs out (Martine vanishes).
+            // Rows and gens from tools/gpubox-ace/gen_retired_jun1d.py (2027-06-01-martine-1-attacks.sql).
+            new Entry
+            {
+                Key = "martine-obsidian", Title = "Martine on the Obsidian Plains", Where = "64.1S, 63.7W", Levels = "69",
+                Regions = new[] { "obsidian" }, Box = (0x2E, 0x2E, 0x30, 0x30), Festivals = new[] { "martineattacks" }, Minutes = 60,
+                Start = new[] { "DirectorMartineObsidian" }, Stop = new[] { "DirectorMartineObsidian" },
+                Announce = LEAD + "Martine has been seen in the Obsidian Plains crater, near 64.1S, 63.7W, and Virindi Renegades are hunting him. He pays for their tokens.",
+                Victory = "The Virindi Renegades in the Obsidian Plains crater are dead, and Martine has vanished again.",
+                Withdraw = "Martine has vanished from the Obsidian Plains crater, and the Virindi Renegades with him.",
+                Evidence = "904022-904023 at 0x2F2F0033 (row DirectorMartineObsidian): Martine 904021 (copy of 20028, L750, only fights back, takes Renegade's Token 20033) and four Virindi Renegades 904020 (renamed copy of 11622, L69, the token on every corpse; owner yes 2026-11-09) (wiki rev 443396)",
+            },
+            new Entry
+            {
+                Key = "martine-marae", Title = "Martine on Marae Lassel", Where = "55.1N, 71.1W", Levels = "69",
+                Regions = new[] { "marae-martine" }, Box = (0x25, 0xC3, 0x27, 0xC5), Festivals = new[] { "martineattacks" }, Minutes = 60,
+                Start = new[] { "DirectorMartineMarae" }, Stop = new[] { "DirectorMartineMarae" },
+                Announce = LEAD + "Martine has been seen on Marae Lassel, near 55.1N, 71.1W, and Virindi Renegades are hunting him. He pays for their tokens.",
+                Victory = "The Virindi Renegades on Marae Lassel are dead, and Martine has vanished again.",
+                Withdraw = "Martine has vanished from Marae Lassel, and the Virindi Renegades with him.",
+                Evidence = "904024-904025 at 0x26C40023 (row DirectorMartineMarae): Martine 904021 (copy of 20028, L750, only fights back, takes Renegade's Token 20033) and four Virindi Renegades 904020 (renamed copy of 11622, L69, the token on every corpse; owner yes 2026-11-09) (wiki rev 443396)",
+            },
+            // T'THUUN'S MARAUDERS (retail Nov 2008, revived 2026-11-01 for the owner's review; docs/EVENT-TESTS/tthuun-marauders.md).
+            // The twelve retail raid sites, one at a time while the calendar's "tthuun" festival runs (Nov 16 to 29). Rows and
+            // wave generators: tools/public-shard/datafixes/2026-11-16-tthuun-1-raids.sql; the waves after the first, the
+            // site stones, the Royal Scouts' kill tasks and the Sparks: TthuunRaids.cs (sites in TthuunRaidsRule.cs).
+            new Entry
+            {
+                Key = "tthuun-toutou", Title = "T'thuun's Marauders Raid Tou-Tou", Where = "26.9S, 96.8E", Levels = "200 to 220",
+                Regions = new[] { "toutou", "tthuun" }, Box = (0xF7, 0x5C, 0xF9, 0x5E), Festivals = new[] { "tthuun" }, Minutes = 60,
+                Start = new[] { "DirectorTthuunToutou" }, Stop = new[] { "DirectorTthuunToutou" },
+                Announce = LEAD + "T'thuun's Marauders are raiding Tou-Tou! A Patriarchs' device has opened by the lighthouse, near 26.9S, 96.8E, and Moarsman, Sclavus and Falatacot marauders are pouring through. Clear them all to draw out the Patriarchs' lieutenants, then a Patriarch's Champion. The Royal Scout by the mage tower pays for every one you put down. Who will heed the call?",
+                Victory = "The Patriarchs' device at Tou-Tou has gone dark. Well fought!",
+                Withdraw = "The marauders at Tou-Tou have slipped back through the Patriarchs' device.",
+                Evidence = "wiki T'Thuun's Marauders rev 477303 (marauders site); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunToutou; waves after the first: TthuunRaids.cs",
+            },
+            new Entry
+            {
+                Key = "tthuun-isleoftears", Title = "T'thuun's Raiders Raid The Isle of Tears", Where = "21.6N, 53.7E", Levels = "160 to 185",
+                Regions = new[] { "isleoftears", "tthuun" }, Box = (0xC1, 0x99, 0xC3, 0x9B), Festivals = new[] { "tthuun" }, Minutes = 60,
+                Start = new[] { "DirectorTthuunIsleOfTears" }, Stop = new[] { "DirectorTthuunIsleOfTears" },
+                Announce = LEAD + "T'thuun's Raiders are raiding the Isle of Tears! A Patriarchs' device has opened by the Underground City, near 21.6N, 53.7E, and Moarsman, Sclavus and Falatacot raiders are pouring through. Clear them all to draw out the Patriarchs' lieutenants, then a Patriarch's Inquisitor. The Royal Scout at the portal from Cragstone pays for every one you put down. Who will heed the call?",
+                Victory = "The Patriarchs' device at the Isle of Tears has gone dark. Well fought!",
+                Withdraw = "The raiders at the Isle of Tears have slipped back through the Patriarchs' device.",
+                Evidence = "wiki T'Thuun's Marauders rev 477303 (raiders site); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunIsleOfTears; waves after the first: TthuunRaids.cs",
+            },
+            new Entry
+            {
+                Key = "tthuun-silyun", Title = "T'thuun's Marauders Raid Silyun", Where = "87.4N, 70.6W", Levels = "200 to 220",
+                Regions = new[] { "silyun", "tthuun" }, Box = (0x26, 0xEB, 0x28, 0xED), Festivals = new[] { "tthuun" }, Minutes = 60,
+                Start = new[] { "DirectorTthuunSilyun" }, Stop = new[] { "DirectorTthuunSilyun" },
+                Announce = LEAD + "T'thuun's Marauders are raiding Silyun! A Patriarchs' device has opened in the middle of the town, near 87.4N, 70.6W, and Moarsman, Sclavus and Falatacot marauders are pouring through. Clear them all to draw out the Patriarchs' lieutenants, then a Patriarch's Champion. The Royal Scout by the town pays for every one you put down. Who will heed the call?",
+                Victory = "The Patriarchs' device at Silyun has gone dark. Well fought!",
+                Withdraw = "The marauders at Silyun have slipped back through the Patriarchs' device.",
+                Evidence = "wiki T'Thuun's Marauders rev 477303 (marauders site); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunSilyun; waves after the first: TthuunRaids.cs",
+            },
+            new Entry
+            {
+                Key = "tthuun-asheronsisland", Title = "T'thuun's Raiders Raid Asheron's Island", Where = "17.3N, 71.7E", Levels = "160 to 185",
+                Regions = new[] { "asheronsisland", "tthuun" }, Box = (0xD8, 0x94, 0xDA, 0x96), Festivals = new[] { "tthuun" }, Minutes = 60,
+                Start = new[] { "DirectorTthuunAsheronsIsland" }, Stop = new[] { "DirectorTthuunAsheronsIsland" },
+                Announce = LEAD + "T'thuun's Raiders are raiding Asheron's Island! A Patriarchs' device has opened on top of the hill, near 17.3N, 71.7E, and Moarsman, Sclavus and Falatacot raiders are pouring through. Clear them all to draw out the Patriarchs' lieutenants, then a Patriarch's Inquisitor. The Royal Scout by the portal drop from Eastham (16.2N, 69.5E) pays for every one you put down. Who will heed the call?",
+                Victory = "The Patriarchs' device at Asheron's Island has gone dark. Well fought!",
+                Withdraw = "The raiders at Asheron's Island have slipped back through the Patriarchs' device.",
+                Evidence = "wiki T'Thuun's Marauders rev 477303 (raiders site); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunAsheronsIsland; waves after the first: TthuunRaids.cs",
+            },
+            new Entry
+            {
+                Key = "tthuun-candethkeep", Title = "T'thuun's Marauders Raid Candeth Keep", Where = "87.5S, 67.1W", Levels = "200 to 220",
+                Regions = new[] { "candethkeep", "tthuun" }, Box = (0x2A, 0x11, 0x2C, 0x13), Festivals = new[] { "tthuun" }, Minutes = 60,
+                Start = new[] { "DirectorTthuunCandethKeep" }, Stop = new[] { "DirectorTthuunCandethKeep" },
+                Announce = LEAD + "T'thuun's Marauders are raiding Candeth Keep! A Patriarchs' device has opened in the middle of the town, near 87.5S, 67.1W, and Moarsman, Sclavus and Falatacot marauders are pouring through. Clear them all to draw out the Patriarchs' lieutenants, then a Patriarch's Champion. The Royal Scout on the outer wall pays for every one you put down. Who will heed the call?",
+                Victory = "The Patriarchs' device at Candeth Keep has gone dark. Well fought!",
+                Withdraw = "The marauders at Candeth Keep have slipped back through the Patriarchs' device.",
+                Evidence = "wiki T'Thuun's Marauders rev 477303 (marauders site); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunCandethKeep; waves after the first: TthuunRaids.cs",
+            },
+            new Entry
+            {
+                Key = "tthuun-colier", Title = "T'thuun's Raiders Raid Colier", Where = "56.8N, 38.4E", Levels = "160 to 185",
+                Regions = new[] { "colier", "tthuun" }, Box = (0xAE, 0xC5, 0xB0, 0xC7), Festivals = new[] { "tthuun" }, Minutes = 60,
+                Start = new[] { "DirectorTthuunColier" }, Stop = new[] { "DirectorTthuunColier" },
+                Announce = LEAD + "T'thuun's Raiders are raiding Colier! A Patriarchs' device has opened in the middle of the town, near 56.8N, 38.4E, and Moarsman, Sclavus and Falatacot raiders are pouring through. Clear them all to draw out the Patriarchs' lieutenants, then a Patriarch's Inquisitor. The Royal Scout by the Holtburg portal pays for every one you put down. Who will heed the call?",
+                Victory = "The Patriarchs' device at Colier has gone dark. Well fought!",
+                Withdraw = "The raiders at Colier have slipped back through the Patriarchs' device.",
+                Evidence = "wiki T'Thuun's Marauders rev 477303 (raiders site); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunColier; waves after the first: TthuunRaids.cs",
+            },
+            new Entry
+            {
+                Key = "tthuun-osteth", Title = "T'thuun's Marauders Raid The Southern Osteth Menhir Ring", Where = "69.7S, 40.1E", Levels = "200 to 220",
+                Regions = new[] { "osteth", "tthuun" }, Box = (0xB0, 0x27, 0xB2, 0x29), Festivals = new[] { "tthuun" }, Minutes = 60,
+                Start = new[] { "DirectorTthuunOsteth" }, Stop = new[] { "DirectorTthuunOsteth" },
+                Announce = LEAD + "T'thuun's Marauders are raiding the Southern Osteth Menhir Ring! A Patriarchs' device has opened in the middle of the stone ring, near 69.7S, 40.1E, and Moarsman, Sclavus and Falatacot marauders are pouring through. Clear them all to draw out the Patriarchs' lieutenants, then a Patriarch's Champion. The Royal Scout on the hill beside it pays for every one you put down. Who will heed the call?",
+                Victory = "The Patriarchs' device at the Southern Osteth Menhir Ring has gone dark. Well fought!",
+                Withdraw = "The marauders at the Southern Osteth Menhir Ring have slipped back through the Patriarchs' device.",
+                Evidence = "wiki T'Thuun's Marauders rev 477303 (marauders site); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunOsteth; waves after the first: TthuunRaids.cs",
+            },
+            new Entry
+            {
+                Key = "tthuun-esper", Title = "T'thuun's Marauders Raid The Mount Esper crater", Where = "65.8N, 13.1E", Levels = "200 to 220",
+                Regions = new[] { "esper", "tthuun" }, Box = (0x8E, 0xD0, 0x90, 0xD2), Festivals = new[] { "tthuun" }, Minutes = 60,
+                Start = new[] { "DirectorTthuunEsper" }, Stop = new[] { "DirectorTthuunEsper" },
+                Announce = LEAD + "T'thuun's Marauders are raiding the Mount Esper crater! A Patriarchs' device has opened on the crater lake's western shore, near 65.8N, 13.1E, and Moarsman, Sclavus and Falatacot marauders are pouring through. Clear them all to draw out the Patriarchs' lieutenants, then a Patriarch's Champion. The Royal Scout by the housing portals pays for every one you put down. Who will heed the call?",
+                Victory = "The Patriarchs' device at the Mount Esper crater has gone dark. Well fought!",
+                Withdraw = "The marauders at the Mount Esper crater have slipped back through the Patriarchs' device.",
+                Evidence = "wiki T'Thuun's Marauders rev 477303 (marauders site); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunEsper; waves after the first: TthuunRaids.cs",
+            },
+            new Entry
+            {
+                Key = "tthuun-midsong", Title = "T'thuun's Marauders Raid The Festival Stone of Midsong", Where = "0.3S, 0.5W", Levels = "200 to 220",
+                Regions = new[] { "midsong", "tthuun" }, Box = (0x7D, 0x7E, 0x7F, 0x80), Festivals = new[] { "tthuun" }, Minutes = 60,
+                Start = new[] { "DirectorTthuunMidsong" }, Stop = new[] { "DirectorTthuunMidsong" },
+                Announce = LEAD + "T'thuun's Marauders are raiding the Festival Stone of Midsong! A Patriarchs' device has opened beside the Festival Stone, near 0.3S, 0.5W, and Moarsman, Sclavus and Falatacot marauders are pouring through. Clear them all to draw out the Patriarchs' lieutenants, then a Patriarch's Champion. The Royal Scout by the stone pays for every one you put down. Who will heed the call?",
+                Victory = "The Patriarchs' device at the Festival Stone of Midsong has gone dark. Well fought!",
+                Withdraw = "The marauders at the Festival Stone of Midsong have slipped back through the Patriarchs' device.",
+                Evidence = "wiki T'Thuun's Marauders rev 477303 (marauders site); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunMidsong; waves after the first: TthuunRaids.cs",
+            },
+            new Entry
+            {
+                Key = "tthuun-ayanbaqur", Title = "T'thuun's Marauders Raid Ayan Baqur", Where = "59.9S, 87.9W", Levels = "200 to 220",
+                Regions = new[] { "ayanbaqur", "tthuun" }, Box = (0x10, 0x33, 0x12, 0x35), Festivals = new[] { "tthuun" }, Minutes = 60,
+                Start = new[] { "DirectorTthuunAyanBaqur" }, Stop = new[] { "DirectorTthuunAyanBaqur" },
+                Announce = LEAD + "T'thuun's Marauders are raiding Ayan Baqur! A Patriarchs' device has opened under the pyramid over the town, near 59.9S, 87.9W, and Moarsman, Sclavus and Falatacot marauders are pouring through. Clear them all to draw out the Patriarchs' lieutenants, then a Patriarch's Champion and Kazyk Ri's Raid Commander himself. The Royal Scout south of the town pays for every one you put down. Who will heed the call?",
+                Victory = "The Patriarchs' device at Ayan Baqur has gone dark and Kazyk Ri's Raid Commander is slain. Well fought!",
+                Withdraw = "The marauders at Ayan Baqur have slipped back through the Patriarchs' device.",
+                Evidence = "wiki T'Thuun's Marauders rev 477303 (marauders site, Kazyk Ri's Raid Commander); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunAyanBaqur; waves after the first: TthuunRaids.cs",
+            },
+            new Entry
+            {
+                Key = "tthuun-arwic", Title = "T'thuun's Marauders Raid Arwic", Where = "33.6N, 56.8E", Levels = "200 to 220",
+                Regions = new[] { "arwic", "tthuun" }, Box = (0xC5, 0xA8, 0xC7, 0xAA), Festivals = new[] { "tthuun" }, Minutes = 60,
+                Start = new[] { "DirectorTthuunArwic" }, Stop = new[] { "DirectorTthuunArwic" },
+                Announce = LEAD + "T'thuun's Marauders are raiding Arwic! A Patriarchs' device has opened under the pyramid over the town, near 33.6N, 56.8E, and Moarsman, Sclavus and Falatacot marauders are pouring through. Clear them all to draw out the Patriarchs' lieutenants, then a Patriarch's Champion and Minik Ra's Raid Commander himself. The Royal Scout by the south entrance pays for every one you put down. Who will heed the call?",
+                Victory = "The Patriarchs' device at Arwic has gone dark and Minik Ra's Raid Commander is slain. Well fought!",
+                Withdraw = "The marauders at Arwic have slipped back through the Patriarchs' device.",
+                Evidence = "wiki T'Thuun's Marauders rev 477303 (marauders site, Minik Ra's Raid Commander); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunArwic; waves after the first: TthuunRaids.cs",
+            },
+            new Entry
+            {
+                Key = "tthuun-mayoi", Title = "T'thuun's Raiders Raid Mayoi", Where = "61.5S, 81.9E", Levels = "160 to 210",
+                Regions = new[] { "mayoi", "tthuun" }, Box = (0xE4, 0x31, 0xE6, 0x33), Festivals = new[] { "tthuun" }, Minutes = 60,
+                Start = new[] { "DirectorTthuunMayoi" }, Stop = new[] { "DirectorTthuunMayoi" },
+                Announce = LEAD + "T'thuun's Raiders are raiding Mayoi! A Patriarchs' device has opened under the pyramid over the town, near 61.5S, 81.9E, and Moarsman, Sclavus and Falatacot raiders are pouring through. Clear them all to draw out the Patriarchs' lieutenants, then a Patriarch's Inquisitor and Nivinizk's Raid Commander himself. The Royal Scout by the lifestone pays for every one you put down. Who will heed the call?",
+                Victory = "The Patriarchs' device at Mayoi has gone dark and Nivinizk's Raid Commander is slain. Well fought!",
+                Withdraw = "The raiders at Mayoi have slipped back through the Patriarchs' device.",
+                Evidence = "wiki T'Thuun's Marauders rev 477303 (raiders site, Nivinizk's Raid Commander); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunMayoi; waves after the first: TthuunRaids.cs",
+            },
             // Season 1 beat 1, "Omens" (docs/SEASON-THE-SHADOW-RETURNS.md, docs/MONSTERS-LORE-FACTIONS.md): Aerbax's
             // Umbral Legion raids three towns. Ours, not retail: rows and gens from tools/gpubox-ace/lore-factions.sql.
             // In the rotation only while event_director_omens is on (off by default); @eventdirector start works regardless.
@@ -378,10 +696,21 @@ namespace RevivalGuard
 
         static bool Enabled => PropertyManager.GetBool(P_ENABLED, false).Item;
         const string P_FROSTFELL = "rg_event_director_frostfell";
+        const string P_TTHUUN = "rg_event_director_tthuun";
         static bool FrostfellSwitch => PropertyManager.GetBool(P_FROSTFELL, true).Item;
-        /// <summary>The director runs: rg_event_director on, or Frostfell active with rg_event_director_frostfell on
-        /// (EventDirectorRules.DirectorOn; then only Frostfell's own entries).</summary>
-        static bool Running => EventDirectorRules.DirectorOn(Enabled, FrostfellSwitch, SeasonalCalendar.IsFestivalActive(EventDirectorRules.FROSTFELL));
+        /// <summary>A self-running festival's own switch (EventDirectorRules.SELF_RUN): rg_event_director_frostfell,
+        /// rg_event_director_tthuun, or rg_event_director_retired for every revived retired event; all default on.</summary>
+        static bool SelfRunSwitch(string festival) =>
+            festival.Equals(EventDirectorRules.TTHUUN, StringComparison.OrdinalIgnoreCase) ? PropertyManager.GetBool(P_TTHUUN, true).Item
+            : festival.Equals(EventDirectorRules.FROSTFELL, StringComparison.OrdinalIgnoreCase) ? FrostfellSwitch
+            : EventDirectorRules.RETIRED.Contains(festival, StringComparer.OrdinalIgnoreCase) && RetiredSwitch;
+        /// <summary>The director runs: rg_event_director on, or a self-running festival (Frostfell, T'thuun's Marauders, a
+        /// revived retired event) active with its switch on (EventDirectorRules.DirectorOn; then only that festival's own entries).</summary>
+        static bool Running => EventDirectorRules.DirectorOn(Enabled, f => SelfRunSwitch(f) && SeasonalCalendar.IsFestivalActive(f));
+        const string P_RETIRED = "rg_event_director_retired";
+        static bool RetiredSwitch => PropertyManager.GetBool(P_RETIRED, true).Item;
+        /// <summary>Which self-running festivals run their own events now (status lines).</summary>
+        static string SelfRunNow => string.Join(" and ", EventDirectorRules.SELF_RUN.Where(f => SelfRunSwitch(f) && SeasonalCalendar.IsFestivalActive(f)));
 
         /// <summary>The running event's key, start and end (unix seconds), or null: for Frostfell's raid timer.</summary>
         internal static (string key, double startedAt, double endsAt)? CurrentEvent()
@@ -503,7 +832,7 @@ namespace RevivalGuard
             if (s_State.NextAt <= 0) s_State.NextAt = now + Gap * 60;
             else if (s_State.NextAt < now + 300) s_State.NextAt = now + 300;
             Save();
-            Mod.Log.Info($"[RevivalGuard] EventDirector: {(Enabled ? "ON" : $"OFF ({P_ENABLED})")}{(!Enabled && FrostfellSwitch ? $", Frostfell's events run while it is on ({P_FROSTFELL})" : "")}; next live event {Stamp(s_State.NextAt)}");
+            Mod.Log.Info($"[RevivalGuard] EventDirector: {(Enabled ? "ON" : $"OFF ({P_ENABLED})")}{(!Enabled ? $", Frostfell's and T'thuun's Marauders' own events run while they are on ({P_FROSTFELL}, {P_TTHUUN})" : "")}; next live event {Stamp(s_State.NextAt)}");
         }
 
         // ---- choosing ---------------------------------------------------------------------------
@@ -541,7 +870,7 @@ namespace RevivalGuard
             {
                 if (!EventDirectorRules.FestivalOpen(e.Festivals, SeasonalCalendar.IsFestivalActive)) return $"out of season ({FestivalNames(e)} is not on)";
                 if (e.IsFestival && !FestivalsOn) return $"{P_FESTIVALS} is off";
-                if (!EventDirectorRules.EntryAllowed(Enabled, e.Festivals)) return $"{P_ENABLED} is off (only Frostfell's events run, {P_FROSTFELL})";
+                if (!EventDirectorRules.EntryAllowed(Enabled, e.Festivals, SelfRunSwitch)) return $"{P_ENABLED} is off (only Frostfell's, T'thuun's Marauders' and the retired events' own events run, {P_FROSTFELL}, {P_TTHUUN}, {P_RETIRED})";
                 var skip = (PropertyManager.GetString(P_SKIP, "").Item ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 if (skip.Any(s => s.Equals(e.Key, StringComparison.OrdinalIgnoreCase))) return $"listed in {P_SKIP}";
                 if (e.Key.StartsWith("omens-", StringComparison.OrdinalIgnoreCase) && !PropertyManager.GetBool(P_OMENS, false).Item)
@@ -646,7 +975,7 @@ namespace RevivalGuard
             // A Present Raid held to the end, its present still standing: the defenders won.
             if (now >= s_State.EndsAt)
             {
-                bool held = cur.Lost != null && !s_StagesSeen.Contains(cur.Lost);
+                bool held = (cur.Lost != null && !s_StagesSeen.Contains(cur.Lost)) || cur.HeldWins;
                 End(cur, now, held ? "held to the end" : "time is up", announce: true, victory: held);
                 return;
             }
@@ -686,12 +1015,22 @@ namespace RevivalGuard
         static void End(Entry cur, double now, string why, bool announce, bool victory)
         {
             StopRows(cur, now);
+            // T'thuun's raids: the waves after the generators' are spawned by TthuunRaids, not a generator; they go too
+            if (TthuunRaidsRule.ByKey(cur.Key) != null)
+                try { TthuunRaids.EventEnded(cur.Key, victory); }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] EventDirector: tthuun cleanup: {e.Message}"); }
             s_State.Current = null;
             s_State.Manual = false;
             s_State.NextAt = now + Gap * 60;
             Save();
             if (announce) WorldBroadcast(victory ? cur.Victory : cur.Withdraw);
             if (victory) JokeScrollRewards.EventWon(cur.Key, PlayersNear(cur).ToList());   // off unless rg_joke_scroll_rewards
+            if (victory && HeroRaids.IsHeroRaid(cur.Key))
+                try { HeroRaids.Won(cur.Key, PlayersNear(cur).ToList()); }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] EventDirector: hero raid reward: {e.Message}"); }
+            if (victory && cur.Key == ProdigalChildren.KEY)
+                try { ProdigalChildren.Won(PlayersNear(cur).ToList()); }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] EventDirector: prodigal reward: {e.Message}"); }
             if (victory && cur.Lost != null)
                 try { Frostfell.RaidWon(cur.Key, PlayersNear(cur).ToList()); }
                 catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] EventDirector: raid reward: {e.Message}"); }
@@ -823,6 +1162,8 @@ namespace RevivalGuard
                 var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_ENABLED)) b[P_ENABLED] = new Property<bool>(false, "EventDirector: rotate live events (Olthoi swarms, eruptions, raids, festival events); off until staff turn it on");
                 if (!b.ContainsKey(P_FROSTFELL)) b[P_FROSTFELL] = new Property<bool>(true, "EventDirector: while Frostfell runs, its own events (Present Raids, Holtburg snowmen, Stonehold Scold) run even with rg_event_director off");
+                if (!b.ContainsKey(P_RETIRED)) b[P_RETIRED] = new Property<bool>(true, "EventDirector: while a revived retired event runs (the Bur Portal Summoning Ritual, Aerbax's Prodigal Children), its own events run even with rg_event_director off");
+                if (!b.ContainsKey(P_TTHUUN)) b[P_TTHUUN] = new Property<bool>(true, "EventDirector: while T'thuun's Marauders runs (Nov 16 to 29), its town raids (tthuun-*) run even with rg_event_director off");
                 if (!b.ContainsKey(P_FESTIVALS)) b[P_FESTIVALS] = new Property<bool>(true, "EventDirector: festival-only events (Pumpkin Lords, Unhappy Snowmen ...) get a slot after every event_director_festival_every year-round events while their festival runs");
                 if (!b.ContainsKey(P_OMENS)) b[P_OMENS] = new Property<bool>(false, "EventDirector: put the Season 1 Omens shadow raids (omens-*) in the rotation");
                 var d = MonsterAi.Inner(DefaultPropertyManager.DefaultDoubleProperties);
@@ -985,7 +1326,7 @@ namespace RevivalGuard
                 lock (s_Lock)
                 {
                     var cur = Find(s_State.Current);
-                    Say(session, $"[EventDirector] (ours) {(Enabled ? "ON" : Running ? "Frostfell's events only" : "OFF")}; each event {Minutes(P_DURATION, 120):0.##} min (festival ones their own), gap {Gap:0.##} min, idle end {Minutes(P_IDLE, 60):0.##} min, min players {Minutes(P_MINPLAYERS, 1):0}; switch {P_ENABLED}");
+                    Say(session, $"[EventDirector] (ours) {(Enabled ? "ON" : Running ? $"{SelfRunNow} events only" : "OFF")}; each event {Minutes(P_DURATION, 120):0.##} min (festival ones their own), gap {Gap:0.##} min, idle end {Minutes(P_IDLE, 60):0.##} min, min players {Minutes(P_MINPLAYERS, 1):0}; switch {P_ENABLED}");
                     if (cur != null)
                     {
                         var on = cur.Stop.Where(IsOn).ToList();
@@ -1051,7 +1392,7 @@ namespace RevivalGuard
                 if (cur != null) End(cur, now, $"replaced by {who}", announce: true, victory: false);
                 Begin(target, now, manual: true);
                 Mod.Log.Info($"[RevivalGuard] EventDirector: {target.Key} started by {who} ({verb})");
-                Say(session, $"[EventDirector] started {target.Key}; ends {Stamp(s_State.EndsAt)}." + (Enabled ? "" : Running ? " The rotation runs Frostfell's events only." : " The rotation is off, so nothing follows it."));
+                Say(session, $"[EventDirector] started {target.Key}; ends {Stamp(s_State.EndsAt)}." + (Enabled ? "" : Running ? $" The rotation runs {SelfRunNow} events only." : " The rotation is off, so nothing follows it."));
             }
         }
     }

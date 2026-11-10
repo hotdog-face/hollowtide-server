@@ -29,7 +29,7 @@ namespace RevivalGuard
     /// </summary>
     public sealed class TownCrierBrain
     {
-        public const string WHO = "Town Crier";
+        public const string WHO = "Holtburg Herald";   // owner 2026-11-10: renamed so he is not taken for retail's Town Crier nearby
         const double KM_PER_UNIT = 0.24;          // one map unit is 240 m (ACE PositionExtensions.GetMapCoords)
         const double NEAR_KM = 1.2;               // nearer than this a route is just "walk"
         const int OPEN_SPAN = 40;                 // a ground with no top is good for this many levels above its floor (where-next tune)
@@ -671,7 +671,7 @@ namespace RevivalGuard
             return WORD.IsMatch(rest);
         }
 
-        string Greeting() => $"Hear ye, hear ye! {WHO} of Holtburg, at your service. Ask me where to hunt at your level, how to reach a town or dungeon, or what a thing does. Say \"help\" for more.";
+        string Greeting() => $"Hear ye, hear ye! The {WHO}, at your service. Ask me where to hunt at your level, how to reach a town or dungeon, or what a thing does. Say \"help\" for more.";
 
         string Help() => "Hear ye! Ask me plainly: \"where do I level at 30\", \"how do I get to Cragstone\", \"where is the Mana Forge\", \"what does a Greater Mana Stone do\", \"what level is the Acid Axe Quest\". What I do not know, your Journal's Wiki tab may.";
 

@@ -330,7 +330,8 @@ namespace RevivalGuard
                 {
                     string message = clientMessage.Payload.ReadString16L();
                     string target = clientMessage.Payload.ReadString16L().Trim();
-                    if (!target.Equals(TownCrierBrain.WHO, StringComparison.OrdinalIgnoreCase) && !target.Equals("Town Crier of Holtburg", StringComparison.OrdinalIgnoreCase))
+                    if (!target.Equals(TownCrierBrain.WHO, StringComparison.OrdinalIgnoreCase) && !target.Equals("Town Crier of Holtburg", StringComparison.OrdinalIgnoreCase)
+                        && !target.Equals("Holtburg Herald", StringComparison.OrdinalIgnoreCase) && !target.Equals("Herald", StringComparison.OrdinalIgnoreCase))
                     { clientMessage.Payload.BaseStream.Position = pos; return true; }
                     var p = session.Player;
                     if (p.IsGagged) { p.SendGagError(); return false; }

@@ -111,6 +111,12 @@ namespace RevivalGuard
             { 47168, new[] { "frostfell" } },   // Snow Tuskie Kennel (the imposter Santa)
             { 80078, new[] { "spring" } },   // Pon Mi's confession
             { 27249, new[] { "spring" } },   // Spring Cleaner Title Token
+            // Retired live events (docs/EVENTS-RETIRED.md; tools/gpubox-ace/gen_retired_feb2.py). Their droppers come only
+            // in the window, so these hold only if one is ever spawned outside it; the Illuminated scroll's dropper,
+            // Matriarch Mirta'kir on Bur, stands all year.
+            { 5878, new[] { "greatwork" } },     // Tremblant's Ivory Staff (Sir Joffre Tremblant, 1 in 10)
+            { 5904, new[] { "greatwork" } },     // Crystal Device (The Great Work)
+            { 903733, new[] { "burritual" } },   // Illuminated Falatacot Scroll (Matriarch Mirta'kir)
         };
 
         internal static int Count => Held.Count;

@@ -71,6 +71,7 @@ namespace RevivalGuard
             PerfStat.Register();
             AccountCreationCap.Register();
             RetailWelcome.Register();
+            DnDefaultOn.Register();      // every player character on the Dereth Network by default, silently (owner 2026-11-11)
             LoginTokens.Register();
             PasswordRecovery.Register();
             LfgBoard.Register();

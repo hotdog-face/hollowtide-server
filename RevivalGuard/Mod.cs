@@ -101,6 +101,7 @@ namespace RevivalGuard
             // shard that has never stored the key (ACE answers "Unknown bool property" otherwise; review 2026-11-10).
             PkCommon.RegisterBool(HoltburgOnly.P_ON, true, "RevivalGuard HoltburgOnly: every new character starts in Holtburg whatever town the client asked for (false: the client's town)");
             PkCommon.RegisterBool(GroundSettle.P_ON, true, "RevivalGuard GroundSettle: an at-rest PK body ACE left off the ground is ticked so it lands (false: ACE)");
+            PkCommon.RegisterBool(LostObjectResend.P_ON, true, "RevivalGuard LostObjectResend: a retail client asking for a monster it lost (0xF6EA) is sent the whole object again (false: ACE, appearance only)");
             try { Log.Info($"[RevivalGuard] PK expansion: renown {(PkRenown.On ? "ON" : "off")}, bounties {(PkBounty.On ? "ON" : "off")}, shrines {(PkShrines.On ? "ON" : "off")}, PK Night {(PkNight.On ? "ON" : "off")}"); }
             catch (Exception e) { Log.Warn($"[RevivalGuard] PK expansion: properties not readable yet ({e.Message})"); }
             try { NameGuard.LoadNow(); } catch (Exception e) { Log.Error($"[RevivalGuard] NameGuard: {e.Message}"); }   // says at start how many names are protected

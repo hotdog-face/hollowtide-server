@@ -274,6 +274,7 @@ namespace RevivalGuard
         {
             if (c is Player || c is Pet || c.IsChessPiece || c.PhysicsObj == null || c.Location == null) return true;
             if (DuelistAi.Owns(c)) return true;   // the duelist boss has his own brain (DuelistAi.cs); nothing here moves him
+            if (HoltburgGuards.Owns(c)) return true;   // Holtburg's guards fight with their own rules (HoltburgGuards.cs)
             double rt = Timers.RunningTime;
             var cfg = Config(rt);
 

@@ -44,6 +44,7 @@ namespace RevivalGuard
             // (rg_expansion_motions, rg_nether_rift): docs/NEW-ANIMATIONS.md.
             ExpansionMotions.Register();
             NetherRift.Register();
+            ShopsFor.Register();   // the supply run's "which shop sells it" (on, our client only)
         }
 
         static void Hello(Session session, params string[] parameters)

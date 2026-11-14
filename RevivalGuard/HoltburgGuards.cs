@@ -48,6 +48,8 @@ namespace RevivalGuard
         // whose fight it is (HoltburgGuardsRule.Decide): live tunables beside the switch, defaults in the rule
         internal const string P_NEWCOMER = "rg_holtburg_guards_newcomer_level", P_WINDOW = "rg_holtburg_guards_engage_window_s",
                               P_RESCUE = "rg_holtburg_guards_rescue_health";
+        internal const string P_EMOTE = "rg_holtburg_guards_emote_minutes";   // gestures: minutes apart per guard, 0 = none at all
+        internal const string P_SALUTE = "rg_holtburg_guards_salute_m";        // another guard this close (and in view): a salute
         internal const uint WCID = 37518;          // Royal Guard
         const uint LONG_SWORD = 351;               // ace_world: Long Sword, Heavy Weapons (MercKit's)
         const uint HUMAN_CMT = 0x30000000;         // the human combat maneuver table 2,512 human weenies use
@@ -79,6 +81,10 @@ namespace RevivalGuard
             public int Swings; public string Step = "";
             public double RestUntil;   // after a stand-down: its closing line first, then the next monster
             public Vector2 ChaseTo;
+            public double MotionUntil, NextGesture, NextSalute;   // gestures: busy until, next idle one, next salute
+            public Gesture LastGesture;
+            public bool PendingWalk;
+            public double SheathTime;                              // a walk order held back until a gesture ends
             public Creature Target;
             public bool Kitted, FellBack;
         }
@@ -98,6 +104,8 @@ namespace RevivalGuard
         static long Trace { get { try { return PropertyManager.GetLong(P_TRACE, 0).Item; } catch { return 0; } } }
         internal static bool Tracing => Trace > 0;
         static int NewcomerLevel { get { try { return (int)PropertyManager.GetLong(P_NEWCOMER, NEWCOMER_LEVEL).Item; } catch { return NEWCOMER_LEVEL; } } }
+        static float SaluteRange { get { try { return (float)PropertyManager.GetDouble(P_SALUTE, SALUTE_RANGE).Item; } catch { return SALUTE_RANGE; } } }
+        static double EmoteMinutes { get { try { return PropertyManager.GetDouble(P_EMOTE, EMOTE_MINUTES).Item; } catch { return EMOTE_MINUTES; } } }
         static double Window { get { try { return PropertyManager.GetDouble(P_WINDOW, ENGAGE_WINDOW).Item; } catch { return ENGAGE_WINDOW; } } }
         static float RescueHealth { get { try { return (float)PropertyManager.GetDouble(P_RESCUE, RESCUE_HEALTH).Item; } catch { return RESCUE_HEALTH; } } }
 
@@ -111,6 +119,8 @@ namespace RevivalGuard
                 if (!l.ContainsKey(P_NEWCOMER)) l[P_NEWCOMER] = new Property<long>(NEWCOMER_LEVEL, "RevivalGuard HoltburgGuards: a player under this level fighting a monster keeps it to themselves (guards step in only if they are in real trouble)");
                 var d = MonsterAi.Inner(DefaultPropertyManager.DefaultDoubleProperties);
                 if (!d.ContainsKey(P_WINDOW)) d[P_WINDOW] = new Property<double>(ENGAGE_WINDOW, "RevivalGuard HoltburgGuards: seconds a player's hit or being the target counts as fighting a monster");
+                if (!d.ContainsKey(P_SALUTE)) d[P_SALUTE] = new Property<double>(SALUTE_RANGE, "RevivalGuard HoltburgGuards: metres within which two standing guards salute each other");
+                if (!d.ContainsKey(P_EMOTE)) d[P_EMOTE] = new Property<double>(EMOTE_MINUTES, "RevivalGuard HoltburgGuards: minutes between a guard's idle gestures (flex, stretch, look-around); 0 turns every gesture off (bow, salute, cheer too)");
                 if (!d.ContainsKey(P_RESCUE)) d[P_RESCUE] = new Property<double>(RESCUE_HEALTH, "RevivalGuard HoltburgGuards: a newcomer below this share of health is in real trouble and the guards step in");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] HoltburgGuards: trace switch not registered ({e.Message})"); }
@@ -200,6 +210,7 @@ namespace RevivalGuard
                 if (g.Mind.State != PState.Duty) PatrolThink(g, now, on);
             }
             if (on && g.Mind.State != PState.Duty) Ambient(g, now);
+            if (on && g.Mind.State != PState.Duty) Gestures(g, now);
             if (g.FellBack && g.Mind.State != PState.Duty) Recover(g);
             if (!on && g.Mind.State == PState.Station && g.Kitted) Unkit(g);
             if (Trace > 0 && now >= g.NextTrace) { g.NextTrace = now + 2; TraceLine(g); }
@@ -209,6 +220,8 @@ namespace RevivalGuard
         static void PatrolThink(Guard g, double now, bool on)
         {
             var c = g.Obj;
+            if (now < g.MotionUntil) return;   // a gesture plays out before any move order
+            if (g.PendingWalk) { g.PendingWalk = false; g.Mind.ProgressAt = now; c.MoveTo(WpPos(g, g.Mind.Index), 0f); return; }
             int away = 0;
             lock (s_Lock) foreach (var o in s_Guards.Values) if (o != g && o.Mind.State != PState.Station) away++;
             bool mayLeave = !g.FellBack && MayLeave(away, now, s_LastDeparture);
@@ -290,6 +303,116 @@ namespace RevivalGuard
             g.NextAmbient = now + AMBIENT_GAP_MIN + s_Rng.NextDouble() * AMBIENT_GAP_SPAN;
         }
 
+        // ---- gestures ----
+        static MotionCommand Cmd(Gesture gs) => gs switch
+        {
+            Gesture.Akimbo => MotionCommand.Akimbo, Gesture.Stretch => MotionCommand.YawnStretch, Gesture.LookAround => MotionCommand.ScanHorizon,
+            Gesture.WarmHands => MotionCommand.WarmHands, Gesture.Bow => MotionCommand.BowDeep, Gesture.Salute => MotionCommand.Salute,
+            Gesture.Cheer => MotionCommand.Cheer, _ => MotionCommand.Ready,
+        };
+
+        static float Length(Creature c, MotionCommand cmd)
+        {
+            try
+            {
+                var mt = ACE.DatLoader.DatManager.PortalDat.ReadFromDat<ACE.DatLoader.FileTypes.MotionTable>(c.MotionTableId);
+                float l = mt?.GetAnimationLength(MotionStance.NonCombat, cmd, MotionCommand.Ready) ?? 0;
+                return l > 0 ? l : 2f;
+            }
+            catch { return 2f; }
+        }
+
+        /// <summary>
+        /// One gesture, as ACE's own emote Motion step plays it: the action broadcast to everyone in range (ExecuteMotion),
+        /// then back to Ready when its animation ends. The guard is busy (no move order, no other gesture) until then.
+        /// </summary>
+        static void Play(Guard g, Gesture gs, double delay, string why)
+        {
+            var c = g.Obj; var cmd = Cmd(gs);
+            float len = Length(c, cmd);
+            double now = Timers.RunningTime;
+            g.MotionUntil = Math.Max(g.MotionUntil, now + delay + len + 0.4);
+            var chain = new ActionChain();
+            chain.AddDelaySeconds(Math.Max(0, delay));
+            chain.AddAction(c, () =>
+            {
+                try
+                {
+                    bool moving = c.PhysicsObj?.IsMovingTo() ?? true;
+                    if (c.IsDead || g.Mind.State == PState.Duty || moving || c.CurrentMotionState?.Stance != MotionStance.NonCombat)
+                    {
+                        if (Tracing) Mod.Log.Info($"[RevivalGuard] HoltburgGuards gesture skipped: {g.Route.Name} {gs} ({why}) state {g.Mind.State} moving {moving} stance {c.CurrentMotionState?.Stance}");
+                        return;
+                    }
+                    c.ExecuteMotion(new Motion(MotionStance.NonCombat, cmd), true, WorldObject.LocalBroadcastRange);
+                    if (Tracing) Mod.Log.Info($"[RevivalGuard] HoltburgGuards gesture: {g.Route.Name} {gs} ({why}) {cmd} {len:0.00} s, state {g.Mind.State} moving {moving}");
+                    var back = new ActionChain();
+                    back.AddDelaySeconds(len);
+                    back.AddAction(c, () =>
+                    {
+                        try
+                        {
+                            if (!c.IsDead && c.CurrentMotionState?.MotionState.ForwardCommand == cmd)
+                                c.ExecuteMotion(new Motion(MotionStance.NonCombat, MotionCommand.Ready), true, WorldObject.LocalBroadcastRange);
+                        }
+                        catch (Exception e) { TickGuard.Report("HoltburgGuards.Gesture", e); }
+                    });
+                    back.EnqueueChain();
+                }
+                catch (Exception e) { TickGuard.Report("HoltburgGuards.Gesture", e); }
+            });
+            chain.EnqueueChain();
+        }
+
+        static readonly Dictionary<Gesture, string> GESTURE_LINES = new Dictionary<Gesture, string>
+        {
+            [Gesture.Stretch] = "gesture.stretch", [Gesture.LookAround] = "gesture.look", [Gesture.WarmHands] = "gesture.warm",
+        };
+
+        /// <summary>Idle gestures on the guard's own timer, and a salute when another guard is in view.</summary>
+        static void Gestures(Guard g, double now)
+        {
+            double minutes = EmoteMinutes;
+            if (minutes <= 0) return;
+            var c = g.Obj;
+            bool moving = c.PhysicsObj.IsMovingTo();
+            if (g.NextGesture == 0) g.NextGesture = NextIdle(now, minutes, s_Rng.NextDouble());
+            if (g.NextGesture > now + minutes * 60 * 1.25) g.NextGesture = NextIdle(now, minutes, s_Rng.NextDouble());   // the tunable was lowered
+            if (!MayGesture(g.Mind.State, moving, true, now, g.MotionUntil)) return;
+
+            // another guard in view, both standing: a salute, answered
+            if (now >= g.NextSalute)
+            {
+                float range = SaluteRange;
+                Guard other = null;
+                lock (s_Lock)
+                    foreach (var o in s_Guards.Values)
+                        if (o != g && o.Obj?.Location != null && o.Mind.State != PState.Duty && Vector2.Distance(Local(o.Obj.Location), Local(c.Location)) <= range) { other = o; break; }
+                if (other != null && PlayerNear(c, 40))
+                {
+                    double turn = c.Rotate(other.Obj);
+                    Play(g, For(GestureFor.MetGuard), turn + 0.1, "met " + other.Route.Name + " guard");
+                    g.NextSalute = other.NextSalute = now + SALUTE_GAP;
+                    if (MayGesture(other.Mind.State, other.Obj.PhysicsObj.IsMovingTo(), true, now, other.MotionUntil))
+                    {
+                        double t2 = other.Obj.Rotate(c);
+                        Play(other, For(GestureFor.MetGuard), turn + 1.2 + t2, "answering " + g.Route.Name + " guard");
+                    }
+                    return;
+                }
+            }
+
+            if (now < g.NextGesture) return;
+            if (!PlayerNear(c, 40)) { g.NextGesture = now + 15; return; }   // nobody to see it: look again soon
+            var gs = PickIdle(NowBucket(), SeasonKey(), g.LastGesture, s_Rng.NextDouble());
+            g.LastGesture = gs;
+            Play(g, gs, 0, "idle");
+            g.NextGesture = NextIdle(now, minutes, s_Rng.NextDouble());
+            // now and then a word with it, when the talk pacing allows
+            if (GESTURE_LINES.TryGetValue(gs, out var pool) && s_Rng.NextDouble() < 0.35 && MaySpeak(now, 0, s_LastLine, true, false))
+                SayLater(c, 0.8, () => Line(g, pool));
+        }
+
         /// <summary>A Use: retail's own Use emote has run (prefix let it); a reply in character follows it.</summary>
         internal static bool OnUse(Creature c, WorldObject user)
         {
@@ -301,6 +424,9 @@ namespace RevivalGuard
                 return false;   // no turning to chat in the middle of a fight
             }
             if (Answered(p, 30)) return true;
+            // retail's own Use emote turns the guard to the player; the bow follows, then the greeting
+            if (EmoteMinutes > 0 && MayGesture(g.Mind.State, c.PhysicsObj?.IsMovingTo() ?? true, true, Timers.RunningTime, g.MotionUntil))
+                Play(g, Gesture.Bow, 1.0, "use");
             SayLater(c, 2.5, () => Line(g, "greet." + Key(NowBucket())));
             return true;
         }
@@ -330,7 +456,14 @@ namespace RevivalGuard
             var g = Get(c);
             if (Answered(p, 45)) return;   // the first guard to hear it answers; the others let it be
             string pool = g.Mind.State == PState.Duty ? "greet.fight" : "greet." + Key(NowBucket());
-            SayLater(c, 1.2, () => Line(g, pool));
+            double say = 1.2;
+            if (EmoteMinutes > 0 && MayGesture(g.Mind.State, c.PhysicsObj?.IsMovingTo() ?? true, true, Timers.RunningTime, g.MotionUntil))
+            {
+                double turn = c.Rotate(p);   // face the player first
+                Play(g, Gesture.Bow, turn + 0.1, "greeting");
+                say = turn + 0.6;
+            }
+            SayLater(c, say, () => Line(g, pool));
         }
 
         static bool Answered(Player p, double within)
@@ -566,6 +699,12 @@ namespace RevivalGuard
             }
             g.RestUntil = now + 3;
             if (speak) SayLater(c, pool == "duty.fallback" ? 0.2 : 1.0, () => Line(g, pool));
+            if (speak && pool == "duty.closing" && EmoteMinutes > 0 && c.PhysicsObj.IsMovingTo())
+            {
+                c.CancelMoveTo();            // stand, cheer, then walk home
+                g.PendingWalk = true;
+                Play(g, Gesture.Cheer, Math.Max(1.2, g.SheathTime), "victory");
+            }
         }
 
         /// <summary>
@@ -703,7 +842,8 @@ namespace RevivalGuard
             SetDutyList();
             c.Faction1Bits = null;
             if (c.PhysicsObj.IsMovingTo()) c.CancelMoveTo();
-            if (c.CurrentMotionState.Stance != MotionStance.NonCombat) c.SetCombatMode(CombatMode.NonCombat);
+            g.SheathTime = 0;
+            if (c.CurrentMotionState.Stance != MotionStance.NonCombat) g.SheathTime = c.SetCombatMode(CombatMode.NonCombat);
             c.MonsterState = Creature.State.Idle;
             // walk home by the route, from the nearest waypoint
             var here = Local(c.Location); int best = 0; float bd = float.MaxValue;

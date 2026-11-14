@@ -100,6 +100,38 @@ namespace RevivalGuard
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] AllegianceOrphans on delete: {e.Message}"); return true; }
         }
+
+        /// <summary>LIVE CRASH 2026-11-14 04:09 UTC: a character delete ran the stock path, GetAllegiance built an
+        /// allegiance whose monarch character no longer exists, BuildOfficers threw a NullReferenceException on the world
+        /// thread and the whole server went down. A delete that throws is logged, its vassals are freed by guid, and the
+        /// world goes on.</summary>
+        static Exception Finalizer(Exception __exception, uint playerGuid)
+        {
+            if (__exception == null) return null;
+            Mod.Log.Warn($"[RevivalGuard] AllegianceOrphans: delete of 0x{playerGuid:X8} threw {__exception.GetType().Name}: {__exception.Message}; freeing its vassals by guid instead");
+            try { AllegianceOrphans.FreeVassalsOf(playerGuid, "their patron was deleted (stock delete threw)"); }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] AllegianceOrphans after a failed delete: {e.Message}"); }
+            return null;
+        }
+    }
+
+    /// <summary>An allegiance node whose character is gone (a monarch or member deleted under this shard's instant
+    /// teardown) has no Player; stock BuildOfficers dereferences it and throws on the world thread (live crash
+    /// 2026-11-14 04:09 UTC). Same result as stock, skipping nodes with no character.</summary>
+    [HarmonyPatch(typeof(Allegiance), nameof(Allegiance.BuildOfficers))]
+    static class AllegianceOfficersNullSafe
+    {
+        static bool Prefix(Allegiance __instance)
+        {
+            try
+            {
+                if (!AllegianceOrphans.On || __instance.Members == null) return true;
+                __instance.Officers = __instance.Members.Where(i => i.Value?.Player?.AllegianceOfficerRank != null)
+                                                        .ToDictionary(i => i.Key, i => i.Value);
+                return false;
+            }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] AllegianceOfficersNullSafe: {e.Message}"); return true; }
+        }
     }
 
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Initialize))]

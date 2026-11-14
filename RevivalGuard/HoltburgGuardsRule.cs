@@ -250,5 +250,41 @@ namespace RevivalGuard
 
         /// <summary>The stagger: a guard may leave its station if fewer than MAX_AWAY are out and none left lately.</summary>
         public static bool MayLeave(int away, double now, double lastDeparture) => away < MAX_AWAY && now - lastDeparture >= DEPART_GAP;
+
+        // ---- gestures (owner 2026-11-13: "a muscle flex. a bow. etc.") ----
+        // Retail emote actions from the human motion table 0x09000001 (NonCombat, from Ready). Read offline from the DATs:
+        // it has no flex (no such command exists) and no ChestBeat; Akimbo (fists on hips) stands in for the flex.
+        public enum Gesture { None, Akimbo, Stretch, LookAround, WarmHands, Bow, Salute, Cheer }
+        public enum GestureFor { Idle, Greeted, MetGuard, Victory }
+
+        public const double EMOTE_MINUTES = 4;      // a guard's own idle gesture timer: about this many minutes apart
+        public const float SALUTE_RANGE = 35f;      // another guard in view this close: a salute
+        public const double SALUTE_GAP = 300;       // per guard, at most one salute this often
+
+        /// <summary>The gesture that answers a moment (a greeting, another guard, a kill), or null for an idle one.</summary>
+        public static Gesture For(GestureFor ctx) => ctx switch
+        {
+            GestureFor.Greeted => Gesture.Bow, GestureFor.MetGuard => Gesture.Salute, GestureFor.Victory => Gesture.Cheer, _ => Gesture.None,
+        };
+
+        /// <summary>An idle gesture at a post: fists on hips, a stretch, a look over the horizon; warming the hands only at
+        /// night or in winter. Never the one it made last. <paramref name="r"/> in [0, 1).</summary>
+        public static Gesture PickIdle(Bucket b, string season, Gesture last, double r)
+        {
+            var pool = new List<Gesture> { Gesture.Akimbo, Gesture.Stretch, Gesture.LookAround };
+            if (b == Bucket.Night || season == "winter") pool.Add(Gesture.WarmHands);
+            if (b == Bucket.Dawn) pool.Add(Gesture.Stretch);   // a stretch is likelier at dawn
+            pool.RemoveAll(g => g == last);
+            return pool[Math.Min(pool.Count - 1, (int)(r * pool.Count))];
+        }
+
+        /// <summary>A gesture only from a guard standing still (at its station or paused at a post), not fighting, not in the
+        /// middle of another gesture, with a player near enough to see it.</summary>
+        public static bool MayGesture(PState s, bool moving, bool playerNear, double now, double busyUntil)
+            => (s == PState.Station || s == PState.Paused) && !moving && playerNear && now >= busyUntil;
+
+        /// <summary>The next idle gesture: minutes apart, give or take a quarter. 0 or less: gestures are off.</summary>
+        public static double NextIdle(double now, double minutes, double r)
+            => minutes <= 0 ? double.MaxValue : now + minutes * 60 * (0.75 + 0.5 * r);
     }
 }

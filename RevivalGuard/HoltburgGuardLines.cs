@@ -104,6 +104,11 @@ namespace RevivalGuard
                 "Nothing stirs. Good.",
             },
 
+            // said now and then with an idle gesture
+            ["gesture.stretch"] = new[] { "A long watch. The legs get stiff.", "Ah. That is better." },
+            ["gesture.look"] = new[] { "Nothing on the road. Good.", "Clear as far as I can see." },
+            ["gesture.warm"] = new[] { "Cold hands make a slow blade.", "A cold one tonight." },
+
             // spoken to a player who uses a guard or greets one in local chat
             ["greet.dawn"] = new[]
             {

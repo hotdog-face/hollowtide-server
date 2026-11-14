@@ -200,6 +200,70 @@ namespace RevivalGuard
                  : best == Skill.HeavyWeapons ? Kind.HeavyMace : Kind.LightDagger;
         }
 
+        static string SkillGroup(Kind k) { var g = Group(k); return g == "bow" || g == "crossbow" ? "missile" : g; }
+
+        /// <summary>THE KIND, BY WHAT IT IS TRAINED IN (live 2026-11-13: Maximus, an archer, held a Knife at login and was
+        /// given the Borg Acid Dagger). The best trained weapon skill decides; what it holds only picks the subtype when it
+        /// is of that skill (a Heavy fighter with a sword gets the sword); an archer gets the crossbow when it carries one.</summary>
+        static Kind Choose(Player p)
+        {
+            var trained = ByTraining(p);
+            var hand = p.GetEquippedMeleeWeapon() ?? p.GetEquippedMissileLauncher() ?? p.GetEquippedWand();
+            var held = KindOf(hand);
+            if (held.HasValue && SkillGroup(held.Value) == SkillGroup(trained)) return held.Value;
+            if (trained == Kind.Bow)
+            {
+                bool crossbow = p.EquippedObjects.Values.Concat(AllCarried(p))
+                    .Any(o => o.ItemType == ItemType.MissileWeapon && o.W_WeaponType == WeaponType.Crossbow);
+                return crossbow ? Kind.Crossbow : Kind.Bow;
+            }
+            return trained;
+        }
+
+        /// <summary>Already in its band's suit and signature weapon: nothing to make room for.</summary>
+        static bool Dressed(Player p, int lv)
+        {
+            bool weapon = p.EquippedObjects.Values.Any(o => IsSignature(o.WeenieClassId) && (o.WeenieClassId >= W_MID) == (lv >= MID_FROM));
+            if (lv >= MID_FROM) return weapon && MID_BODY.All(w => Worn(p, w));
+            return weapon && Worn(p, S_SHIRT) && Worn(p, S_PANTS, S_FLARED) && Worn(p, S_BOOTS, S_SHOES);
+        }
+
+        /// <summary>Everything in the pack and its side packs.</summary>
+        static List<WorldObject> AllCarried(Player p)
+        {
+            var out_ = new List<WorldObject>();
+            foreach (var o in p.Inventory.Values)
+            {
+                out_.Add(o);
+                if (o is Container c) out_.AddRange(c.Inventory.Values);
+            }
+            return out_;
+        }
+
+        /// <summary>ROOM TO DRESS (live 2026-11-13: Sefa's pack was full of loot; her Chainmail went to the pack and the suit
+        /// had nowhere to be made, "pack full" at every login). The cheapest plain loot goes, as few as are needed: never
+        /// bonded, attuned or kit items, keys, money, notes, containers, or anything worth JUNK_TOP or more.</summary>
+        const int JUNK_TOP = 2000;
+        static void Room(Player p, int need)
+        {
+            int free = p.GetFreeInventorySlots();
+            if (free >= need) return;
+            var junk = AllCarried(p).Where(o => !(o is Container) && !IsSuit(o.WeenieClassId) && !IsSignature(o.WeenieClassId)
+                    && !KIT.Contains(o.WeenieClassId) && (o.GetProperty(PropertyInt.Bonded) ?? 0) == 0 && !o.IsAttunedOrContainsAttuned
+                    // plain loot only: armor, clothing, jewelry, melee weapons, gems (never ammunition, launchers, casters,
+                    // kits, components or food: shard2 2026-11-13, the first try cleared an archer's arrows)
+                    && (o.ItemType & (ItemType.Armor | ItemType.Clothing | ItemType.Jewelry | ItemType.MeleeWeapon | ItemType.Gem)) != 0
+                    && o.WeenieType != WeenieType.Ammunition
+                    && (o.Value ?? 0) < JUNK_TOP)
+                .OrderBy(o => (o.Value ?? 0) / Math.Max(1, o.StackSize ?? 1)).ThenBy(o => o.Value ?? 0)
+                .Take(need - free).ToList();
+            foreach (var o in junk)
+            {
+                bool gone = p.TryConsumeFromInventoryWithNetworking(o);
+                Mod.Log.Info($"[RevivalGuard] BorgKit: {p.Name} {(gone ? "clears" : "could not clear")} {o.Name} (worth {o.Value ?? 0}) to make room");
+            }
+        }
+
         /// <summary>A signature weapon's numbers for this level (the instance, not the weenie).</summary>
         static void Tune(Player p, WorldObject w, string band)
         {
@@ -214,9 +278,7 @@ namespace RevivalGuard
         /// any other weapon goes to the pack (kept); the signature made if not carried, set to our level, wielded.</summary>
         static void Arm(Player p, string band, List<string> given)
         {
-            var hand = p.GetEquippedMeleeWeapon() ?? p.GetEquippedMissileLauncher() ?? p.GetEquippedWand();
-            var kind = KindOf(hand) ?? ByTraining(p);
-            if (kind == Kind.Wand && !Trained(p, Skill.WarMagic)) kind = Kind.HeavyMace;
+            var kind = Choose(p);
             uint want = (band == "low" ? W_LOW : W_MID) + (uint)kind;
             var others = Enumerable.Range(0, 9).Select(i => (band == "low" ? W_MID : W_LOW) + (uint)i)
                 .Concat(Enumerable.Range(0, 9).Select(i => (band == "low" ? W_LOW : W_MID) + (uint)i).Where(w => w != want)).ToArray();
@@ -336,6 +398,7 @@ namespace RevivalGuard
             bool woman = p.GetProperty(PropertyInt.Gender) == (int)Gender.Female;
             int lv = p.Level ?? 1;
             if (Suits && lv >= OWN_FROM) return;            // their own armor from 80: nothing given or taken
+            if (Suits && !Dressed(p, lv)) Room(p, lv >= MID_FROM ? 12 : 8);   // (pieces to make, earned armor and weapon to pack)
             if (Suits && lv >= MID_FROM)
             {
                 DressMid(p, given);

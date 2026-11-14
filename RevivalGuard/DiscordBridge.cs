@@ -202,13 +202,30 @@ namespace RevivalGuard
         {
             if (s_Out.IsEmpty) return;
             var sb = new StringBuilder();
-            while (sb.Length < 1600 && s_Out.TryDequeue(out var line)) { if (sb.Length > 0) sb.Append('\n'); sb.Append(line); }
+            // one reader, so the line peeked is the line taken; a long post (Leaderboards) never pushes one past Discord's 2000
+            while (sb.Length < 1600 && s_Out.TryPeek(out var next) && (sb.Length == 0 || sb.Length + next.Length < 1950))
+            {
+                s_Out.TryDequeue(out var line);
+                if (sb.Length > 0) sb.Append('\n');
+                sb.Append(line);
+            }
             // flags 4 = SUPPRESS_EMBEDS (Fable audit 2026-10-19, item 5): a link typed in game posts as plain text, never a preview
             var body = JsonSerializer.Serialize(new { content = sb.ToString(), allowed_mentions = new { parse = Array.Empty<string>() }, flags = 4 });
             using var r = await s_Http.PostAsync($"{API}/channels/{s_Cfg.channelId}/messages", new StringContent(body, Encoding.UTF8, "application/json"), stop);
             if ((int)r.StatusCode == 429) { await Task.Delay(RetryAfter(await r.Content.ReadAsStringAsync()), stop); return; }
             if (!r.IsSuccessStatusCode) Mod.Log.Warn($"[RevivalGuard] DiscordBridge: post refused ({(int)r.StatusCode})");
             else s_Sent++;
+        }
+
+        /// <summary>
+        /// Queue one post from the shard itself for the General channel (Leaderboards' daily post, off unless the owner turns
+        /// it on: the bot posts only to #general). False when there is no bridge.
+        /// </summary>
+        public static bool PostGeneral(string text)
+        {
+            if (s_Cfg == null || string.IsNullOrWhiteSpace(text)) return false;
+            s_Out.Enqueue(text.Length > 1800 ? text.Substring(0, 1800) + "..." : text);
+            return true;
         }
 
         /// <summary>

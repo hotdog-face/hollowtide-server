@@ -112,8 +112,9 @@ namespace RevivalGuard
         /// <summary>A client that has NOT sent LoginComplete for this teleport is still showing portal space (ours holds
         /// it until the world is ready: 25 s, 90 s on a first visit or in the browser, then a 100 s fallback). ACE keeps
         /// the player hidden and unattackable until then, as retail did; completing it at 20 s let a PK kill a slow loader
-        /// who saw only the tunnel (ticket 261103-0036). Such a player waits this long before the arms above.</summary>
-        const double CLIENT_PORTAL_SECONDS = 120.0;
+        /// who saw only the tunnel (ticket 261103-0036). Such a player waits this long before the arms above.
+        /// Property rg_tele_arrive_seconds (TeleportArrival), default 120, never under STUCK_SECONDS.</summary>
+        static double CLIENT_PORTAL_SECONDS => TeleportArrival.ClientWaitSeconds(STUCK_SECONDS);
 
         /// <summary>When each player's client last sent LoginComplete (unix time), from <see cref="LoginCompleteSeen"/>.</summary>
         internal static readonly ConcurrentDictionary<uint, double> s_ClientArrived = new ConcurrentDictionary<uint, double>();
@@ -146,6 +147,8 @@ namespace RevivalGuard
                 var stuck = now - started.Value;
                 // the client's own LoginComplete for THIS teleport: then only the retry chain can be holding it
                 bool clientDone = s_ClientArrived.TryGetValue(p.Guid.Full, out var at) && at >= started.Value;
+                // ...or our own completion (TeleportArrival's movement arm) already asked for it
+                if (!clientDone && TeleportArrival.Requested(p, started.Value)) clientDone = true;
                 double grace = clientDone ? 0.0 : CLIENT_PORTAL_SECONDS - STUCK_SECONDS;
                 if (stuck < STUCK_SECONDS + grace) continue;
 
@@ -157,18 +160,20 @@ namespace RevivalGuard
                     Mod.Log.Warn($"[RevivalGuard] teleport watchdog: {who} and did not recover -- "
                         + $"forcing the relog ACE's own five-minute rule intends but never reaches. "
                         + $"The destination it was sent to is the thing to look at: {p.Location}");
-                    if (p.Session != null) p.Session.LogOffPlayer(true); else p.LogOut();
+                    TeleportArrival.t_ForceWhy = "TeleportWatchdog forced the relog";
+                    try { if (p.Session != null) p.Session.LogOffPlayer(true); else p.LogOut(); }
+                    finally { TeleportArrival.t_ForceWhy = null; }
                     continue;
                 }
 
                 var lb = p.CurrentLandblock;
                 if (lb != null && lb.CreateWorldObjectsCompleted)
                 {
-                    // Case 1: the world is ready and only the dead retry chain was missing.
-                    Mod.Log.Warn($"[RevivalGuard] teleport watchdog: {who}; its landblock HAS "
-                        + $"finished loading, so the re-check chain died with the landblock tick. "
-                        + $"Completing the teleport by hand at {p.Location}");
-                    p.OnTeleportComplete();
+                    // Case 1: the world is ready and only the dead retry chain (or the client's word) was missing.
+                    // TeleportArrival.Complete also does LoginComplete's first-login step.
+                    TeleportArrival.Complete(p, "the teleport watchdog", clientDone
+                        ? "its landblock HAS finished loading, so the re-check chain died with the landblock tick"
+                        : $"its client never said portal space ended within rg_tele_arrive_seconds ({CLIENT_PORTAL_SECONDS:F0}s); landblock loaded");
                     continue;
                 }
 

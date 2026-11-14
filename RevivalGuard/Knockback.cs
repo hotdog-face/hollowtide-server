@@ -105,6 +105,7 @@ namespace RevivalGuard
             // Credit the movement guard with the flight before the client moves: the budget refills at
             // run speed, and a knock is faster than a run.
             if (MovementGuard.s_State.TryGetValue(p, out var st)) st.Budget += new Vector2(v.X, v.Y).Length() * 1.5f + 2f;
+            MoveGuard.Credit(p, new Vector2(v.X, v.Y).Length() * 1.5f + 2f);
             // A KNOCK BREAKS YOUR ATTACK (owner, 2026-09-29: "knockback should cancel a players attacks when
             // hit with it"). ACE's own cancel, the one the client's Cancel Attack message calls: a swing in
             // progress is marked cancelled and the auto-repeat stops, so the player has to re-engage.

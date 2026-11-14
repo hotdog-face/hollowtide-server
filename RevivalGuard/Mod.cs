@@ -48,6 +48,7 @@ namespace RevivalGuard
             AzimarTheme.Register();
             SeasonalDrops.Validate();
             LandblockReload.Register();
+            WeenieReload.Register();
             Broadcast.Register();
             KeepCharacter.Register();
             MagicRim.Register();
@@ -75,6 +76,7 @@ namespace RevivalGuard
             LoginTokens.Register();
             PasswordRecovery.Register();
             LfgBoard.Register();
+            Leaderboards.Register();      // /top: level, XP, luminance, kills, PK, quests (rg_top; Discord post rg_top_discord, on)
             FeatureBoard.Register();
             ItemLock.Register();
             AutoStack.Register();
@@ -92,6 +94,7 @@ namespace RevivalGuard
             ScavengerHunt.Register();
             ExtraDeathLines.Register();
             HoltburgGuards.Register();    // Holtburg's Royal Guards talk, patrol and fight monsters in town (rg_holtburg_guards)
+            TickContainment.Register();   // one object's tick exception is contained, not the end of the world (rg_tick_containment, @tickfaults)
             // The PK expansion (docs/PK-EXPANSION.md): every part off until its property is set.
             PkCommon.RegisterProperties();
             PkRenown.Register();
@@ -101,24 +104,26 @@ namespace RevivalGuard
             PkNight.Register();           // Sunday 7 PM Pacific, hold the spot (rg_pk_night, off by default)
             // Harmony-only guards with a switch read at its default: registered so @modifybool can turn them off on a
             // shard that has never stored the key (ACE answers "Unknown bool property" otherwise; review 2026-11-10).
+            MoveGuard.Register();         // rg_moveguard_mode 0 off / 1 log (default) / 2 enforce; rg_moveguard_staff
             PkCommon.RegisterBool(HoltburgOnly.P_ON, true, "RevivalGuard HoltburgOnly: every new character starts in Holtburg whatever town the client asked for (false: the client's town)");
             PkCommon.RegisterBool(GroundSettle.P_ON, true, "RevivalGuard GroundSettle: an at-rest PK body ACE left off the ground is ticked so it lands (false: ACE)");
             PkCommon.RegisterBool(LostObjectResend.P_ON, true, "RevivalGuard LostObjectResend: a retail client asking for a monster it lost (0xF6EA) is sent the whole object again (false: ACE, appearance only)");
             try { Log.Info($"[RevivalGuard] PK expansion: renown {(PkRenown.On ? "ON" : "off")}, bounties {(PkBounty.On ? "ON" : "off")}, shrines {(PkShrines.On ? "ON" : "off")}, PK Night {(PkNight.On ? "ON" : "off")}"); }
             catch (Exception e) { Log.Warn($"[RevivalGuard] PK expansion: properties not readable yet ({e.Message})"); }
             try { NameGuard.LoadNow(); } catch (Exception e) { Log.Error($"[RevivalGuard] NameGuard: {e.Message}"); }   // says at start how many names are protected
-            Log.Info("[RevivalGuard] loaded: movement, vendor, fellowship, flood and chat guards, "
+            try { Log.Info($"[RevivalGuard] moveguard: {(MoveGuard.Mode == MoveGuardRule.ENFORCE ? "ENFORCE" : MoveGuard.Mode == MoveGuardRule.LOG ? "log only" : "off")} (rg_moveguard_mode)"); } catch { }
+            Log.Info("[RevivalGuard] loaded: movement (and the moveguard path check), vendor, fellowship, flood and chat guards, "
                 + "the ticket desk (@tickets / @ticket), presence (@who / @stuck), the seasonal "
                 + "calendar (@festival) and its seasonal drops (SeasonalDrops), the teleport watchdog and completion rescue, chess "
                 + "checkmate, the stuck-chest healer, the academy exit amnesty and give-after-yes "
                 + "(a Luminance token is taken only when the player answers Yes), @create placed "
-                + "inside a cell (CreateInCell), one landblock back from the database (@reloadblock), "
+                + "inside a cell (CreateInCell), one landblock back from the database (@reloadblock), one weenie back from the database without a global cache clear (@reloadweenie), "
                 + "the world broadcast with a look first (@broadcast), and the blue rim on magic items "
                 + "whose weenie never carried UiEffects (MagicRim), and retail's PK death loot: wielded "
                 + "gear at any level and every rare (PkDeathLoot), and keyrings that open their chests and "
                 + "spend a key per unlock (Keyrings), the audit trail on disk and in game (@audit), and character "
                 + "snapshots with a confirmed restore (@snapshot), and bonded items into an offline "
-                + "character's pack (@bestow), and the looking-for-group board (@lfgboard), and the feature request board (@features), and locked items (@lockitem / @unlockitem), and cell furniture taken out of the world (HiddenCellStatics), and no house purchase waits for dev accounts (DevHousing), and the allegiance hall: bank, hall board, hall portal, lawn corpses, kill board and raid alarm (/mansion), and ragdoll corpses where the body lands (@ragdollcorpse), and the login screen's population count on the login port (PopulationQuery), and combat pets that only pick targets in line of sight (PetLos, pet_los_targets), and dyes that take only on clothing whose art has the colour (DyeArt, dye_by_art), and hovering NPCs reported lower than their physics (HoverDrop, hover_drop), and generator spawns placed in the air dropped to the ground (SpawnGround, rg_spawn_ground), and monsters ACE sends home sent as a teleport (ForceHomeStamp, rg_forcehome_stamp), and town NPCs that keep one face across landblock reloads (NpcFaceStable, rg_npc_face_stable), and Azimar greeting players by name, level, hour and visit, with paced blessings (AzimarVoice, azimar_voice), and every new character starting in Holtburg whatever town the client asked for (HoltburgOnly, rg_holtburg_only), and Holtburg's Royal Guards talking, patrolling and keeping the town (HoltburgGuards, rg_holtburg_guards)");
+                + "character's pack (@bestow), and the looking-for-group board (@lfgboard), and the feature request board (@features), and locked items (@lockitem / @unlockitem), and cell furniture taken out of the world (HiddenCellStatics), and no house purchase waits for dev accounts (DevHousing), and the allegiance hall: bank, hall board, hall portal, lawn corpses, kill board and raid alarm (/mansion), and ragdoll corpses where the body lands (@ragdollcorpse), and the login screen's population count on the login port (PopulationQuery), and combat pets that only pick targets in line of sight (PetLos, pet_los_targets), and dyes that take only on clothing whose art has the colour (DyeArt, dye_by_art), and hovering NPCs reported lower than their physics (HoverDrop, hover_drop), and generator spawns placed in the air dropped to the ground (SpawnGround, rg_spawn_ground), and monsters ACE sends home sent as a teleport (ForceHomeStamp, rg_forcehome_stamp), and town NPCs that keep one face across landblock reloads (NpcFaceStable, rg_npc_face_stable), and Azimar greeting players by name, level, hour and visit, with paced blessings (AzimarVoice, azimar_voice), and every new character starting in Holtburg whatever town the client asked for (HoltburgOnly, rg_holtburg_only), and Holtburg's Royal Guards talking, patrolling and keeping the town (HoltburgGuards, rg_holtburg_guards), and one object's or player's tick exception contained instead of stopping the server (TickContainment, rg_tick_containment " + (TickContainment.On ? "ON" : "off") + ", @tickfaults)");
         }
 
         public void Dispose()
@@ -193,13 +198,14 @@ namespace RevivalGuard
         }
         internal static readonly ConditionalWeakTable<Player, State> s_State = new ConditionalWeakTable<Player, State>();
 
-        internal static void Rebaseline(Player p) { if (s_State.TryGetValue(p, out var st)) st.Pos = null; }
+        internal static void Rebaseline(Player p) { MoveGuard.Restart(p); if (s_State.TryGetValue(p, out var st)) st.Pos = null; }
 
         /// <summary>A teleport is starting: remember where from, so a report still carrying the old
         /// spot (sent before the client heard of the teleport) is recognised as stale, not a cheat.</summary>
         internal static void TeleportFrom(Player p)
         {
             var st = s_State.GetOrCreateValue(p);
+            MoveGuard.Restart(p);
             st.Pos = null;
             st.StaleFrom = p.Location != null ? new ACE.Entity.Position(p.Location) : null;
             st.TeleportedAt = DateTime.UtcNow;
@@ -257,7 +263,7 @@ namespace RevivalGuard
             var now = DateTime.UtcNow;
             st.ForceBefore = -1;
             if (forceUpdate || p.Teleporting || p.Location == null || newPosition == null)
-            { st.Pos = null; st.At = now; return true; }
+            { st.Pos = null; st.At = now; MoveGuard.Restart(p); return true; }
             // A report that echoes our newest snap (or later) shows the client heard it: the unheard count starts again.
             if (st.Unheard > 0)
             {
@@ -291,6 +297,7 @@ namespace RevivalGuard
             {
                 Mod.Log.Info($"[RevivalGuard] movement silence: {p.Name} (0x{p.Guid.Full:X8}) moved {moved:F1} m after {silent:F1} s without a report " +
                              $"(run allowance {runAllowed:F1} m at run rate {rate:F2}, budget {allowed:F1} m); accepted");
+                if (!MoveGuard.Allow(p, newPosition, now)) { SnapBack(p, st, now); __result = false; return false; }
                 st.Pos = new ACE.Entity.Position(newPosition);
                 st.At = now;
                 st.ForceBefore = ForceSeq(p);
@@ -320,35 +327,44 @@ namespace RevivalGuard
                 if (!stale)
                 Offences.Add(p, "movement", $"moved {moved:F1} m in {dt:F2} s (budget allowed {allowed:F1} m at run rate {rate:F2}); snapped back to {p.Location.ToLOCString()}"
                     + $" (measured from {st.Pos.ToLOCString()}, {(now - st.At).TotalSeconds:F1} s old; the server's copy {p.Location.DistanceTo(newPosition):F1} m from the report)");
-                var seq = p.Sequences.GetNextSequence(SequenceType.ObjectForcePosition);
-                if (seq != null && seq.Length >= 2) { st.SnapStamp = BitConverter.ToUInt16(seq, 0); st.SnapAt = now; st.StaleDrops = 0; }
-                p.SendUpdatePosition();
-                // A CLIENT THAT NEVER HEARS THE SNAP-BACKS (ticket 261108-0014, 2026-11-08): Olivia's browser client died in a
-                // dungeon and never took the lifestone teleport; for over an hour it kept running in the dungeon and echoed
-                // ForcePosition sequence 0 through 1,100+ snaps. Every snap put her back at the Holtburg lifestone and every report
-                // started her running again, so the players there saw her run and snap back on a loop. A client that echoes none
-                // of our snaps for this long is out of step with the server and only a relog brings it back (as TeleportWatchdog's
-                // last arm does): it re-enters where the server has it.
-                if (st.Unheard++ == 0) st.UnheardSince = now;
-                if (MovementBudget.Desynced(st.Unheard, (now - st.UnheardSince).TotalSeconds) && !st.DesyncLogged)
-                {
-                    st.DesyncLogged = true;
-                    Mod.Log.Warn($"[RevivalGuard] movement desync: {p.Name} (0x{p.Guid.Full:X8}) echoed none of {st.Unheard} snap-backs in "
-                        + $"{(now - st.UnheardSince).TotalSeconds:F0} s (its client is not applying the server's positions); forcing a relog at {p.Location.ToLOCString()}");
-                    if (p.Session != null) p.Session.LogOffPlayer(true); else p.LogOut();
-                }
-                // The server's position stands AS OF NOW: measuring the next attempt from the last
-                // accepted update instead would let a cheater who keeps trying earn a longer and longer
-                // window (up to MAX_DT) and so a steady ~2x speed.
-                st.Pos = new ACE.Entity.Position(p.Location);
-                st.At = now;
+                SnapBack(p, st, now);
                 __result = false;
                 return false;   // ACE's UpdatePlayerPosition is skipped: the server keeps its position
             }
+            // MoveGuard (MoveGuard.cs): what fits this budget is checked against the last 30 s of reports
+            if (!MoveGuard.Allow(p, newPosition, now)) { SnapBack(p, st, now); __result = false; return false; }
             st.Pos = new ACE.Entity.Position(newPosition);
             st.At = now;
             st.ForceBefore = ForceSeq(p);
             return true;
+        }
+
+        /// <summary>Refuses the report: the client is snapped back to the server's position, which stands as of now.</summary>
+        static void SnapBack(Player p, State st, DateTime now)
+        {
+            MoveGuard.Restart(p);
+            var seq = p.Sequences.GetNextSequence(SequenceType.ObjectForcePosition);
+            if (seq != null && seq.Length >= 2) { st.SnapStamp = BitConverter.ToUInt16(seq, 0); st.SnapAt = now; st.StaleDrops = 0; }
+            p.SendUpdatePosition();
+            // A CLIENT THAT NEVER HEARS THE SNAP-BACKS (ticket 261108-0014, 2026-11-08): Olivia's browser client died in a
+            // dungeon and never took the lifestone teleport; for over an hour it kept running in the dungeon and echoed
+            // ForcePosition sequence 0 through 1,100+ snaps. Every snap put her back at the Holtburg lifestone and every report
+            // started her running again, so the players there saw her run and snap back on a loop. A client that echoes none
+            // of our snaps for this long is out of step with the server and only a relog brings it back (as TeleportWatchdog's
+            // last arm does): it re-enters where the server has it.
+            if (st.Unheard++ == 0) st.UnheardSince = now;
+            if (MovementBudget.Desynced(st.Unheard, (now - st.UnheardSince).TotalSeconds) && !st.DesyncLogged)
+            {
+                st.DesyncLogged = true;
+                Mod.Log.Warn($"[RevivalGuard] movement desync: {p.Name} (0x{p.Guid.Full:X8}) echoed none of {st.Unheard} snap-backs in "
+                    + $"{(now - st.UnheardSince).TotalSeconds:F0} s (its client is not applying the server's positions); forcing a relog at {p.Location.ToLOCString()}");
+                if (p.Session != null) p.Session.LogOffPlayer(true); else p.LogOut();
+            }
+            // The server's position stands AS OF NOW: measuring the next attempt from the last
+            // accepted update instead would let a cheater who keeps trying earn a longer and longer
+            // window (up to MAX_DT) and so a steady ~2x speed.
+            st.Pos = new ACE.Entity.Position(p.Location);
+            st.At = now;
         }
 
         /// <summary>
@@ -367,6 +383,7 @@ namespace RevivalGuard
                 int after = ForceSeq(p);
                 if (after < 0 || after == st.ForceBefore) return;
                 st.SnapStamp = (ushort)after; st.SnapAt = DateTime.UtcNow; st.StaleDrops = 0;
+                MoveGuard.Restart(p);
                 st.Pos = p.Location != null ? new ACE.Entity.Position(p.Location) : null;
                 st.At = st.SnapAt;
             }

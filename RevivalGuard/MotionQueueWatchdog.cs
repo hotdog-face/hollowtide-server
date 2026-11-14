@@ -71,30 +71,50 @@ namespace RevivalGuard
 
         static void Drain(Player p, object head, double age)
         {
+            var q = p.PhysicsObj?.PartArray?.MotionTableManager?.PendingAnimations;
+            if (q == null || q.Count == 0 || !ReferenceEquals(q.First, head)) return;   // it moved meanwhile
+            string what = Finish(p);
+            Mod.Log.Warn($"[RevivalGuard] motion queue watchdog: {p.Name} (0x{p.Guid.Full:X8}) {what}; it had not moved for {age:F1}s "
+                + $"({ServerFooting.Describe(p)})");
+            BusyLedger.Note(p, $"motion queue watchdog: drained a stuck queue after {age:F0}s");
+        }
+
+        /// <summary>The head of the body's motion queue, its counter of finished links and its length, to tell later whether
+        /// it moved.</summary>
+        internal static (object head, uint counter, int count) Snapshot(Player p)
+        {
+            var mtm = p?.PhysicsObj?.PartArray?.MotionTableManager;
+            var q = mtm?.PendingAnimations;
+            return q == null ? (null, 0u, 0) : (q.First, mtm.AnimationCounter, q.Count);
+        }
+
+        /// <summary>Finish every entry of the body's motion queue link by link (MotionTableManager.AnimationDone, as each
+        /// link ending would, so the weenie's motion-done callbacks run, a chug's included), then put a body left in a state
+        /// a standing body cannot be in back to Ready in its stance (MotionQueueRule.BackToReady). Returns what it found
+        /// and did, for a log line. Shared with ChugWatchdog and MeleeLatchGuard; run it on the player's action queue.</summary>
+        internal static string Finish(Player p)
+        {
             var po = p.PhysicsObj;
             var mtm = po?.PartArray?.MotionTableManager;
             var q = mtm?.PendingAnimations;
-            if (q == null || q.Count == 0 || !ReferenceEquals(q.First, head)) return;   // it moved meanwhile
-            string before = $"queue {q.Count} ({string.Join(",", q.Select(a => $"{(MotionCommand)a.Motion}/{a.NumAnims}").Take(4))}), counter {mtm.AnimationCounter}";
+            if (q == null || q.Count == 0) return "queue 0";
+            string what = $"queue {q.Count} ({string.Join(",", q.Select(a => $"{(MotionCommand)a.Motion}/{a.NumAnims}").Take(4))}), counter {mtm.AnimationCounter}: finished";
             int guard = 0;
             while (q.Count > 0 && guard++ < 2000) mtm.AnimationDone(true);
             var mi = po.get_minterp();
             bool contact = (po.TransientState & TransientStateFlags.Contact) != 0;
             bool fwdAction = (mi.InterpretedState.ForwardCommand & (uint)CommandMask.Action) != 0;
             bool falling = mtm.State?.Substate == (uint)MotionCommand.Falling;
-            string fixedState = "";
             if (MotionQueueRule.BackToReady(fwdAction, falling, contact))
             {
-                fixedState = $"; was {(MotionCommand)mi.InterpretedState.ForwardCommand}, table {(MotionCommand)(mtm.State?.Substate ?? 0)}: back to Ready";
+                what += $"; was {(MotionCommand)mi.InterpretedState.ForwardCommand}, table {(MotionCommand)(mtm.State?.Substate ?? 0)}: back to Ready";
                 var raw = mi.RawState;
                 var allowJump = mi.motion_allows_jump(mi.InterpretedState.ForwardCommand) == WeenieError.None;
                 raw.ForwardCommand = (uint)MotionCommand.Ready; raw.ForwardSpeed = 1f;
                 if (!po.IsMovingOrAnimating) po.UpdateTime = ACE.Server.Physics.Common.PhysicsTimer.CurrentTime;
                 mi.apply_raw_movement(true, allowJump);
             }
-            Mod.Log.Warn($"[RevivalGuard] motion queue watchdog: {p.Name} (0x{p.Guid.Full:X8}) {before} had not moved for {age:F1}s; "
-                + $"finished it{fixedState} ({ServerFooting.Describe(p)})");
-            BusyLedger.Note(p, $"motion queue watchdog: drained a stuck queue after {age:F0}s");
+            return what;
         }
     }
 }

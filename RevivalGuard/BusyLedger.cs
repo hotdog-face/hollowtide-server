@@ -60,6 +60,7 @@ namespace RevivalGuard
                 var mtp = p.MoveToParams;
                 if (mtp?.Callback != null)
                     parts.Add($"use waiting on its server walk/turn to {mtp.Target?.Name ?? "?"} (moving to {p.IsPlayerMovingTo2}, body moving {p.PhysicsObj?.IsMovingOrAnimating})");
+                if (p.MeleeTarget != null) parts.Add($"melee on {p.MeleeTarget.Name} (alive {p.MeleeTarget.IsAlive}, swinging {p.Attacking})");
                 parts.Add(ServerFooting.Describe(p));
             }
             catch (Exception e) { parts.Add("state ? " + e.GetType().Name); }

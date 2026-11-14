@@ -232,6 +232,8 @@ namespace RevivalGuard
             {
                 p = IdleListener(wo);
                 if (p == null) { result = 0; return false; }
+                // Holtburg's speech budget (TownLife): his idle line is one of the town's unprompted lines
+                if (wo.Location?.Landblock == 0xA9B4 && !TownLife.TryAmbient(wo, out _)) { result = 0; return false; }
                 target = p;
             }
             else if (p != null && PlayerManager.GetOnlinePlayer(p.Guid) == null) { result = 0; return false; }

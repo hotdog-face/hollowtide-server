@@ -114,6 +114,13 @@ namespace RevivalGuard
             }
         }
 
+        /// <summary>This month's Chronicle title, for the townsfolk's talk of the news (TownLife); null when there is none.</summary>
+        internal static string ChronicleTitle()
+        {
+            try { var t = Load()?.Chronicle?.Title; return string.IsNullOrWhiteSpace(t) ? null : t.Trim(); }
+            catch { return null; }
+        }
+
         static string Seed()
         {
             using var rs = typeof(NoticeBoard).Assembly.GetManifestResourceStream("RevivalGuard.NoticeBoard.json");

@@ -1,0 +1,364 @@
+{
+  "_": "Holtburg's town life (RevivalGuard TownLife.cs, TownLifeRule.cs; docs/findings/holtburg-town-life-2026-11-14.md). The copy beside the mod dll on the shard is the live one: edit it there and it is read again within a minute; no restart. Turbine voice (docs/outreach/VOICE.md): plain ASCII, no em dashes, nothing modern. Points are [x, y, z, cell] in A9B4 metres, cell 'out' or the interior cell (low hex); every leg is checked by tools/townlife/check_legs.py before it ships. A post must match where the NPC really stands (2 m) or its rounds are off. Tokens: {name} {visits} {level} {title} {chronicle}.",
+  "town": "Holtburg",
+  "landblock": "A9B4",
+  "npcs": [
+    { "key": "wilomine", "name": "Barkeeper Wilomine", "guid": "0x7A9B4022", "wcid": 710, "role": "barkeeper", "vendor": true, "greets": true, "rumours": true,
+      "post": [108.77, 34.93, 94.08, "0155"],
+      "gestures": ["Nod", "Wave", "MimeDrink", "Shrug", "Laugh"],
+      "rounds": [
+        { "name": "bar", "when": ["day", "evening", "night"], "path": [[106.5, 33.5, 94, "0155"], [106.3, 36.5, 94, "0155"], [106.8, 38.8, 94, "0155"]], "pause": [6, 10] }
+      ] },
+    { "key": "buckminster", "name": "Buckminster", "guid": "0x7A9B4075", "wcid": 44891, "role": "server", "greets": true, "rumours": true,
+      "post": [104.41, 35.19, 94, "0163"],
+      "gestures": ["Nod", "Laugh", "Beckon", "Wave", "MimeDrink"],
+      "rounds": [
+        { "name": "tables", "when": ["day", "evening"], "path": [[102.0, 35.5, 94, "0163"], [99.5, 36.5, 94, "0163"], [99.5, 41.5, 94, "0169"], [103.0, 43.0, 94, "0169"]], "pause": [6, 12], "weight": 3 },
+        { "name": "hall", "when": ["day", "evening", "night"], "path": [[101.0, 33.5, 94, "0163"], [99.0, 34.0, 94, "0163"]], "pause": [8, 10] }
+      ] },
+    { "key": "worcer", "name": "Worcer", "guid": "0x7A9B405C", "wcid": 5035, "role": "patron", "quest": true, "rumours": true,
+      "post": [107.67, 46.07, 94, "0169"],
+      "gestures": ["MimeDrink", "Laugh", "HeartyLaugh", "ClapHands", "Cheer"],
+      "rounds": [
+        { "name": "evening", "when": ["evening"], "path": [[108.2, 44.0, 94, "0169"], [104.0, 43.0, 94, "0169"], [100.5, 40.0, 94, "0163"]], "stay": [false, false, true] }
+      ] },
+    { "key": "alfrin", "name": "Alfrin", "guid": "0x7A9B405E", "wcid": 30479, "role": "patron", "quest": true, "rumours": true,
+      "post": [108.56, 45.2, 94, "0169"],
+      "gestures": ["MimeDrink", "Laugh", "Shrug", "ScratchHead", "Cheer"],
+      "rounds": [
+        { "name": "evening", "when": ["evening"], "path": [[109.0, 43.5, 94, "0169"], [104.5, 42.0, 94, "0169"], [101.5, 41.5, 94, "0169"]], "stay": [false, false, true] }
+      ] },
+    { "key": "flinrala", "name": "Flinrala Ryndmad", "guid": "0x7A9B4032", "wcid": 5033, "role": "patron", "quest": true, "greets": true, "rumours": true,
+      "post": [103.07, 45.7, 94, "0169"], "gestures": ["Wave", "Beckon", "Nod", "MimeDrink"] },
+    { "key": "gawain", "name": "Gawain Cooper", "guid": "0x7A9B46AA", "wcid": 44190, "role": "patron", "quest": true, "rumours": true,
+      "post": [113.85, 33.05, 94, "0162"], "gestures": ["MimeDrink", "Nod", "Laugh", "TapFoot"],
+      "rounds": [
+        { "name": "evening", "when": ["evening"], "path": [[116.3, 33.5, 94, "0162"], [115.8, 37.3, 94, "0162"]], "stay": [false, true] }
+      ] },
+    { "key": "broker", "name": "Contract Broker", "guid": "0x7A9B46A9", "wcid": 44186, "role": "shopkeeper", "vendor": true,
+      "post": [114.23, 35.02, 94, "0162"], "gestures": ["Nod", "ScratchHead", "TapFoot"] },
+
+    { "key": "alcott", "name": "Alcott", "guid": "0x7A9B4073", "wcid": 44895, "role": "greeter", "greets": true, "quest": true,
+      "post": [83.3, 14.04, 94, "out"], "gestures": ["Wave", "Beckon", "Nod", "BowDeep"],
+      "rounds": [
+        { "name": "lifestone", "when": ["day", "evening", "night"], "path": [[85.5, 12.5, 94, "out"], [85.0, 9.0, 94, "out"]], "pause": [10, 15] }
+      ] },
+    { "key": "thorolf", "name": "Pathwarden Thorolf", "guid": "0x7A9B4074", "wcid": 33596, "role": "greeter", "greets": true, "quest": true,
+      "post": [97, 27, 94, "out"], "gestures": ["Wave", "Point", "Nod", "Akimbo"],
+      "rounds": [
+        { "name": "step", "when": ["day", "evening"], "path": [[94.0, 26.0, 94, "out"], [92.5, 23.5, 94, "out"]], "pause": [8, 12] }
+      ] },
+    { "key": "herald", "name": "Holtburg Herald", "guid": "0x7A9B4FC0", "wcid": 903150, "role": "herald", "nochat": true,
+      "post": [79.47, 29.34, 94, "out"], "gestures": ["Point", "ScratchHead", "Nod"],
+      "rounds": [
+        { "name": "pace", "when": ["day", "evening"], "path": [[83.0, 27.5, 94, "out"], [86.0, 28.5, 94, "out"]], "pause": [10, 15] }
+      ] },
+    { "key": "tirenia", "name": "Tirenia", "guid": "0x7A9B406B", "wcid": 30696, "role": "guardsman", "quest": true,
+      "post": [101.93, 20.41, 94, "out"], "gestures": ["Akimbo", "Nod", "Salute"] },
+    { "key": "dwennon", "name": "Dwennon", "guid": "0x7A9B406D", "wcid": 33970, "role": "townsfolk", "quest": true,
+      "post": [72.99, 138.44, 66, "out"], "gestures": ["ScratchHead", "Point", "Shrug", "TapFoot"],
+      "rounds": [
+        { "name": "watch", "when": ["day", "evening"], "path": [[70.0, 142.0, 66, "out"], [66.5, 141.0, 66, "out"]], "pause": [10, 20] },
+        { "name": "home", "when": ["night"], "path": [[70.5, 136.0, 66, "out"], [70.8, 131.5, 66, "out"]], "stay": [false, true] }
+      ] },
+    { "key": "renald_eldest", "name": "Renald the Eldest", "guid": "0x7A9B406E", "wcid": 28856, "role": "townsfolk", "quest": true,
+      "post": [128.52, 4.95, 94, "out"], "gestures": ["Akimbo", "ScratchHead", "Shrug"],
+      "rounds": [
+        { "name": "stroll", "when": ["day", "evening"], "path": [[126.0, 2.5, 94, "out"], [131.0, 1.5, 94, "out"]], "pause": [10, 15] },
+        { "name": "home", "when": ["night"], "path": [[131.0, 3.0, 94, "out"], [134.2, 3.3, 94, "out"]], "stay": [false, true] }
+      ] },
+    { "key": "sean", "name": "Sean the Speedy", "guid": "0x7A9B46A8", "wcid": 39746, "role": "townsfolk", "quest": true,
+      "post": [114.64, 46.36, 94, "out"], "gestures": ["TapFoot", "YawnStretch", "Point", "Wave"],
+      "rounds": [
+        { "name": "dash", "when": ["day"], "path": [[119.5, 48.5, 94, "out"], [124.0, 44.0, 94, "out"], [121.0, 40.5, 94, "out"]], "pause": [5, 8], "run": true },
+        { "name": "tavern door", "when": ["evening"], "path": [[120.0, 42.0, 94, "out"], [120.5, 36.5, 94, "out"]], "stay": [false, true] }
+      ] },
+    { "key": "rand", "name": "Rand, Game Hunter", "guid": "0x7A9B46AD", "wcid": 39983, "role": "townsfolk", "quest": true, "rumours": true,
+      "post": [154.57, 36.2, 96, "out"], "gestures": ["Akimbo", "ScanHorizon", "Point"] },
+    { "key": "novedion", "name": "Novedion the Gem Seller", "guid": "0x7A9B404E", "wcid": 9423, "role": "shopkeeper", "vendor": true, "post": [124.79, 31.52, 94.01, "out"] },
+
+    { "key": "sedor", "name": "Sedor Wystan the Blacksmith", "guid": "0x7A9B4026", "wcid": 712, "role": "crafter", "vendor": true, "post": [87.48, 131.04, 66, "0100"], "gestures": ["Akimbo", "Nod", "ScratchHead"] },
+    { "key": "thelnoth", "name": "Thelnoth Cort the Healer", "guid": "0x7A9B4027", "wcid": 715, "role": "shopkeeper", "vendor": true, "post": [30.02, 159.68, 66, "0111"], "gestures": ["Nod", "Pray", "ScratchHead"] },
+    { "key": "monyra", "name": "Monyra the Jeweler", "guid": "0x7A9B4020", "wcid": 716, "role": "shopkeeper", "vendor": true, "post": [157.19, 135.3, 66.12, "0117"], "gestures": ["Nod", "BlowKiss", "Wave"] },
+    { "key": "cindrue", "name": "Archmage Cindrue", "guid": "0x7A9B4033", "wcid": 2304, "role": "arcanum", "vendor": true, "post": [152.35, 132.55, 69, "011B"], "gestures": ["ScratchHead", "Nod", "Point"] },
+    { "key": "asenala", "name": "Asenala", "guid": "0x7A9B4077", "wcid": 49518, "role": "arcanum", "vendor": true, "post": [155.74, 129.9, 69.01, "011B"] },
+    { "key": "sontella", "name": "Sontella Dagroff the Bowyer", "guid": "0x7A9B4028", "wcid": 713, "role": "crafter", "vendor": true, "post": [100.56, 135.6, 66.12, "0121"], "gestures": ["Nod", "Akimbo", "ScanHorizon"] },
+    { "key": "ecutha", "name": "Ecutha the Tailor", "guid": "0x7A9B4025", "wcid": 719, "role": "crafter", "vendor": true, "post": [56.52, 132, 66.12, "012A"], "gestures": ["Nod", "ScratchHead", "Shrug"] },
+    { "key": "ianto", "name": "Ianto", "guid": "0x7A9B4076", "wcid": 42428, "role": "crafter", "vendor": true, "post": [60.03, 137.91, 66, "012A"], "gestures": ["Nod", "Akimbo", "Shrug"] },
+    { "key": "tailor_apprentice", "name": "Tailor's Apprentice", "guid": "0x7A9B46AC", "wcid": 42736, "role": "townsfolk", "quest": true, "post": [61.2, 135.94, 66, "012A"], "gestures": ["YawnStretch", "ScratchHead", "Nod"] },
+    { "key": "ealdred", "name": "Ealdred", "guid": "0x7A9B4081", "wcid": 42720, "role": "barber", "quest": true, "post": [54.14, 136.12, 66, "0127"], "gestures": ["ClapHands", "Laugh", "Nod", "Wave"] },
+    { "key": "renald_younger", "name": "Scribe Renald the Younger", "guid": "0x7A9B4023", "wcid": 717, "role": "shopkeeper", "vendor": true, "post": [131.4, 12.24, 94, "013F"], "gestures": ["ScratchHead", "Nod", "Shrug"] },
+    { "key": "renald_elder", "name": "Shopkeeper Renald the Elder", "guid": "0x7A9B4021", "wcid": 718, "role": "shopkeeper", "vendor": true, "post": [139.23, 18.33, 94, "0141"], "gestures": ["Akimbo", "Nod", "TapFoot"] },
+    { "key": "alchemist_apprentice", "name": "Apprentice Alchemist", "guid": "0x7A9B4053", "wcid": 27740, "role": "arcanum", "quest": true, "post": [139.64, 8.13, 97, "014D"], "gestures": ["ScratchHead", "YawnStretch", "Nod"] },
+    { "key": "fispur", "name": "Fispur Ansel the Grocer", "guid": "0x7A9B4024", "wcid": 714, "role": "shopkeeper", "vendor": true, "post": [78.97, 38.53, 94, "016A"], "gestures": ["Nod", "Wave", "MimeEat"] },
+    { "key": "arcanum_agent", "name": "Agent of the Arcanum", "guid": "0x7A9B4038", "wcid": 12050, "role": "arcanum", "quest": true, "post": [163.15, 5.8, 94, "0172"], "gestures": ["Nod", "ScratchHead"] },
+    { "key": "refurbisher", "name": "Arcanum Refurbisher", "guid": "0x7A9B46AB", "wcid": 32085, "role": "arcanum", "quest": true, "post": [159.72, 5.48, 94, "0172"], "gestures": ["Nod", "TapFoot"] },
+    { "key": "wedding_planner", "name": "Wedding Planner", "guid": "0x7A9B4041", "wcid": 14930, "role": "wedding", "vendor": true, "post": [163.04, 8.73, 94, "0172"], "gestures": ["ClapHands", "BlowKiss", "Cheer", "Nod"] }
+  ],
+
+  "exchanges": [
+    { "a": "wilomine", "b": "buckminster", "when": ["day", "evening"], "lines": [["a", "Buckminster, the corner table wants another round."], ["b", "On my way. Same as before?"], ["a", "Same as always."]] },
+    { "a": "wilomine", "b": "buckminster", "when": ["evening", "night"], "lines": [["b", "Busy night. The keg is near dry."], ["a", "Then tap the next one, and quickly. Thirsty folk are short-tempered folk."]] },
+    { "a": "buckminster", "b": "wilomine", "when": ["day"], "lines": [["a", "Quiet in here today."], ["b", "Give it till Evensong. They always come in at Evensong."]] },
+    { "a": "worcer", "b": "alfrin", "when": ["evening"], "lines": [["b", "Any luck with the old Redoubt, Worcer?"], ["a", "Some. The young ones bring back a piece now and then. It is a start."], ["b", "Here is to them, then."]] },
+    { "a": "alfrin", "b": "worcer", "when": ["evening"], "lines": [["a", "I mean to have a farm of my own by spring."], ["b", "You said that last spring, Alfrin."], ["a", "And I meant it then too."]] },
+    { "a": "gawain", "b": "broker", "when": ["day", "evening"], "lines": [["a", "Any new contracts going out today?"], ["b", "A few. Fewer coming back finished than I would like."]] },
+    { "a": "thorolf", "b": "tirenia", "when": ["day", "evening"], "lines": [["a", "Another boat of new arrivals at the lifestone this morning."], ["b", "Good. Holtburg needs every sword arm it can get."]] },
+    { "a": "ecutha", "b": "ianto", "when": ["day"], "lines": [["b", "This hem is crooked again."], ["a", "It is straight. Your eyes are crooked."]] },
+    { "a": "renald_younger", "b": "renald_elder", "when": ["day", "evening"], "lines": [["b", "Have you finished copying those ledgers?"], ["a", "Nearly. Father would have had them done by noon."], ["b", "Father had help. Get on with it."]] },
+    { "a": "wedding_planner", "b": "arcanum_agent", "when": ["day"], "lines": [["a", "Do you suppose the Arcanum would lend a few lights for a wedding?"], ["b", "The Arcanum lends nothing. But it might sell you some."]] },
+    { "a": "cindrue", "b": "asenala", "when": ["day", "evening"], "lines": [["a", "Your stones hum again tonight."], ["b", "They always hum. You only listen at night."]] }
+  ],
+
+  "keywords": {
+    "rumour": ["rumor", "rumors", "rumour", "rumours", "gossip", "news", "work", "job", "jobs", "quest", "quests", "hunt", "hunting", "where should"],
+    "drink": ["ale", "beer", "drink", "mead", "wine", "round"],
+    "thanks": ["thanks", "thank", "thx", "ty"],
+    "farewell": ["bye", "farewell", "goodbye", "later", "goodnight"]
+  },
+
+  "rumours": [
+    { "min": 1, "max": 12, "lines": [
+      "Worcer, in the back room, wants relics brought out of the old Redoubt to the south. Good work for new hands.",
+      "Talk to the Pathwarden by the tavern door before you wander off. He sees new folk properly outfitted.",
+      "They say the Training Academy turns out a sharper adventurer than any tavern ever did." ] },
+    { "min": 10, "max": 32, "lines": [
+      "Folk your size go down to the Facility Hub, I hear. The wardens there always want hands.",
+      "The wardens of the Facility Hub keep a long list of chores. Steady work, steady pay." ] },
+    { "min": 28, "max": 55, "lines": [
+      "Tuskers. Everyone your size goes after tuskers. The Tusker Barracks are thick with them.",
+      "A guard out by Shoushi pays well to see the tuskers thinned. Ask after him." ] },
+    { "min": 48, "max": 80, "lines": [
+      "A fellowship goes further than a lone blade. Find some friends, then try the Matron Hive to the north.",
+      "They talk of the Matron Hive North in here. Olthoi, and plenty of them." ] },
+    { "min": 72, "max": 105, "lines": [
+      "Tusker Holding, not the Armory. The Armory looks rich and pays poor, so the regulars say.",
+      "The Olthoi Brood Hive keeps the bold busy, I am told." ] },
+    { "min": 98, "max": 155, "lines": [
+      "Creepy Canyons. Half the strong arms in this room have come home from there with full purses.",
+      "If you can hold the Creepy Canyons, the regulars say there is no better ground for one of your strength." ] },
+    { "min": 148, "max": 205, "lines": [
+      "The Egg Orchard, and whoever is taking contracts on Olthoi Rippers. Big work for big folk.",
+      "The Colosseum's arena master pays well to those who can win there, and often." ] },
+    { "min": 195, "max": 275, "lines": [
+      "Folk of your standing keep a round of old doors that open once a day. Walk them all, then hunt between.",
+      "They say Diemos waits for those who have won ten times in the Colosseum.",
+      "The Gauntlet is for fellowships, not heroes. Bring friends." ] },
+    { "min": 1, "max": 275, "lines": [
+      "Rand the Game Hunter pays every day for game brought in, whatever your strength.",
+      "The factions keep tasks for any who will take them, and they pay by the day." ] }
+  ],
+
+  "lines": {
+    "town.day": [
+      "Fine weather for it.",
+      "The square is busy today.",
+      "Mind the cart ruts by the lifestone.",
+      "I could do with a quiet hour."
+    ],
+    "town.evening": [
+      "The lamps will be lit soon.",
+      "Evensong already. Where does the day go?",
+      "Half the town will be in the tavern by now."
+    ],
+    "town.night": [
+      "Late to be about.",
+      "Quiet night. I like it that way.",
+      "Mind the dark corners. Not everything out there is a drudge."
+    ],
+    "town": [
+      "Holtburg has its faults, but it is home.",
+      "Another day in Holtburg."
+    ],
+    "news": [
+      "The Herald cries '{chronicle}' every hour. I could cry it myself by now.",
+      "Have you read the notice board? '{chronicle}', it says. Nobody talks of anything else."
+    ],
+
+    "role.barkeeper": [
+      "If you are drinking, sit. If you are not, make room for those who are.",
+      "I hear everything in here, sooner or later.",
+      "Mind the bench by the hearth. It wobbles."
+    ],
+    "role.barkeeper.evening": [
+      "Evensong, and every stool full. Just how I like it.",
+      "Another round for the hearth table, and no singing this time."
+    ],
+    "role.barkeeper.night": [
+      "Last ones in always stay the longest.",
+      "Quiet now. Even the drunks have gone home."
+    ],
+    "role.server": [
+      "Watch your elbows, coming through.",
+      "Who had the stew? Somebody had the stew."
+    ],
+    "role.server.evening": [
+      "Busy tonight. My feet will be talking to me tomorrow."
+    ],
+    "role.patron": [
+      "Wilomine pours a fair measure. Fairer than Arwic, anyway.",
+      "One more, and then home. Probably.",
+      "Did you hear about the cow by the well? No? Never mind."
+    ],
+    "role.patron.evening": [
+      "Nothing like the tavern at Evensong.",
+      "To Holtburg, and to whoever is buying."
+    ],
+    "role.greeter": [
+      "If you are new, there is no shame in asking the way.",
+      "Holtburg looks after its own. You will see."
+    ],
+    "role.greeter.night": [
+      "The lifestone glows brightest at night. Comforting, in its way."
+    ],
+    "role.herald": [
+      "News for any who will hear it. Ask, and I will tell.",
+      "Hear ye! The roads are open and the town stands."
+    ],
+    "role.guardsman": [
+      "Stand straight, recruit. The Crown is watching."
+    ],
+    "role.townsfolk": [
+      "Busy, busy.",
+      "I have half a mind to take a walk to Arwic. Only half, mind."
+    ],
+    "role.shopkeeper": [
+      "Fair prices, and no haggling before noon.",
+      "Look all you like. Touching costs extra."
+    ],
+    "role.crafter": [
+      "Good work takes time. Bad work takes longer.",
+      "Steady hands. That is the whole of the trade."
+    ],
+    "role.arcanum": [
+      "Mind the reagents. Some of them bite.",
+      "Magic is patience, mostly. And a little luck."
+    ],
+    "role.barber": [
+      "A trim makes the adventurer, I always say.",
+      "Sit still and I will make you look like a hero."
+    ],
+    "role.wedding": [
+      "Every couple in Dereth deserves a proper wedding.",
+      "Flowers, a hall, and two willing hearts. The rest is detail."
+    ],
+
+    "npc.dwennon": [
+      "The cows are watching. Do not look at them.",
+      "Moo. Ahem. Practising.",
+      "Three in the east field, standing very still. Too still."
+    ],
+    "npc.renald_eldest": [
+      "Hmph. Young folk, always rushing.",
+      "In my day we walked to Arwic and back before breakfast."
+    ],
+    "npc.sean": [
+      "Faster, faster! The road does not run itself.",
+      "I have been to Arwic and back since you got here."
+    ],
+    "npc.ealdred": [
+      "Have you seen the state of the hair on the new arrivals?"
+    ],
+    "npc.wilomine.fest.frostfell": [
+      "Spiced wine for Frostfell. Hot, and not too much water in it."
+    ],
+
+    "fest.festivalseason": [
+      "The harvest is in. Even the drudges seem to know it.",
+      "Pumpkins on every step. The children carve faces in them."
+    ],
+    "fest.frostfell": [
+      "Frostfell again. Keep your feet warm and your mug full.",
+      "Snow on the roofs and presents under the trees. Holtburg wears it well."
+    ],
+    "fest.spring": [
+      "The maypole is up. Spring has come to Holtburg.",
+      "Flowers on every sill. It does the heart good."
+    ],
+    "fest.wedding": [
+      "Another year since the Royal Wedding. The Wedding Planner has not stopped smiling."
+    ],
+    "fest.anniversary": [
+      "They say Dereth is a year older today. I do not feel it."
+    ],
+    "fest.newyear": [
+      "A new year. May it be kinder than the last."
+    ],
+    "fest.tthuun": [
+      "Marauders on the roads, they say. Keep your blade close."
+    ],
+    "fest.scavengerhunt": [
+      "The Advocates want monster trophies again. Their Herald is by the square."
+    ],
+
+    "event.raid": [
+      "Something is in the town! Get inside!",
+      "The guards are calling. Keep back from the road!",
+      "Not again. Not here."
+    ],
+    "event.pkdeath": [
+      "Blood on the cobbles. Over what, I wonder?",
+      "Another one fallen in the street. These are hard days."
+    ],
+    "event.levelup": [
+      "Well done, {name}! I saw that.",
+      "Look at you, {name}. Stronger by the day.",
+      "There is something new in your step, {name}."
+    ],
+
+    "greet.first": [
+      "Welcome to Holtburg, {name}. Ask if you need anything.",
+      "A new face. Welcome, {name}."
+    ],
+    "greet.return": [
+      "Back again, {name}? That is your {visits} visit, by my count.",
+      "{name}! Good to see you back.",
+      "Ah, {name}. Holtburg missed you. A little."
+    ],
+    "greet.away": [
+      "{name}! It has been days. We thought you had gone to Arwic for good.",
+      "Look who has come back. Welcome home, {name}."
+    ],
+    "greet.level.low": [
+      "Still finding your feet, {name}? We all started somewhere."
+    ],
+    "greet.level.mid": [
+      "You are filling out that armor nicely, {name}."
+    ],
+    "greet.level.high": [
+      "The drudges must run when they see you coming now, {name}."
+    ],
+    "greet.level.legend": [
+      "{name}. They tell stories about you in here, you know."
+    ],
+    "greet.title": [
+      "If it is not {name} the {title}. Welcome back."
+    ],
+    "greet.died": [
+      "You have the lifestone's chill on you, {name}. Sit a while.",
+      "Back from the lifestone, {name}? Happens to the best of us."
+    ],
+    "greet.day": [ "Good day, {name}." ],
+    "greet.evening": [ "Good evening, {name}." ],
+    "greet.night": [ "Late to be about, {name}." ],
+
+    "reply.day": [ "Good day to you.", "Well met.", "Hello there." ],
+    "reply.evening": [ "Good evening.", "Evening, friend." ],
+    "reply.night": [ "And to you. Mind the dark.", "Evening. Late one, is it?" ],
+    "npc.dwennon.reply": [ "Shh! Not so loud. They can hear you." ],
+    "npc.renald_eldest.reply": [ "Hmph. Hello yourself." ],
+    "npc.sean.reply": [ "Hello! Goodbye! Busy!" ],
+
+    "kw.rumour.other": [
+      "Ask Wilomine at the tavern. She hears everything.",
+      "Rumours? The tavern is the place for those."
+    ],
+    "kw.drink": [
+      "Sit down and I will see what we have.",
+      "A drink for the traveller, then."
+    ],
+    "kw.drink.other": [ "The tavern is that way. Follow the noise." ],
+    "kw.thanks": [ "You are welcome.", "Any time." ],
+    "kw.farewell": [ "Safe roads.", "Go well." ]
+  }
+}

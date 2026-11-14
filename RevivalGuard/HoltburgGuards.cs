@@ -264,19 +264,19 @@ namespace RevivalGuard
             return i < 0 ? null : lines[i];
         }
 
-        internal static void Say(Creature c, string text)
+        internal static void Say(Creature c, string text, float range = WorldObject.LocalBroadcastRange)
         {
             if (string.IsNullOrEmpty(text) || c == null || c.IsDestroyed) return;
-            c.EnqueueBroadcast(new GameMessageHearSpeech(text, c.Name, c.Guid.Full, ChatMessageType.Emote), WorldObject.LocalBroadcastRange);
+            c.EnqueueBroadcast(new GameMessageHearSpeech(text, c.Name, c.Guid.Full, ChatMessageType.Emote), range);
             s_LastLine = Timers.RunningTime;
             if (Trace > 0 && ROUTES.TryGetValue(c.Guid.Full, out var r)) Mod.Log.Info($"[RevivalGuard] HoltburgGuards said: {r.Name} \"{text}\"");
         }
 
-        static void SayLater(Creature c, double delay, Func<string> text)
+        static void SayLater(Creature c, double delay, Func<string> text, float range = WorldObject.LocalBroadcastRange)
         {
             var chain = new ActionChain();
             chain.AddDelaySeconds(delay);
-            chain.AddAction(c, () => { try { Say(c, text()); } catch (Exception e) { TickGuard.Report("HoltburgGuards.Say", e); } });
+            chain.AddAction(c, () => { try { Say(c, text(), range); } catch (Exception e) { TickGuard.Report("HoltburgGuards.Say", e); } });
             chain.EnqueueChain();
         }
 
@@ -295,11 +295,13 @@ namespace RevivalGuard
             var c = g.Obj;
             if (!MaySpeak(now, g.NextAmbient, s_LastLine, true, false)) return;
             if (!PlayerNear(c, EARSHOT)) { g.NextAmbient = now + 10; return; }   // look again soon, when someone comes by
+            // the town's speech budget (TownLife: one unprompted line a minute per player, town-wide, a player within talking range)
+            if (!TownLife.TryAmbient(c, out float range)) { g.NextAmbient = now + 20; return; }
             int players = c.PhysicsObj.ObjMaint.GetKnownPlayersCount();
             bool after = now - s_LastVictory < 600;
             bool quiet = now - s_LastVictory > 3600 && players <= 1;
             string pool = PickPool(NowBucket(), SeasonKey(), after, players >= 6, quiet, s_Rng.NextDouble());
-            Say(c, Line(g, pool) ?? Line(g, "general"));
+            Say(c, Line(g, pool) ?? Line(g, "general"), range);
             g.NextAmbient = now + AMBIENT_GAP_MIN + s_Rng.NextDouble() * AMBIENT_GAP_SPAN;
         }
 
@@ -409,8 +411,9 @@ namespace RevivalGuard
             Play(g, gs, 0, "idle");
             g.NextGesture = NextIdle(now, minutes, s_Rng.NextDouble());
             // now and then a word with it, when the talk pacing allows
-            if (GESTURE_LINES.TryGetValue(gs, out var pool) && s_Rng.NextDouble() < 0.35 && MaySpeak(now, 0, s_LastLine, true, false))
-                SayLater(c, 0.8, () => Line(g, pool));
+            if (GESTURE_LINES.TryGetValue(gs, out var pool) && s_Rng.NextDouble() < 0.35 && MaySpeak(now, 0, s_LastLine, true, false)
+                && TownLife.TryAmbient(c, out float hear))
+                SayLater(c, 0.8, () => Line(g, pool), hear);
         }
 
         /// <summary>A Use: retail's own Use emote has run (prefix let it); a reply in character follows it.</summary>
@@ -659,6 +662,7 @@ namespace RevivalGuard
                 if (s_Called.Count > 100) s_Called.Clear();
             }
             if (callNow) Say(c, Line(g, rescue ? "duty.rescue" : "duty.callout"));
+            if (callNow && !rescue) TownLife.Notice("raid", Local(m.Location), 120);   // the townsfolk near it go home; one says so
             else if (s_Rng.NextDouble() < 0.6) SayLater(c, 2.0, () => Line(g, "duty.answer"));
             Mod.Log.Info($"[RevivalGuard] HoltburgGuards: {g.Route.Name} guard engages {m.Name} 0x{m.Guid.Full:X8} at {Local(m.Location).X:0},{Local(m.Location).Y:0} ({Vector2.Distance(Local(c.Location), Local(m.Location)):0} m)");
         }

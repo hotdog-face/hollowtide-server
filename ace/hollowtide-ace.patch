@@ -154,9 +154,18 @@ index f07027b6..aacd792d 100644
      }
  }
 diff --git a/Source/ACE.Server/Command/CommandManager.cs b/Source/ACE.Server/Command/CommandManager.cs
-index e2340aee..e501c2de 100644
+index e2340aee..f3133cbe 100644
 --- a/Source/ACE.Server/Command/CommandManager.cs
 +++ b/Source/ACE.Server/Command/CommandManager.cs
+@@ -28,7 +28,7 @@ public static IEnumerable<CommandHandlerInfo> GetCommands()
+ 
+         public static IEnumerable<CommandHandlerInfo> GetCommandByName(string commandname)
+         {
+-            return commandHandlers.Select(p => p.Value).Where(p => p.Attribute.Command == commandname);
++            return commandHandlers.Select(p => p.Value).Where(p => p.Attribute.Command.Equals(commandname, StringComparison.OrdinalIgnoreCase));
+         }
+ 
+         public static CommandHandler GetDelegate(Action<Session, string[]> handler) => (CommandHandler)Delegate.CreateDelegate(typeof(CommandHandler), handler.Method);
 @@ -128,17 +128,48 @@ public static void Initialize()
  
          private static void CommandThread()
@@ -267,6 +276,66 @@ index 2e678809..cd37349e 100644
          // time
          [CommandHandler("time", AccessLevel.Envoy, CommandHandlerFlag.None, 0,
              "Displays the server's current game time.")]
+diff --git a/Source/ACE.Server/Command/Handlers/AdvocateCommands.cs b/Source/ACE.Server/Command/Handlers/AdvocateCommands.cs
+index 3b166c99..9013f75b 100644
+--- a/Source/ACE.Server/Command/Handlers/AdvocateCommands.cs
++++ b/Source/ACE.Server/Command/Handlers/AdvocateCommands.cs
+@@ -134,9 +134,9 @@ public static void HandleRemove(Session session, params string[] parameters)
+                         return;
+                     }
+ 
+-                    if (session.Player.AdvocateLevel < player.AdvocateLevel)
++                    if (session.Player.AdvocateLevel <= player.AdvocateLevel)
+                     {
+-                        session.Network.EnqueueSend(new GameMessageSystemChat($"You cannot remove {playerToFind.Name}'s Advocate status because they out rank you.", ChatMessageType.Broadcast));
++                        session.Network.EnqueueSend(new GameMessageSystemChat($"You cannot remove {playerToFind.Name}'s Advocate status because they are equal to or out rank you.", ChatMessageType.Broadcast));
+                         return;
+                     }
+ 
+diff --git a/Source/ACE.Server/Command/Handlers/HelpCommands.cs b/Source/ACE.Server/Command/Handlers/HelpCommands.cs
+index 7af9a3f2..33bf8253 100644
+--- a/Source/ACE.Server/Command/Handlers/HelpCommands.cs
++++ b/Source/ACE.Server/Command/Handlers/HelpCommands.cs
+@@ -30,7 +30,7 @@ public static void HandleACEHelp(Session session, params string[] parameters)
+                 return;
+             }
+ 
+-            if (parameters?[0] == "commands") // Mimick @help commands command
++            if (string.Equals(parameters?[0], "commands", StringComparison.OrdinalIgnoreCase)) // Mimick @help commands command
+             {
+                 HandleACECommands(session, parameters);
+                 return;
+diff --git a/Source/ACE.Server/Command/Handlers/PlayerCommands.cs b/Source/ACE.Server/Command/Handlers/PlayerCommands.cs
+index 9ff72666..96c59eb7 100644
+--- a/Source/ACE.Server/Command/Handlers/PlayerCommands.cs
++++ b/Source/ACE.Server/Command/Handlers/PlayerCommands.cs
+@@ -144,8 +144,6 @@ public static void HandleHouseSelect(Session session, bool confirmed, params str
+             actionChain.AddDelaySeconds(3.0f);  // wait for slumlord inventory biotas above to save
+             actionChain.AddAction(session.Player, session.Player.HandleActionQueryHouse);
+             actionChain.EnqueueChain();
+-
+-            Console.WriteLine("OK");
+         }
+ 
+         [CommandHandler("debugcast", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, "Shows debug information about the current magic casting state")]
+@@ -419,7 +417,7 @@ public static void HandleReportbug(Session session, params string[] parameters)
+             for (var i = 1; i < parameters.Length; i++)
+                 description += parameters[i] + " ";
+ 
+-            description.Trim();
++            description = description.Trim();
+ 
+             switch (category.ToLower())
+             {
+@@ -454,7 +452,7 @@ public static void HandleReportbug(Session session, params string[] parameters)
+             var w = "";
+             var g = "";
+ 
+-            if (cg == "creature" || cg == "npc"|| cg == "item" || cg == "item")
++            if (cg == "creature" || cg == "npc" || cg == "item")
+             {
+                 var objectId = new ObjectGuid();
+                 if (session.Player.HealthQueryTarget.HasValue || session.Player.ManaQueryTarget.HasValue || session.Player.CurrentAppraisalTarget.HasValue)
 diff --git a/Source/ACE.Server/Entity/SetupResolver.cs b/Source/ACE.Server/Entity/SetupResolver.cs
 new file mode 100644
 index 00000000..565500a4
@@ -1978,6 +2047,29 @@ index cc727018..71fd9498 100644
          public void OnPortal(Creature activator)
          {
              IsBusy = false;
+diff --git a/Source/ACE.Server/WorldObjects/Managers/EnchantmentManager.cs b/Source/ACE.Server/WorldObjects/Managers/EnchantmentManager.cs
+index 1435b6d8..b63e92fa 100644
+--- a/Source/ACE.Server/WorldObjects/Managers/EnchantmentManager.cs
++++ b/Source/ACE.Server/WorldObjects/Managers/EnchantmentManager.cs
+@@ -167,7 +167,7 @@ public virtual AddEnchantmentResult Add(Spell spell, WorldObject caster, WorldOb
+ 
+             if (refreshSpell == null)
+             {
+-                var newEntry = BuildEntry(spell, caster, weapon, equip);
++                var newEntry = BuildEntry(spell, caster, weapon, equip, isWeaponSpell);
+                 newEntry.LayerId = result.NextLayerId;
+                 WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(newEntry, WorldObject.BiotaDatabaseLock);
+ 
+@@ -1405,7 +1405,8 @@ public void ApplyDamageTick(List<PropertiesEnchantmentRegistry> enchantments, Da
+                 if (isDead) break;
+             }
+ 
+-            creature.TakeDamageOverTime(tickAmountTotal, damageType);
++            if (!creature.Invincible)
++                creature.TakeDamageOverTime(tickAmountTotal, damageType);
+ 
+             if (!creature.IsAlive) return;
+ 
 diff --git a/Source/ACE.Server/WorldObjects/Pet.cs b/Source/ACE.Server/WorldObjects/Pet.cs
 index 3c94bd8b..b3fdc767 100644
 --- a/Source/ACE.Server/WorldObjects/Pet.cs
@@ -1998,6 +2090,19 @@ index 3c94bd8b..b3fdc767 100644
              return ProjectileRadiusCache[WeenieClassId] = setup.Spheres[0].Radius * scale;
          }
      }
+diff --git a/Source/ACE.Server/WorldObjects/Player.cs b/Source/ACE.Server/WorldObjects/Player.cs
+index 6fcad700..ef701080 100644
+--- a/Source/ACE.Server/WorldObjects/Player.cs
++++ b/Source/ACE.Server/WorldObjects/Player.cs
+@@ -164,6 +164,8 @@ private void SetEphemeralValues()
+                 }
+                 if (Session.AccessLevel == AccessLevel.Advocate)
+                     IsAdvocate = true;
++                else if (IsAdvocate && !AdvocateQuest)
++                    IsAdvocate = false;
+             }
+ 
+             IsOlthoiPlayer = HeritageGroup == HeritageGroup.Olthoi || HeritageGroup == HeritageGroup.OlthoiAcid;
 diff --git a/Source/ACE.Server/WorldObjects/Player_Character.cs b/Source/ACE.Server/WorldObjects/Player_Character.cs
 index 2ab82407..2b3f08ed 100644
 --- a/Source/ACE.Server/WorldObjects/Player_Character.cs
@@ -2015,7 +2120,7 @@ index 2ab82407..2b3f08ed 100644
              var validHairPalette = ValidateHairPalette(requestedHairPaletteDID, sex.HairColorList);
  
 diff --git a/Source/ACE.Server/WorldObjects/Player_Inventory.cs b/Source/ACE.Server/WorldObjects/Player_Inventory.cs
-index 4c079aff..7a7c3a70 100644
+index 4c079aff..882ea922 100644
 --- a/Source/ACE.Server/WorldObjects/Player_Inventory.cs
 +++ b/Source/ACE.Server/WorldObjects/Player_Inventory.cs
 @@ -2088,7 +2088,7 @@ private WeenieError CheckWieldRequirements(WorldObject item)
@@ -2027,7 +2132,39 @@ index 4c079aff..7a7c3a70 100644
              {
                  if (((item.ValidLocations & (EquipMask.Clothing | EquipMask.Armor)) != 0)
                      && (heritageSpecificArmor == null || (HeritageGroup)heritageSpecificArmor != HeritageGroup))
-@@ -3257,6 +3257,26 @@ public void HandleActionGiveObjectRequest(uint targetGuid, uint itemGuid, int am
+@@ -2541,6 +2541,15 @@ public void HandleActionStackableSplitTo3D(uint stackId, int amount)
+                     return;
+                 }
+ 
++                // We make sure the stack is still valid. It could have changed during our pickup animation
++                if (FindObject(stack.Guid, SearchLocations.MyInventory | SearchLocations.MyEquippedItems, out stackFoundInContainer, out stackRootOwner, out _) != stack || stack.StackSize <= amount)
++                {
++                    log.DebugFormat("Player 0x{0:X8}:{1} tried to split an item that's no longer valid 0x{2:X8}:{3}.", Guid.Full, Name, stack.Guid.Full, stack.Name);
++                    Session.Network.EnqueueSend(new GameEventCommunicationTransientString(Session, "Split failed!")); // Custom error message
++                    Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, stackId, WeenieError.ActionCancelled));
++                    return;
++                }
++
+                 if (!AdjustStack(stack, -amount, stackFoundInContainer, stackRootOwner))
+                 {
+                     Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, stackId, WeenieError.ActionCancelled));
+@@ -3249,6 +3258,15 @@ public void HandleActionGiveObjectRequest(uint targetGuid, uint itemGuid, int am
+                     return;
+                 }
+ 
++                // We make sure the item is still valid. It could have changed during our movement
++                if (FindObject(item.Guid, SearchLocations.MyInventory | SearchLocations.MyEquippedItems, out itemFoundInContainer, out itemRootOwner, out itemWasEquipped) != item || item.StackSize < amount)
++                {
++                    log.DebugFormat("Player 0x{0:X8}:{1} tried to give an item that's no longer valid 0x{2:X8}:{3}.", Guid.Full, Name, item.Guid.Full, item.Name);
++                    Session.Network.EnqueueSend(new GameEventCommunicationTransientString(Session, "Give failed!")); // Custom error message
++                    Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid, WeenieError.ActionCancelled));
++                    return;
++                }
++
+                 if (target is Player targetAsPlayer)
+                     GiveObjectToPlayer(targetAsPlayer, item, itemFoundInContainer, itemRootOwner, itemWasEquipped, amount);
+                 else
+@@ -3257,6 +3275,26 @@ public void HandleActionGiveObjectRequest(uint targetGuid, uint itemGuid, int am
              });    // if player is within UseRadius of moveToTarget, perform rotation?
          }
  
@@ -2124,10 +2261,122 @@ index 28712213..de283c70 100644
                  return;
  
              // The former wielder already knows about this object was removed
+diff --git a/Source/ACE.Server/WorldObjects/Player_Trade.cs b/Source/ACE.Server/WorldObjects/Player_Trade.cs
+index f1f71acf..41da05ab 100644
+--- a/Source/ACE.Server/WorldObjects/Player_Trade.cs
++++ b/Source/ACE.Server/WorldObjects/Player_Trade.cs
+@@ -259,10 +259,16 @@ private void FinalizeTrade(Player target)
+             actionChain.AddAction(CurrentLandblock, () =>
+             {
+                 foreach (var wo in myEscrow)
+-                    TryCreateInInventoryWithNetworking(wo);
++                {
++                    if (!TryCreateInInventoryWithNetworking(wo) && !target.TryCreateInInventoryWithNetworking(wo))
++                        log.WarnFormat("Item 0x{0:X8}:{1} for player {2} lost from FinalizeTrade failure.", wo.Guid.Full, wo.Name, target.Name);
++                }
+ 
+                 foreach (var wo in targetEscrow)
+-                    target.TryCreateInInventoryWithNetworking(wo);
++                {
++                    if (!target.TryCreateInInventoryWithNetworking(wo) && !TryCreateInInventoryWithNetworking(wo))
++                        log.WarnFormat("Item 0x{0:X8}:{1} for player {2} lost from FinalizeTrade failure.", wo.Guid.Full, wo.Name, Name);
++                }
+ 
+                 Session.Network.EnqueueSend(new GameEventWeenieError(Session, WeenieError.TradeComplete));
+                 target.Session.Network.EnqueueSend(new GameEventWeenieError(target.Session, WeenieError.TradeComplete));
+diff --git a/Source/ACE.Server/WorldObjects/Player_Vitals.cs b/Source/ACE.Server/WorldObjects/Player_Vitals.cs
+index b6a23b6d..77070667 100644
+--- a/Source/ACE.Server/WorldObjects/Player_Vitals.cs
++++ b/Source/ACE.Server/WorldObjects/Player_Vitals.cs
+@@ -144,7 +144,7 @@ public override int UpdateVital(CreatureVital vital, int newVal)
+             // check for exhaustion
+             if (vital.Vital == PropertyAttribute2nd.Stamina || vital.Vital == PropertyAttribute2nd.MaxStamina)
+             {
+-                if (newVal == 0)
++                if (vital.Current == 0)
+                 {
+                     OnExhausted();
+                 }
+diff --git a/Source/ACE.Server/WorldObjects/SpellProjectile.cs b/Source/ACE.Server/WorldObjects/SpellProjectile.cs
+index 0ef0c887..3e92a57f 100644
+--- a/Source/ACE.Server/WorldObjects/SpellProjectile.cs
++++ b/Source/ACE.Server/WorldObjects/SpellProjectile.cs
+@@ -380,7 +380,7 @@ public override void OnCollideObject(WorldObject target)
+             var sourcePlayer = source as Player;
+             var targetPlayer = target as Player;
+ 
+-            if (source == null || !target.IsAlive || targetPlayer != null && targetPlayer.Invincible)
++            if (source == null || !target.IsAlive || target.Invincible)
+                 return null;
+ 
+             // check lifestone protection
+@@ -688,7 +688,7 @@ public void DamageTarget(Creature target, float damage, bool critical, bool crit
+         {
+             var targetPlayer = target as Player;
+ 
+-            if (targetPlayer != null && targetPlayer.Invincible || target.IsDead)
++            if (target.Invincible || target.IsDead)
+                 return;
+ 
+             var sourceCreature = ProjectileSource as Creature;
+diff --git a/Source/ACE.Server/WorldObjects/Vendor.cs b/Source/ACE.Server/WorldObjects/Vendor.cs
+index 0ae96861..f9ebcd6f 100644
+--- a/Source/ACE.Server/WorldObjects/Vendor.cs
++++ b/Source/ACE.Server/WorldObjects/Vendor.cs
+@@ -440,6 +440,8 @@ public bool BuyItems_ValidateTransaction(List<ItemProfile> itemProfiles, Player
+             var defaultItemProfiles = new List<ItemProfile>();
+             var uniqueItems = new List<WorldObject>();
+ 
++            var requestedGuids = new HashSet<uint>();
++
+             // find item profiles in default and unique items
+             foreach (var itemProfile in itemProfiles)
+             {
+@@ -450,11 +452,25 @@ public bool BuyItems_ValidateTransaction(List<ItemProfile> itemProfiles, Player
+                     return false;
+                 }
+ 
++                if (!requestedGuids.Add(itemProfile.ObjectGuid))
++                {
++                    log.Warn($"[VENDOR] {player.Name} tried to buy duplicate item {itemProfile.ObjectGuid:X8} from {Name}");
++                    player.SendTransientError($"Invalid item");
++                    return false;
++                }
++
+                 var itemGuid = new ObjectGuid(itemProfile.ObjectGuid);
+ 
+                 // check default items
+                 if (DefaultItemsForSale.TryGetValue(itemGuid, out var defaultItemForSale))
+                 {
++                    // services are not limited by pack space, so only allow one per request
++                    if (itemProfile.Amount > 1 && (defaultItemForSale.GetProperty(PropertyBool.VendorService) ?? false))
++                    {
++                        player.SendTransientError($"Invalid amount");
++                        return false;
++                    }
++
+                     itemProfile.WeenieClassId = defaultItemForSale.WeenieClassId;
+                     itemProfile.Palette = defaultItemForSale.PaletteTemplate;
+                     itemProfile.Shade = defaultItemForSale.Shade;
 diff --git a/Source/ACE.Server/WorldObjects/WorldObject_Magic.cs b/Source/ACE.Server/WorldObjects/WorldObject_Magic.cs
-index 800df982..77773102 100644
+index 800df982..a61a7456 100644
 --- a/Source/ACE.Server/WorldObjects/WorldObject_Magic.cs
 +++ b/Source/ACE.Server/WorldObjects/WorldObject_Magic.cs
+@@ -170,11 +170,11 @@ public bool TryResistSpell(WorldObject target, Spell spell, WorldObject itemCast
+             var player = this as Player;
+             var targetPlayer = target as Player;
+ 
++            if (targetCreature.Invincible)
++                resisted = true;
++
+             if (targetPlayer != null)
+             {
+-                if (targetPlayer.Invincible)
+-                    resisted = true;
+-
+                 if (targetPlayer.UnderLifestoneProtection)
+                 {
+                     targetPlayer.HandleLifestoneProtection();
 @@ -1873,12 +1873,13 @@ private float GetProjectileRadius(Spell spell)
                  return 0.0f;
              }
@@ -2218,3 +2467,16 @@ index a2270d5f..2c05d069 100644
  
          public uint? DefaultScriptId
          {
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 384e14e8..5cf5c225 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -9,7 +9,7 @@ services:
+     volumes:
+       - ./db-data:/var/lib/mysql
+     ports:
+-      - "3306:3306/tcp"
++      - "127.0.0.1:3306:3306/tcp"
+     restart: unless-stopped
+     healthcheck:
+         test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]

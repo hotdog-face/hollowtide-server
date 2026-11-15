@@ -94,7 +94,7 @@ namespace RevivalGuard
                 // Ours from here on: never hand it to ACE, answered or not.
                 ours = true;
                 var now = DateTime.UtcNow;
-                var real = Gateway.RealAddress(endPoint);   // a browser player's own address, not the gateway's loopback
+                var real = Gateway.RealAddressForLimits(endPoint);   // a browser player's own address, not the gateway's loopback
                 string key = real.ToString();
                 bool local = StaffLoginGate.IsLocal(real);
                 if (!local && (!WithinBudget(now) || (s_Seen.Count >= MAX_SEEN && !s_Seen.ContainsKey(key)))) return false;

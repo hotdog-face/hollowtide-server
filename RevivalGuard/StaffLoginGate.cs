@@ -17,11 +17,8 @@ namespace RevivalGuard
 {
     /// <summary>
     /// STAFF ACCOUNTS LOG IN ONLY FROM THE SHARD'S OWN NETWORK, AND PASSWORDS CANNOT BE GUESSED IN BULK.
-    /// Release gate #4 (2026-09-24). Ten accounts on this shard are AccessLevel 5 (an admin account, admin, dev,
-    /// devbot..devbot7), and the dev fleet's convention is password = account name (AcLogin's class
-    /// note). That is fine on a LAN and fatal on a public port: anyone who types "devbot" twice is an
-    /// admin. Rotating every bot's password would break the fleet, so the rule is where the login
-    /// comes from instead:
+    /// Release gate #4 (2026-09-24). A staff password alone is not enough on a public port, so the rule is
+    /// also where the login comes from:
     ///
     ///   * An account above Player logs in only from loopback, RFC 1918 private ranges, Tailscale
     ///     (100.64.0.0/10), IPv6 loopback/link-local/ULA, or an address listed in
@@ -29,6 +26,8 @@ namespace RevivalGuard
     ///     2026-11-03, away from home for about 5 days: staff tell us their current IP and it is added from the OVH
     ///     console with no restart, and removed when they are home). Anywhere else gets the wrong-password
     ///     boot, word for word, so the gate does not confirm that a staff account exists.
+    ///   * A browser login (through the WebSocket gateway, Gateway.cs) is judged by the address the gateway
+    ///     positively gives for it, asked fresh at login; when the gateway cannot give one, the login is never staff.
     ///   * Any address that fails a password FAILS_ALLOWED times inside WINDOW is refused for LOCKOUT
     ///     (ACE's own TO-DO at the mismatch: "temporary lockout ... preventing brute force").
     ///     Loopback and private ranges are exempt, so the fleet cannot lock itself out.
@@ -85,6 +84,12 @@ namespace RevivalGuard
                 string key = addr.ToString();
 
                 if (account == null) return true;   // ACE answers "account does not exist" itself
+
+                // FAIL CLOSED THROUGH THE GATEWAY (security review 2026-11-14, SEC-001): a browser session whose address the
+                // gateway could not positively give is never staff, whatever the allow list says.
+                if (s_GateOn && account.AccessLevel > 0 && Gateway.IsUnknown(addr))
+                    return Refuse(session, $"staff login refused: account '{account.AccountName}' "
+                                         + $"(level {account.AccessLevel}): the browser gateway could not say where it comes from");
 
                 if (s_GateOn && account.AccessLevel > 0 && !local && !s_Allow.Contains(key) && !InLiveAllow(key))
                 {

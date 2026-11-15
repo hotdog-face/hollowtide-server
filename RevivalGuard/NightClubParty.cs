@@ -90,7 +90,7 @@ namespace RevivalGuard
         static Call s_Call;
         static double s_Last, s_NextCall, s_NextFloor;
         static int s_LastDance = -1;
-        static readonly Random s_Rng = new Random();
+        static readonly Random s_Rng = Random.Shared;   // thread-safe: landblocks tick in parallel, and a shared new Random() corrupts under races
 
         static double Now => ACE.Common.Time.GetUnixTime();
         internal static bool Open => SeasonalCalendar.IsFestivalActive("nightclub") || SeasonalCalendar.IsFestivalActive("anniversary");

@@ -228,6 +228,7 @@ namespace RevivalGuard
             var void_ = p.GetCreatureSkill(Skill.VoidMagic);
             bool voidOk = void_ != null && void_.AdvancementClass >= SkillAdvancementClass.Trained;
             bool known = p.QuestManager.HasQuest(STAMP);
+            if (known && npc is Vendor) return;   // she keeps a shop now (VoidScrollGate): a learner just shops, no lesson again
 
             string[] lines;
             bool teach = false;

@@ -12,7 +12,7 @@ namespace RevivalGuard
 {
     /// <summary>
     /// JOKE SCROLLS AS FESTIVAL AND EVENT REWARDS (owner 2026-10-20 chose "Festival/event rewards" after removing Tumble;
-    /// proposal docs/JOKE-SCROLLS-FESTIVALS.md). OFF until he approves: @modifybool rg_joke_scroll_rewards true.
+    /// docs/JOKE-SCROLLS-FESTIVALS.md). ON by default since 2026-11-14 (owner approved); off: @modifybool rg_joke_scroll_rewards false.
     /// No NPC, no world object: the scrolls (gen_joke_spells.py, 901661-901673) arrive two retail-shaped ways.
     ///   1. A creature a player kills while a SeasonalCalendar festival runs may carry its festival's scroll in its
     ///      corpse (SeasonalDrops' shape: festival trophies off ordinary creatures). One roll per kill.
@@ -23,22 +23,11 @@ namespace RevivalGuard
     static class JokeScrollRewards
     {
         internal const string P_ON = "rg_joke_scroll_rewards", P_RATE = "rg_joke_scroll_rate";
-        const uint COW = 901661, PRESENT = 901662, TABLE = 901663, BOVINE = 901664, OLDSCHOOL = 901665;
-        static readonly uint[] BOOM = { 901666, 901667, 901668, 901669, 901670, 901671, 901672, 901673 };   // 8 colours
-        const uint MAD_COW = 23623;   // cowmad, the April Fools' Mad Cow (eventmadcowgen 23631)
+        const uint PRESENT = SeasonalSourcesRule.PRESENT;
+        static readonly uint[] BOOM = SeasonalSourcesRule.BOOM;
+        // the festival table (rates, pools, the Mad Cow rule) is SeasonalSourcesRule.JokeDrops, checked by tools/nettest
 
-        // festival key -> (1 in N kills, the pool one is picked from, only from this creature or 0 = any creature)
-        static readonly (string fest, int oneIn, uint[] pool, uint only)[] s_Festival =
-        {
-            ("festivalseason", 1000, new[] { COW }, 0),                      // the harvest: a cow
-            ("aprilfools", 12, new[] { BOVINE, COW }, MAD_COW),              // raining cows: the Mad Cows only
-            ("frostfell", 1000, new[] { PRESENT }, 0),                       // gift season: a present
-            ("wedding", 500, new[] { TABLE, OLDSCHOOL }, 0),                 // the reception: a table, WeddingBliss fireworks
-            ("anniversary", 200, BOOM.Append(OLDSCHOOL).ToArray(), 0),       // the fireworks week
-            ("newyearsday", 200, BOOM, 0),                                   // fireworks for the new year
-        };
-
-        internal static bool On => PropertyManager.GetBool(P_ON, false).Item;
+        internal static bool On => PropertyManager.GetBool(P_ON, true).Item;   // owner 2026-11-14: on
         static double Rate => Math.Max(0.0, PropertyManager.GetDouble(P_RATE, 1.0).Item);
         static int s_Given;
 
@@ -47,14 +36,14 @@ namespace RevivalGuard
             try
             {
                 var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
-                if (!b.ContainsKey(P_ON)) b[P_ON] = new Property<bool>(false, "RevivalGuard JokeScrollRewards: joke spell scrolls drop during festivals and are handed out when players win a live event (docs/JOKE-SCROLLS-FESTIVALS.md)");
+                if (!b.ContainsKey(P_ON)) b[P_ON] = new Property<bool>(true, "RevivalGuard JokeScrollRewards: joke spell scrolls drop during festivals and are handed out when players win a live event (docs/JOKE-SCROLLS-FESTIVALS.md)");
                 var d = MonsterAi.Inner(DefaultPropertyManager.DefaultDoubleProperties);
                 if (!d.ContainsKey(P_RATE)) d[P_RATE] = new Property<double>(1.0, "RevivalGuard JokeScrollRewards: multiplier on every festival scroll drop chance (tests)");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] JokeScrollRewards: switches not registered ({e.Message}); still read at their defaults"); }
-            foreach (var f in s_Festival)
-                if (!SeasonalCalendar.IsFestivalKey(f.fest)) Mod.Log.Warn($"[RevivalGuard] JokeScrollRewards: no festival '{f.fest}'");
-            Mod.Log.Info($"[RevivalGuard] JokeScrollRewards: {(On ? "ON" : "off")} ({P_ON}); {s_Festival.Length} festivals, event wins");
+            foreach (var f in SeasonalSourcesRule.JokeDrops)
+                if (!SeasonalCalendar.IsFestivalKey(f.Festival)) Mod.Log.Warn($"[RevivalGuard] JokeScrollRewards: no festival '{f.Festival}'");
+            Mod.Log.Info($"[RevivalGuard] JokeScrollRewards: {(On ? "ON" : "off")} ({P_ON}); {SeasonalSourcesRule.JokeDrops.Length} festivals, event wins");
         }
 
         static MethodBase TargetMethod()
@@ -76,19 +65,14 @@ namespace RevivalGuard
             {
                 if (corpse == null || __instance == null || __instance is Player || killer == null || !On) return;
                 if (!(killer.TryGetPetOwnerOrAttacker() is Player player) || Mercenaries.IsMerc(player)) return;
-                foreach (var (fest, oneIn, pool, only) in s_Festival)
-                {
-                    if (only != 0 && __instance.WeenieClassId != only) continue;
-                    if (!SeasonalCalendar.IsFestivalActive(fest)) continue;
-                    if (ThreadSafeRandom.Next(0.0f, 1.0f) >= Rate / oneIn) return;   // one roll per kill
-                    var wcid = pool[ThreadSafeRandom.Next(0, pool.Length - 1)];
-                    var wo = WorldObjectFactory.CreateNewWorldObject(wcid);
-                    if (wo == null) { Mod.Log.Warn($"[RevivalGuard] JokeScrollRewards: weenie {wcid} missing"); return; }
-                    if (!corpse.TryAddToInventory(wo)) { wo.Destroy(); return; }
-                    s_Given++;
-                    Mod.Log.Info($"[RevivalGuard] JokeScrollRewards: {fest}: {wo.Name} in the corpse of {__instance.Name}, killed by {player.Name} ({s_Given} this run)");
-                    return;
-                }
+                var d = SeasonalSourcesRule.JokeDropFor(__instance.WeenieClassId, SeasonalCalendar.IsFestivalActive);
+                if (d == null || ThreadSafeRandom.Next(0.0f, 1.0f) >= SeasonalSourcesRule.JokeChance(d, Rate)) return;   // one roll per kill
+                var wcid = d.Pool[ThreadSafeRandom.Next(0, d.Pool.Length - 1)];
+                var wo = WorldObjectFactory.CreateNewWorldObject(wcid);
+                if (wo == null) { Mod.Log.Warn($"[RevivalGuard] JokeScrollRewards: weenie {wcid} missing"); return; }
+                if (!corpse.TryAddToInventory(wo)) { wo.Destroy(); return; }
+                s_Given++;
+                Mod.Log.Info($"[RevivalGuard] JokeScrollRewards: {d.Festival}: {wo.Name} in the corpse of {__instance.Name}, killed by {player.Name} ({s_Given} this run)");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] JokeScrollRewards: drop: {e.Message}"); }
         }

@@ -27,18 +27,20 @@ namespace RevivalGuard
     ///       arm or the watchdog gets there first, and however many re-check chains were started.
     ///   (d) rg_tele_diag: a WARN at 10 s and 30 s for a pending teleport saying whether packets are being lost, the
     ///       client has stalled, or it is alive and acking but never sent LoginComplete; and a line when a player
-    ///       abandons a pending teleport by logging out.
+    ///       abandons a pending teleport by logging out. A login warns later (rg_tele_diag_login_first_s, 30 s, then 60 s):
+    ///       our client streams the world 10-15 s before LoginComplete.
     /// </summary>
     public static class TeleportArrival
     {
         internal const string P_MOVE = "rg_tele_move_arrive", P_LATCH = "rg_tele_latch", P_DIAG = "rg_tele_diag";
         internal const string P_GRACE = "rg_tele_move_grace_seconds", P_MIN_CM = "rg_tele_move_min_cm", P_WAIT = "rg_tele_arrive_seconds";
-        const long DEF_GRACE = 3, DEF_MIN_CM = 100, DEF_WAIT = 120;
+        internal const string P_LOGIN_FIRST = "rg_tele_diag_login_first_s";
+        const long DEF_GRACE = 3, DEF_MIN_CM = 100, DEF_WAIT = 120, DEF_LOGIN_FIRST = 30;
         const double WARN_FIRST = 10, WARN_SECOND = 30, QUIET = 5;
 
         // Read on the world thread every half second (ProcessPacket runs per packet on the network thread).
         static volatile bool s_Move = true, s_Latch = true, s_Diag = true;
-        static double s_Grace = DEF_GRACE, s_MinMeters = DEF_MIN_CM / 100.0, s_Wait = DEF_WAIT;
+        static double s_Grace = DEF_GRACE, s_MinMeters = DEF_MIN_CM / 100.0, s_Wait = DEF_WAIT, s_LoginFirst = DEF_LOGIN_FIRST;
         static int s_Registered;
 
         /// <summary>(b) TeleportWatchdog's wait for a client that never said its portal space ended.</summary>
@@ -64,13 +66,14 @@ namespace RevivalGuard
             if (Interlocked.Exchange(ref s_Registered, 1) == 1) return;
             ExpansionMotions.RegisterProperty(P_MOVE, true, "RevivalGuard TeleportArrival: a client walking the destination completes a teleport whose LoginComplete never came");
             ExpansionMotions.RegisterProperty(P_LATCH, true, "RevivalGuard TeleportArrival: a teleport's arrival side effects run once, whoever completes it");
-            ExpansionMotions.RegisterProperty(P_DIAG, true, "RevivalGuard TeleportArrival: WARN at 10 s and 30 s for a pending teleport (lost packets / client stall / no LoginComplete)");
+            ExpansionMotions.RegisterProperty(P_DIAG, true, "RevivalGuard TeleportArrival: WARN at 10 s and 30 s for a pending teleport, later for a login (lost packets / client stall / no LoginComplete)");
             try
             {
                 var l = MonsterAi.Inner(DefaultPropertyManager.DefaultLongProperties);
                 void Add(string k, long d, string desc) { if (!l.ContainsKey(k)) l[k] = new Property<long>(d, desc); }
                 Add(P_GRACE, DEF_GRACE, "RevivalGuard TeleportArrival: seconds after a teleport starts before movement can complete it");
                 Add(P_MIN_CM, DEF_MIN_CM, "RevivalGuard TeleportArrival: centimetres the client must have moved from the arrival point (proves it left portal space)");
+                Add(P_LOGIN_FIRST, DEF_LOGIN_FIRST, "RevivalGuard TeleportArrival: seconds before the first pending WARN for a login (second at twice that; teleports stay 10/30)");
                 Add(P_WAIT, DEF_WAIT, "RevivalGuard TeleportWatchdog: seconds a client that never sent LoginComplete is left before the server completes the arrival (min 20)");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] TeleportArrival: long properties not registered ({e.Message}); defaults used"); }
@@ -86,6 +89,7 @@ namespace RevivalGuard
                 s_Grace = Math.Max(0, PropertyManager.GetLong(P_GRACE, DEF_GRACE).Item);
                 s_MinMeters = Math.Max(0, PropertyManager.GetLong(P_MIN_CM, DEF_MIN_CM).Item) / 100.0;
                 s_Wait = PropertyManager.GetLong(P_WAIT, DEF_WAIT).Item;
+                s_LoginFirst = PropertyManager.GetLong(P_LOGIN_FIRST, DEF_LOGIN_FIRST).Item;
             }
             catch { }
         }
@@ -196,7 +200,8 @@ namespace RevivalGuard
                 if (start <= 0) continue;
                 var e = Track(p, start);
                 if (!s_Diag) continue;
-                int due = TeleportArrivalRule.WarnDue(now - start, e.Warned, WARN_FIRST, WARN_SECOND);
+                var (first, second) = TeleportArrivalRule.WarnTimes(p.LoginTimestamp == start, s_LoginFirst, WARN_FIRST, WARN_SECOND);
+                int due = TeleportArrivalRule.WarnDue(now - start, e.Warned, first, second);
                 if (due == 0) continue;
                 e.Warned = due;
                 Mod.Log.Warn($"[RevivalGuard] teleport pending: {Describe(p, e, now)}");

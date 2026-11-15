@@ -54,7 +54,7 @@ namespace RevivalGuard
 
         internal static bool On => SeasonalCalendar.IsFestivalActive(KEY);
         static double Now => ACE.Common.Time.GetUnixTime();
-        static readonly Random s_Rng = new Random();
+        static readonly Random s_Rng = Random.Shared;   // thread-safe: landblocks tick in parallel, and a shared new Random() corrupts under races
 
         internal static void Register()
         {

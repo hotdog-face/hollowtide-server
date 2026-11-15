@@ -42,7 +42,7 @@ namespace RevivalGuard
     ///   @modifybool rg_town_life_speech false   silent life only: no line from the layer (guards' and Azimar's idle lines too)
     ///   @modifystring rg_town_life_off "patron,dwennon"   roles or NPC keys turned off (comma list)
     ///   @modifydouble rg_town_life_line_gap_s 60 | _npc_gap_s 300 | _exchange_gap_s 600 | _talk_m 10 | _greet_gap_s 3600
-    ///                 | _arrival_gap_s 300 | _screen_s 6 | _gesture_minutes 3
+    ///                 | _again_gap_s 60 | _arrival_gap_s 300 | _screen_s 6 | _gesture_minutes 3
     ///   @modifylong rg_town_life_trace 1        every line, routine step and gesture in the server log
     ///   @townlife [status | reload | moment day|evening|night|auto | event raid|pkdeath]   (Developer)
     /// </summary>
@@ -51,9 +51,11 @@ namespace RevivalGuard
         internal const string P_ON = "rg_town_life", P_SPEECH = "rg_town_life_speech", P_OFF = "rg_town_life_off", P_TRACE = "rg_town_life_trace";
         const string P_LINE = "rg_town_life_line_gap_s", P_NPC = "rg_town_life_npc_gap_s", P_EXCH = "rg_town_life_exchange_gap_s",
                      P_TALK = "rg_town_life_talk_m", P_GREET = "rg_town_life_greet_gap_s", P_ARRIVE = "rg_town_life_arrival_gap_s",
-                     P_SCREEN = "rg_town_life_screen_s", P_GESTURE = "rg_town_life_gesture_minutes";
+                     P_SCREEN = "rg_town_life_screen_s", P_GESTURE = "rg_town_life_gesture_minutes",
+                     P_AGAIN = "rg_town_life_again_gap_s";
         const string FILE = "TownLife.json", VISITS = "TownLifeVisits.json";
         const uint LB = 0xA9B4;
+        static readonly string[] AGAIN = { "Again, friend?", "Hello again." };
         const float BUSINESS_M = 4f, GREET_M = 6f, CHAT_M = 6f, EXCHANGE_PAIR_M = 12f;
 
         // ---------------------------------------------------------------- data (TownLife.json)
@@ -112,7 +114,7 @@ namespace RevivalGuard
         static readonly Dictionary<uint, Npc> s_Npcs = new Dictionary<uint, Npc>();
         static DateTime s_Stamp; static double s_NextLoadCheck;
         static readonly Budget s_Budget = new Budget();
-        static readonly Random s_Rng = new Random();
+        static readonly Random s_Rng = Random.Shared;   // thread-safe: landblocks tick in parallel, and a shared new Random() corrupts under races
         static readonly Dictionary<uint, (int count, double last)> s_Visits = new Dictionary<uint, (int, double)>();
         static readonly Dictionary<uint, double> s_Died = new Dictionary<uint, double>();
         static readonly Dictionary<uint, List<string>> s_Heard = new Dictionary<uint, List<string>>();   // player -> lines heard lately
@@ -147,13 +149,16 @@ namespace RevivalGuard
                 Dbl(P_EXCH, L.ExchangeGap, "seconds between two-NPC exchanges a player hears");
                 Dbl(P_TALK, L.TalkRange, "metres: an unprompted line only with a player this close");
                 Dbl(P_GREET, L.GreetGap, "seconds before one NPC greets the same player again");
+                Dbl(P_AGAIN, L.AgainGap, "seconds before one NPC acknowledges the same player's repeat greeting again");
                 Dbl(P_ARRIVE, L.ArrivalGap, "seconds between arrival greetings to one player (whole town)");
                 Dbl(P_SCREEN, L.Screen, "seconds a town line holds a player's screen (another unprompted line is dropped meanwhile)");
                 Dbl(P_GESTURE, 3, "minutes between an NPC's idle gestures (0: no gestures)");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] TownLife: tunables not registered ({e.Message}); read at their defaults"); }
-            CommandManager.TryAddCommand(Cmd, "townlife", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld,
-                "Holtburg's town life: status, reload, force the moment or an event (tests).", "[status | reload | moment day|evening|night|auto | event raid|pkdeath]");
+            CommandManager.TryAddCommand(Cmd, "townlife", AccessLevel.Developer, CommandHandlerFlag.None,
+                "Holtburg's town life: status, reload (the file beside the dll; 'reload embedded' takes the dll's copy over a hand-edited one), force the moment or an event (tests).",
+                "[status | reload | reload embedded | moment day|evening|night|auto | event raid|pkdeath]");
+            SyncSeed(false);
             Load(true);
             LoadVisits();
             Mod.Log.Info($"[RevivalGuard] TownLife: {s_Defs.Count} Holtburg NPCs, {s_Data.Lines.Values.Sum(v => v.Length)} lines, {s_Data.Exchanges.Count} exchanges ({P_ON}, {P_SPEECH}, {P_OFF})");
@@ -163,7 +168,7 @@ namespace RevivalGuard
         {
             var L = s_Budget.L;
             L.LineGap = D(P_LINE, 60); L.NpcGap = D(P_NPC, 300); L.ExchangeGap = D(P_EXCH, 600); L.TalkRange = (float)D(P_TALK, 10);
-            L.GreetGap = D(P_GREET, 3600); L.ArrivalGap = D(P_ARRIVE, 300); L.Screen = D(P_SCREEN, 6);
+            L.GreetGap = D(P_GREET, 3600); L.AgainGap = D(P_AGAIN, 60); L.ArrivalGap = D(P_ARRIVE, 300); L.Screen = D(P_SCREEN, 6);
             L.HearRange = Math.Max(L.TalkRange, 20f);
         }
 
@@ -176,6 +181,71 @@ namespace RevivalGuard
             if (rs == null) return "{}";
             using var rd = new StreamReader(rs);
             return rd.ReadToEnd();
+        }
+
+        // Every TownLife.json shipped before the .seed sidecar (SeedFileRule.Hash of each git version): a sidecar-less
+        // file matching one was never hand-edited, so the newer embedded copy may replace it. Frozen: later versions
+        // are tracked by the sidecar.
+        static readonly string[] s_SeedPast = { "b3e5d0de99a00c26", "7eda957a397af871" };
+        static string SeedSidecar => FilePath + ".seed";
+
+        /// <summary>Bring the file beside the dll up to the embedded copy when it is an untouched older one we wrote
+        /// (SeedFileRule); a hand-edited file is kept with one WARN unless <paramref name="force"/> (@townlife reload
+        /// embedded). The replaced file is kept as TownLife.json.before-&lt;version&gt;. Returns what happened.</summary>
+        static string SyncSeed(bool force)
+        {
+            lock (s_Lock)
+            {
+                try
+                {
+                    var path = FilePath;
+                    var seed = Seed();
+                    var eh = SeedFileRule.Hash(seed);
+                    string dh = File.Exists(path) ? SeedFileRule.Hash(File.ReadAllText(path)) : null;
+                    string wh = null;
+                    try { if (File.Exists(SeedSidecar)) wh = File.ReadAllText(SeedSidecar).Trim(); } catch { }
+                    if (string.IsNullOrEmpty(wh)) wh = null;
+                    var act = SeedFileRule.Decide(dh, eh, wh, s_SeedPast, force);
+                    string msg;
+                    switch (act)
+                    {
+                        case SeedFileRule.Act.UpToDate:
+                            if (wh != eh) File.WriteAllText(SeedSidecar, eh);
+                            msg = $"{FILE} is the embedded version {eh}";
+                            break;
+                        case SeedFileRule.Act.Keep:
+                            msg = $"{FILE} is hand-edited ({dh}); the embedded version {eh} is the one it was written from, kept";
+                            break;
+                        case SeedFileRule.Act.KeepEdited:
+                            msg = $"{FILE} was edited by hand ({dh}) and a newer embedded version {eh} exists: kept the edited file. " +
+                                  "`@townlife reload embedded` (admin panel Server: town data) takes the embedded one, keeping the edit as " +
+                                  Path.GetFileName(SeedFileRule.BackupName(path, eh));
+                            Mod.Log.Warn("[RevivalGuard] TownLife: " + msg);
+                            return msg;
+                        default:   // Write, Update, ForceUpdate
+                            string kept = null;
+                            if (dh != null)
+                            {
+                                kept = SeedFileRule.BackupName(path, eh);
+                                for (int i = 2; File.Exists(kept); i++) kept = SeedFileRule.BackupName(path, eh) + "-" + i;
+                                File.Copy(path, kept);
+                            }
+                            File.WriteAllText(path + ".tmp", seed);
+                            File.Move(path + ".tmp", path, true);
+                            File.WriteAllText(SeedSidecar, eh);
+                            msg = act == SeedFileRule.Act.Write ? $"wrote {FILE} (embedded version {eh})"
+                                : $"{(act == SeedFileRule.Act.ForceUpdate ? "forced" : "updated")} {FILE} {dh} -> embedded version {eh}, the old one kept as {Path.GetFileName(kept)}";
+                            break;
+                    }
+                    Mod.Log.Info("[RevivalGuard] TownLife: " + msg);
+                    return msg;
+                }
+                catch (Exception e)
+                {
+                    Mod.Log.Warn($"[RevivalGuard] TownLife: {FILE} not checked against the embedded copy: {e.Message}");
+                    return "not checked: " + e.Message;
+                }
+            }
         }
 
         static readonly JsonSerializerOptions s_Json = new JsonSerializerOptions
@@ -824,7 +894,8 @@ namespace RevivalGuard
         }
 
         /// <summary>A player spoke in local chat: the nearest town NPC within a few metres (or one named) answers a greeting
-        /// or a keyword. Prompted: not counted against the budget, but once per player per NPC per GreetGap for a greeting.</summary>
+        /// or a keyword. Prompted: not counted against the budget, but once per player per NPC per GreetGap for a greeting; a
+        /// repeat greeting inside it gets a short acknowledgement (greet.again) or, on a busy screen, a nod (Budget.TryAgain).</summary>
         internal static void Heard(Player p, string message)
         {
             if (!On || !Speech || p?.Location == null || p.Location.Landblock != LB || s_Npcs.Count == 0) return;
@@ -846,20 +917,32 @@ namespace RevivalGuard
                 }
             if (best == null) return;
             double now = Now;
+            bool again = false, nodOnly = false;
             if (greet && kw == null)
             {
-                bool ok; lock (s_Lock) ok = s_Budget.TryGreet(best.Obj.Guid.Full, p.Guid.Full, now, false);
-                if (!ok) return;
+                bool ok; No ag = No.Ok;
+                lock (s_Lock)
+                {
+                    ok = s_Budget.TryGreet(best.Obj.Guid.Full, p.Guid.Full, now, false);
+                    if (!ok) ag = s_Budget.TryAgain(best.Obj.Guid.Full, p.Guid.Full, now);
+                }
+                if (!ok)
+                {
+                    if (ag == No.Again) return;
+                    again = true; nodOnly = ag == No.Screen;
+                }
             }
             string line;
             var mo = NowMoment();
-            if (kw == "rumour") line = best.Def.D.Rumours ? Rumour(p, true) : FromPools(best, new[] { "kw.rumour.other" }, p, out _);
+            if (again) line = nodOnly ? null : FromPools(best, new[] { $"npc.{best.Def.D.Key}.again", "greet.again" }, p, out _)
+                ?? AGAIN[s_Rng.Next(AGAIN.Length)];   // a TownLife.json seeded before greet.again existed (the live copy is never re-seeded)
+            else if (kw == "rumour") line = best.Def.D.Rumours ? Rumour(p, true) : FromPools(best, new[] { "kw.rumour.other" }, p, out _);
             else if (kw == "drink") line = FromPools(best, best.Def.D.Role is "barkeeper" or "server" ? new[] { "kw.drink" } : new[] { "kw.drink.other" }, p, out _);
             else if (kw != null) line = FromPools(best, new[] { $"npc.{best.Def.D.Key}.kw.{kw}", "kw." + kw }, p, out _);
             else line = FromPools(best, new[] { $"npc.{best.Def.D.Key}.reply", $"role.{best.Def.D.Role}.reply", "reply." + Key(mo) }, p, out _);
-            if (line == null) return;
+            if (line == null && !again) return;
             var ls = Listeners(best.Obj, s_Budget.L.HearRange, out _);
-            lock (s_Lock) s_Budget.PromptedLine(ls, now);
+            if (line != null) lock (s_Lock) s_Budget.PromptedLine(ls, now);
             var npc = best;
             var chain = new ActionChain();
             chain.AddAction(npc.Obj, () =>
@@ -867,9 +950,13 @@ namespace RevivalGuard
                 try
                 {
                     double turn = npc.R.State == RState.Post || npc.R.State == RState.Paused ? npc.Obj.Rotate(p) : 0;
-                    if (greet && npc.Def.Gestures.Contains(MotionCommand.Wave)) Play(npc, MotionCommand.Wave, turn + 0.1, "answer");
+                    // a repeat hello: a nod, or a wave from an NPC with no nod (box 2026-11-14: a patron without Nod made no sign)
+                    var ack = npc.Def.Gestures.Contains(MotionCommand.Nod) ? MotionCommand.Nod : npc.Def.Gestures.Contains(MotionCommand.Wave) ? MotionCommand.Wave : MotionCommand.Invalid;
+                    if (again && ack != MotionCommand.Invalid) Play(npc, ack, turn + 0.1, "again");
+                    else if (greet && npc.Def.Gestures.Contains(MotionCommand.Wave)) Play(npc, MotionCommand.Wave, turn + 0.1, "answer");
                     else if (npc.Def.Gestures.Contains(MotionCommand.Nod)) Play(npc, MotionCommand.Nod, turn + 0.1, "answer");
-                    SayLater(npc, turn + 0.8, line, ls, "prompted");
+                    if (line != null) SayLater(npc, turn + 0.8, line, ls, again ? "again" : "prompted");
+                    else if (Tracing) Mod.Log.Info($"[RevivalGuard] TownLife again: {npc.Def.D.Key} to {p.Name}: {(ack == MotionCommand.Invalid ? "nothing shown" : ack + " only")} (screen busy)");
                 }
                 catch (Exception e) { TickGuard.Report("TownLife.Heard", e); }
             });
@@ -879,10 +966,15 @@ namespace RevivalGuard
         // ---------------------------------------------------------------- @townlife
         static void Cmd(Session session, params string[] a)
         {
-            void Out(string s) => session?.Network.EnqueueSend(new GameMessageSystemChat(s, ChatMessageType.Broadcast));
+            void Out(string s) { if (session != null) session.Network.EnqueueSend(new GameMessageSystemChat(s, ChatMessageType.Broadcast)); else Mod.Log.Info("[RevivalGuard] @townlife: " + s); }
             try
             {
                 var verb = a.Length > 0 ? a[0].ToLowerInvariant() : "status";
+                if (verb == "reload" && a.Length > 1 && a[1].ToLowerInvariant() == "embedded")
+                {
+                    Out("TownLife: " + SyncSeed(true));
+                    Load(true); ApplyLimits(); Out($"TownLife: read {FILE} ({s_Defs.Count} NPCs)."); return;
+                }
                 if (verb == "reload") { Load(true); ApplyLimits(); Out($"TownLife: read {FILE} ({s_Defs.Count} NPCs)."); return; }
                 if (verb == "moment" && a.Length > 1) { s_ForcedMoment = a[1] == "auto" ? null : a[1]; Out($"TownLife: moment {(s_ForcedMoment ?? "auto")} (now {NowMoment()})."); return; }
                 if (verb == "event" && a.Length > 1)

@@ -30,7 +30,7 @@ namespace RevivalGuard
     {
         static int SHIELD_LEVEL => (int)Tunables.D("newcomer.shield_level", 5);
         const uint COAT_FIRST = 13210, GEM = 49563, OIL = 12711;   // coatacademycolor1..10, ace49563-facilityhubportalgem, oilacademy
-        static readonly Random s_Rng = new Random();
+        static readonly Random s_Rng = Random.Shared;   // thread-safe: landblocks tick in parallel, and a shared new Random() corrupts under races
 
         static bool PkServer => PropertyManager.GetBool("pk_server").Item;
 

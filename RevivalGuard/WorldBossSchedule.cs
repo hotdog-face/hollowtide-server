@@ -155,7 +155,7 @@ namespace RevivalGuard
         static readonly Dictionary<string, string> s_Sig = new Dictionary<string, string>();
         static readonly Dictionary<string, double> s_SpawnTry = new Dictionary<string, double>();
         static readonly Dictionary<string, double> s_Despawned = new Dictionary<string, double>();
-        static readonly Random s_Rng = new Random();
+        static readonly Random s_Rng = Random.Shared;   // thread-safe: landblocks tick in parallel, and a shared new Random() corrupts under races
 
         /// <summary>A short test rhythm set by an admin (@worldboss testschedule), memory only.</summary>
         sealed class TestRhythm { public double Anchor, Every, Lead, Window; }
@@ -510,10 +510,10 @@ namespace RevivalGuard
         static uint Roll(Tier[] table)
         {
             int total = table.Sum(t => t.Weight), r;
-            lock (s_Rng) r = s_Rng.Next(total);
+            r = s_Rng.Next(total);
             foreach (var t in table)
             {
-                if (r < t.Weight) { lock (s_Rng) return t.Items[s_Rng.Next(t.Items.Length)]; }
+                if (r < t.Weight) { return t.Items[s_Rng.Next(t.Items.Length)]; }
                 r -= t.Weight;
             }
             return table[0].Items[0];

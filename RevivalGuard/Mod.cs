@@ -38,81 +38,84 @@ namespace RevivalGuard
         public void Initialize()
         {
             m_Harmony = new Harmony(ID);
-            m_Harmony.PatchAll(typeof(Mod).Assembly);
+            s_Failed.Clear(); s_PatchedClasses = 0;
+            PatchEach();
             // The ticket queue is chat commands, not Harmony patches, so it registers itself rather
-            // than being found by PatchAll. See TicketConsole for why it is commands and not a panel.
-            TicketConsole.Register();
-            AdminOps.Register();
-            PresenceWatch.Register();
-            SeasonalCalendar.Register();
-            AzimarTheme.Register();
-            SeasonalDrops.Validate();
-            LandblockReload.Register();
-            WeenieReload.Register();
-            Broadcast.Register();
-            KeepCharacter.Register();
-            MagicRim.Register();
-            PkDeathLoot.Register();
-            Keyrings.Register();
-            TradeSafe.Register();
-            AuditTrail.Register();
-            CharacterSnapshot.Register();
-            Bestow.Register();
-            SetHeritage.Register();
-            QuestLog.Register();
-            ModChannel.Register();
-            Mail.Register();
-            Broker.Register();
-            TownCrier.Register();        // the Holtburg Town Crier's question desk (rg_crier, off by default)
-            DressingRoom.Register();
-            DiscordBridge.Register();
-            DerethChatHost.Register();   // the cross-server Dereth channel (off without dereth-chat.json)
-            ItemLink.Register();
-            NoticeBoard.Register();      // @noticeboard: the Holtburg board's pages, for a check from anywhere
-            PerfStat.Register();
-            AccountCreationCap.Register();
-            RetailWelcome.Register();
-            DnDefaultOn.Register();      // every player character on the Dereth Network by default, silently (owner 2026-11-11)
-            LoginTokens.Register();
-            PasswordRecovery.Register();
-            LfgBoard.Register();
-            Leaderboards.Register();      // /top: level, XP, luminance, kills, PK, quests (rg_top; Discord post rg_top_discord, on)
-            FeatureBoard.Register();
-            ItemLock.Register();
-            AutoStack.Register();
-            TreeStatsUpload.Register();   // characters on treestats.net (off without treestats.json)
-            RagdollCorpse.Register();
-            Mercenaries.Register();
-            BorgSwitch.Register();        // @borg on|off|status: the Borg's off switch (admin panel)
-            MercKit.Register();
-            Mansions.Register();
-            TrophyMounts.Register();
-            ServerFirsts.Register();
-            MonsterAi.Register();
-            MonsterFun.Register();
-            EventDirector.Register();
-            ScavengerHunt.Register();
-            ExtraDeathLines.Register();
-            HoltburgGuards.Register();    // Holtburg's Royal Guards talk, patrol and fight monsters in town (rg_holtburg_guards)
-            TickContainment.Register();   // one object's tick exception is contained, not the end of the world (rg_tick_containment, @tickfaults)
+            // than being found by PatchEach. See TicketConsole for why it is commands and not a panel.
+            Try(nameof(TicketConsole), TicketConsole.Register);
+            Try(nameof(AdminOps), AdminOps.Register);
+            Try(nameof(PresenceWatch), PresenceWatch.Register);
+            Try(nameof(SeasonalCalendar), SeasonalCalendar.Register);
+            Try(nameof(AzimarTheme), AzimarTheme.Register);
+            Try(nameof(SeasonalDrops), SeasonalDrops.Validate);
+            Try(nameof(LandblockReload), LandblockReload.Register);
+            Try(nameof(WeenieReload), WeenieReload.Register);
+            Try(nameof(Broadcast), Broadcast.Register);
+            Try(nameof(KeepCharacter), KeepCharacter.Register);
+            Try(nameof(MagicRim), MagicRim.Register);
+            Try(nameof(PkDeathLoot), PkDeathLoot.Register);
+            Try(nameof(Keyrings), Keyrings.Register);
+            Try(nameof(TradeSafe), TradeSafe.Register);
+            Try(nameof(AuditTrail), AuditTrail.Register);
+            Try(nameof(CharacterSnapshot), CharacterSnapshot.Register);
+            Try(nameof(Bestow), Bestow.Register);
+            Try(nameof(SetHeritage), SetHeritage.Register);
+            Try(nameof(QuestLog), QuestLog.Register);
+            Try(nameof(ModChannel), ModChannel.Register);
+            Try(nameof(Mail), Mail.Register);
+            Try(nameof(Broker), Broker.Register);
+            Try(nameof(TownCrier), TownCrier.Register);        // the Holtburg Town Crier's question desk (rg_crier, off by default)
+            Try(nameof(DressingRoom), DressingRoom.Register);
+            Try(nameof(DiscordBridge), DiscordBridge.Register);
+            Try(nameof(DerethChatHost), DerethChatHost.Register);   // the cross-server Dereth channel (off without dereth-chat.json)
+            Try(nameof(ItemLink), ItemLink.Register);
+            Try(nameof(NoticeBoard), NoticeBoard.Register);      // @noticeboard: the Holtburg board's pages, for a check from anywhere
+            Try(nameof(PerfStat), PerfStat.Register);
+            Try(nameof(AccountCreationCap), AccountCreationCap.Register);
+            Try(nameof(RetailWelcome), RetailWelcome.Register);
+            Try(nameof(DnDefaultOn), DnDefaultOn.Register);      // every player character on the Dereth Network by default, silently (owner 2026-11-11)
+            Try(nameof(LoginTokens), LoginTokens.Register);
+            Try(nameof(PasswordRecovery), PasswordRecovery.Register);
+            Try(nameof(LfgBoard), LfgBoard.Register);
+            Try(nameof(Leaderboards), Leaderboards.Register);      // /top: level, XP, luminance, kills, PK, quests (rg_top; Discord post rg_top_discord, on)
+            Try(nameof(FeatureBoard), FeatureBoard.Register);
+            Try(nameof(ItemLock), ItemLock.Register);
+            Try(nameof(AutoStack), AutoStack.Register);
+            Try(nameof(TreeStatsUpload), TreeStatsUpload.Register);   // characters on treestats.net (off without treestats.json)
+            Try(nameof(RagdollCorpse), RagdollCorpse.Register);
+            Try(nameof(Mercenaries), Mercenaries.Register);
+            Try(nameof(BorgSwitch), BorgSwitch.Register);        // @borg on|off|status: the Borg's off switch (admin panel)
+            Try(nameof(MercKit), MercKit.Register);
+            Try(nameof(Mansions), Mansions.Register);
+            Try(nameof(TrophyMounts), TrophyMounts.Register);
+            Try(nameof(ServerFirsts), ServerFirsts.Register);
+            Try(nameof(MonsterAi), MonsterAi.Register);
+            Try(nameof(MonsterFun), MonsterFun.Register);
+            Try(nameof(EventDirector), EventDirector.Register);
+            Try(nameof(ScavengerHunt), ScavengerHunt.Register);
+            Try(nameof(ExtraDeathLines), ExtraDeathLines.Register);
+            Try(nameof(HoltburgGuards), HoltburgGuards.Register);    // Holtburg's Royal Guards talk, patrol and fight monsters in town (rg_holtburg_guards)
+            Try(nameof(TickContainment), TickContainment.Register);   // one object's tick exception is contained, not the end of the world (rg_tick_containment, @tickfaults)
             // The PK expansion (docs/PK-EXPANSION.md): every part off until its property is set.
-            PkCommon.RegisterProperties();
-            PkRenown.Register();
-            PkBounty.Register();
-            PkShrines.Register();
-            PkBoard.Register();
-            PkNight.Register();           // Sunday 7 PM Pacific, hold the spot (rg_pk_night, off by default)
+            Try(nameof(PkCommon), PkCommon.RegisterProperties);
+            Try(nameof(PkRenown), PkRenown.Register);
+            Try(nameof(PkBounty), PkBounty.Register);
+            Try(nameof(PkShrines), PkShrines.Register);
+            Try(nameof(PkBoard), PkBoard.Register);
+            Try(nameof(PkNight), PkNight.Register);           // Sunday 7 PM Pacific, hold the spot (rg_pk_night, off by default)
             // Harmony-only guards with a switch read at its default: registered so @modifybool can turn them off on a
             // shard that has never stored the key (ACE answers "Unknown bool property" otherwise; review 2026-11-10).
-            MoveGuard.Register();         // rg_moveguard_mode 0 off / 1 log (default) / 2 enforce; rg_moveguard_staff
-            MeleeLatchGuard.Register();   // rg_melee_latch_mode 0 off / 1 log (default) / 2 finish
-            PkCommon.RegisterBool(HoltburgOnly.P_ON, true, "RevivalGuard HoltburgOnly: every new character starts in Holtburg whatever town the client asked for (false: the client's town)");
-            PkCommon.RegisterBool(GroundSettle.P_ON, true, "RevivalGuard GroundSettle: an at-rest PK body ACE left off the ground is ticked so it lands (false: ACE)");
-            PkCommon.RegisterBool(LostObjectResend.P_ON, true, "RevivalGuard LostObjectResend: a retail client asking for a monster it lost (0xF6EA) is sent the whole object again (false: ACE, appearance only)");
+            Try(nameof(MoveGuard), MoveGuard.Register);         // rg_moveguard_mode 0 off / 1 log (default) / 2 enforce; rg_moveguard_staff
+            Try(nameof(MeleeLatchGuard), MeleeLatchGuard.Register);   // rg_melee_latch_mode 0 off / 1 log (default) / 2 finish
+            Try(nameof(HoltburgOnly), () => PkCommon.RegisterBool(HoltburgOnly.P_ON, true, "RevivalGuard HoltburgOnly: every new character starts in Holtburg whatever town the client asked for (false: the client's town)"));
+            Try(nameof(GroundSettle), () => PkCommon.RegisterBool(GroundSettle.P_ON, true, "RevivalGuard GroundSettle: an at-rest PK body ACE left off the ground is ticked so it lands (false: ACE)"));
+            Try(nameof(LostObjectResend), () => PkCommon.RegisterBool(LostObjectResend.P_ON, true, "RevivalGuard LostObjectResend: a retail client asking for a monster it lost (0xF6EA) is sent the whole object again (false: ACE, appearance only)"));
             try { Log.Info($"[RevivalGuard] PK expansion: renown {(PkRenown.On ? "ON" : "off")}, bounties {(PkBounty.On ? "ON" : "off")}, shrines {(PkShrines.On ? "ON" : "off")}, PK Night {(PkNight.On ? "ON" : "off")}"); }
             catch (Exception e) { Log.Warn($"[RevivalGuard] PK expansion: properties not readable yet ({e.Message})"); }
             try { NameGuard.LoadNow(); } catch (Exception e) { Log.Error($"[RevivalGuard] NameGuard: {e.Message}"); }   // says at start how many names are protected
             try { Log.Info($"[RevivalGuard] moveguard: {(MoveGuard.Mode == MoveGuardRule.ENFORCE ? "ENFORCE" : MoveGuard.Mode == MoveGuardRule.LOG ? "log only" : "off")} (rg_moveguard_mode)"); } catch { }
+            Log.Info($"[RevivalGuard] patched {s_PatchedClasses} Harmony classes; "
+                + (s_Failed.Count == 0 ? "no part failed" : $"{s_Failed.Count} part(s) OFF after a failure (each its own ERROR above): {string.Join(", ", s_Failed)}; everything else is on"));
             Log.Info("[RevivalGuard] loaded: movement (and the moveguard path check), vendor, fellowship, flood and chat guards, "
                 + "the ticket desk (@tickets / @ticket), presence (@who / @stuck), the seasonal "
                 + "calendar (@festival) and its seasonal drops (SeasonalDrops), the teleport watchdog and completion rescue, chess "
@@ -125,6 +128,62 @@ namespace RevivalGuard
                 + "spend a key per unlock (Keyrings), the audit trail on disk and in game (@audit), and character "
                 + "snapshots with a confirmed restore (@snapshot), and bonded items into an offline "
                 + "character's pack (@bestow), and the looking-for-group board (@lfgboard), and the feature request board (@features), and locked items (@lockitem / @unlockitem), and cell furniture taken out of the world (HiddenCellStatics), and no house purchase waits for dev accounts (DevHousing), and the allegiance hall: bank, hall board, hall portal, lawn corpses, kill board and raid alarm (/mansion), and ragdoll corpses where the body lands (@ragdollcorpse), and the login screen's population count on the login port (PopulationQuery), and combat pets that only pick targets in line of sight (PetLos, pet_los_targets), and dyes that take only on clothing whose art has the colour (DyeArt, dye_by_art), and hovering NPCs reported lower than their physics (HoverDrop, hover_drop), and generator spawns placed in the air dropped to the ground (SpawnGround, rg_spawn_ground), and monsters ACE sends home sent as a teleport (ForceHomeStamp, rg_forcehome_stamp), and town NPCs that keep one face across landblock reloads (NpcFaceStable, rg_npc_face_stable), and Azimar greeting players by name, level, hour and visit, with paced blessings (AzimarVoice, azimar_voice), and every new character starting in Holtburg whatever town the client asked for (HoltburgOnly, rg_holtburg_only), and Holtburg's Royal Guards talking, patrolling and keeping the town (HoltburgGuards, rg_holtburg_guards), and Holtburg's townsfolk going about their day, mostly in silence, under one speech budget (TownLife, rg_town_life), and one object's or player's tick exception contained instead of stopping the server (TickContainment, rg_tick_containment " + (TickContainment.On ? "ON" : "off") + ", @tickfaults)");
+        }
+
+        // ---- one failure loses one feature, not the mod (assessment 2026-11: a single PatchAll lost every guard on 2026-09-22) ----
+        //
+        // ROLLBACK CHOICE: each failure is logged at ERROR, and the nightly restart (tools/public-shard/nightly-restart.sh,
+        // RG_BAD) and stage-mod.sh's box test roll back / refuse a staged mod on any "ERROR: [RevivalGuard]" line. That is
+        // kept on purpose: a new dll that loses a guard against the ACE it will run on is a regression, and yesterday's dll
+        // is the safer one. What changes is the worst case: if the old dll fails the same patch too (ACE moved underneath
+        // both), it now still loads with everything else on, instead of the shard running with no guards at all.
+        static readonly List<string> s_Failed = new List<string>();
+        static int s_PatchedClasses;
+
+        /// <summary>PatchAll, one [HarmonyPatch] class at a time. A class that throws (a renamed or ambiguous ACE target) is
+        /// logged and its own partly-applied patches are taken off again, so no feature runs half-patched.</summary>
+        void PatchEach()
+        {
+            foreach (var type in AccessTools.GetTypesFromAssembly(typeof(Mod).Assembly))
+            {
+                if (!type.IsDefined(typeof(HarmonyPatch), false)) continue;
+                try { m_Harmony.CreateClassProcessor(type).Patch(); s_PatchedClasses++; }
+                catch (Exception e)
+                {
+                    int undone = UnpatchClass(type);
+                    s_Failed.Add(type.Name);
+                    Log.Error($"[RevivalGuard] patch class {type.FullName} FAILED and is OFF ({undone} partial patch(es) undone; the rest of "
+                        + $"RevivalGuard loads; a staged mod is rolled back on this line): {(e.InnerException ?? e).Message}");
+                }
+            }
+        }
+
+        int UnpatchClass(Type type)
+        {
+            int n = 0;
+            try
+            {
+                foreach (var original in m_Harmony.GetPatchedMethods().ToList())
+                {
+                    var info = Harmony.GetPatchInfo(original);
+                    if (info == null) continue;
+                    foreach (var p in info.Prefixes.Concat(info.Postfixes).Concat(info.Transpilers).Concat(info.Finalizers))
+                        if (p.owner == ID && p.PatchMethod.DeclaringType == type) { m_Harmony.Unpatch(original, p.PatchMethod); n++; }
+                }
+            }
+            catch (Exception e) { Log.Warn($"[RevivalGuard] undoing {type.Name}'s partial patches: {e.Message}"); }
+            return n;
+        }
+
+        /// <summary>One Register()/setup call: a throw is one ERROR naming the part, and the rest carries on.</summary>
+        static void Try(string part, Action register)
+        {
+            try { register(); }
+            catch (Exception e)
+            {
+                s_Failed.Add(part);
+                Log.Error($"[RevivalGuard] {part} failed to register and is OFF (the rest of RevivalGuard loads; a staged mod is rolled back on this line): {e.Message}");
+            }
         }
 
         public void Dispose()

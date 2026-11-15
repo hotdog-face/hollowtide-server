@@ -1,5 +1,5 @@
 {
-  "_": "Holtburg's town life (RevivalGuard TownLife.cs, TownLifeRule.cs; docs/findings/holtburg-town-life-2026-11-14.md). The copy beside the mod dll on the shard is the live one: edit it there and it is read again within a minute; no restart. Turbine voice (docs/outreach/VOICE.md): plain ASCII, no em dashes, nothing modern. Points are [x, y, z, cell] in A9B4 metres, cell 'out' or the interior cell (low hex); every leg is checked by tools/townlife/check_legs.py before it ships. A post must match where the NPC really stands (2 m) or its rounds are off. Tokens: {name} {visits} {level} {title} {chronicle}.",
+  "_": "Holtburg's town life (RevivalGuard TownLife.cs, TownLifeRule.cs; docs/findings/holtburg-town-life-2026-11-14.md). The copy beside the mod dll on the shard is the live one: edit it there and it is read again within a minute; no restart. A newer copy built into the mod replaces it at start only if it was not edited here (the old one is kept as TownLife.json.before-<version>); an edited file is kept with a WARN until @townlife reload embedded (admin panel Server: town data). Turbine voice (docs/outreach/VOICE.md): plain ASCII, no em dashes, nothing modern. Points are [x, y, z, cell] in A9B4 metres, cell 'out' or the interior cell (low hex); every leg is checked by tools/townlife/check_legs.py before it ships. A post must match where the NPC really stands (2 m) or its rounds are off. Tokens: {name} {visits} {level} {title} {chronicle}.",
   "town": "Holtburg",
   "landblock": "A9B4",
   "npcs": [
@@ -337,6 +337,12 @@
     "greet.died": [
       "You have the lifestone's chill on you, {name}. Sit a while.",
       "Back from the lifestone, {name}? Happens to the best of us."
+    ],
+    "greet.again": [
+      "Again, friend?",
+      "Hello again.",
+      "Still here, {name}?",
+      "Yes, hello to you too."
     ],
     "greet.day": [ "Good day, {name}." ],
     "greet.evening": [ "Good evening, {name}." ],

@@ -48,7 +48,7 @@ namespace RevivalGuard
     {
         internal static bool On => SeasonalCalendar.IsFestivalActive(TthuunRaidsRule.FESTIVAL);
         static double Now => ACE.Common.Time.GetUnixTime();
-        static readonly Random s_Rng = new Random();
+        static readonly Random s_Rng = Random.Shared;   // thread-safe: landblocks tick in parallel, and a shared new Random() corrupts under races
         const float SITE_R = 150f;      // metres round the site's centre: its defenders and its spawn
         const float SCATTER_R = 15f;    // the later waves' scatter round the centre
         const int SPARK_S = 180;        // wiki: "Disappears after about 3 minutes"

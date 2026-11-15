@@ -97,7 +97,7 @@ namespace RevivalGuard
         static readonly Dictionary<uint, double> s_GivenUp = new Dictionary<uint, double>();   // monster -> fight given up (left alone GIVE_UP_FOR)
         const double GIVE_UP_FOR = 300;
         static double s_NextHoldLog, s_LastLine = -1e9, s_LastDeparture = -1e9, s_LastVictory = -1e9, s_NextScan;
-        static readonly Random s_Rng = new Random();
+        static readonly Random s_Rng = Random.Shared;   // thread-safe: landblocks tick in parallel, and a shared new Random() corrupts under races
         static MethodInfo s_Wield;
 
         internal static bool On { get { try { return PropertyManager.GetBool(P_ON, true).Item; } catch { return false; } } }

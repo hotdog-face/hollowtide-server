@@ -28,7 +28,7 @@
     <EmbeddedResource Include="RetailOutfits.json" LogicalName="RevivalGuard.RetailOutfits.json" />
     <!-- The Holtburg Notice Board's starting words (NoticeBoard), written beside the dll on first read and edited there. -->
     <EmbeddedResource Include="NoticeBoard.json" LogicalName="RevivalGuard.NoticeBoard.json" />
-    <!-- Holtburg town life: roster, rounds, lines (TownLife), seeded beside the dll on first start; that copy is the live one. -->
+    <!-- Holtburg town life: roster, rounds, lines (TownLife), seeded beside the dll; that copy is the live one, replaced by a newer embedded one unless hand-edited (SeedFileRule). -->
     <EmbeddedResource Include="TownLife.json" LogicalName="RevivalGuard.TownLife.json" />
   </ItemGroup>
 </Project>

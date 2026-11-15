@@ -1,3 +1,5 @@
+using System;
+
 namespace RevivalGuard
 {
     /// <summary>TeleportArrival's and TeleportWatchdog's decisions, pure (no ACE types), so tools/nettest compiles and
@@ -40,6 +42,16 @@ namespace RevivalGuard
             if (warned < 2 && age >= second) return 2;
             if (warned < 1 && age >= first) return 1;
             return 0;
+        }
+
+        /// <summary>(d) The two warning times for this pending teleport. A login waits longer: our client streams the
+        /// world for 10-15 s before it sends LoginComplete, so a login warned at 10 s is a normal load (22 of 27 WARNs
+        /// after a live restart). Login: <paramref name="loginFirst"/> s and twice that, never under the teleport times.</summary>
+        public static (double first, double second) WarnTimes(bool login, double loginFirst, double first = 10, double second = 30)
+        {
+            if (!login) return (first, second);
+            double f = loginFirst < first ? first : loginFirst;
+            return (f, Math.Max(second, 2 * f));
         }
 
         public const string Stall = "client-stall", LostPackets = "lost-packets", NoLoginComplete = "no-logincomplete";

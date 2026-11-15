@@ -41,12 +41,14 @@ namespace RevivalGuard
         //   - a two-NPC exchange counts as one line and is rarer still (ExchangeGap per listener);
         //   - prompted lines (a Use, a greeting or keyword aimed at the NPC, a greeting by name on arrival) do not count,
         //     but a greeting comes once per player per NPC per GreetGap, an arrival greeting once per ArrivalGap per player;
+        //   - a repeat greeting inside GreetGap gets a short acknowledgement (or only a nod when the player's screen is busy),
+        //     once per AgainGap per player per NPC, so a second hello is never met with silence;
         //   - an event (raid, PK death, level-up) is answered by one NPC at most;
         //   - one line on a player's screen at a time: an unprompted line finding a listener's screen busy is dropped, never queued.
         // =====================================================================================================
         public sealed class Limits
         {
-            public double LineGap = 60, NpcGap = 300, ExchangeGap = 600, GreetGap = 3600, ArrivalGap = 300, Screen = 6, EventWindow = 120;
+            public double LineGap = 60, NpcGap = 300, ExchangeGap = 600, GreetGap = 3600, AgainGap = 60, ArrivalGap = 300, Screen = 6, EventWindow = 120;
             public float TalkRange = 10, HearRange = 20;
         }
 
@@ -56,7 +58,7 @@ namespace RevivalGuard
             public Listener(uint id, float dist) { Id = id; Dist = dist; }
         }
 
-        public enum No { Ok, NoListener, NpcGap, PlayerGap, ExchangeGap, Screen, Greeted, Arrival }
+        public enum No { Ok, NoListener, NpcGap, PlayerGap, ExchangeGap, Screen, Greeted, Arrival, Again }
 
         public sealed class Budget
         {
@@ -67,6 +69,7 @@ namespace RevivalGuard
             readonly Dictionary<uint, double> m_Npc = new Dictionary<uint, double>();        // npc -> last unprompted line
             readonly Dictionary<uint, double> m_Arrival = new Dictionary<uint, double>();    // player -> last arrival greeting
             readonly Dictionary<(uint npc, uint player), double> m_Greeted = new Dictionary<(uint, uint), double>();
+            readonly Dictionary<(uint npc, uint player), double> m_Again = new Dictionary<(uint, uint), double>();
             readonly Dictionary<string, double> m_Events = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             public int Unprompted, Exchanges, Prompted, Dropped;   // counters (trace, @townlife status)
 
@@ -147,6 +150,22 @@ namespace RevivalGuard
                 return true;
             }
 
+            /// <summary>A prompted repeat greeting (TryGreet said Greeted): Ok = a short acknowledgement line; Screen = the
+            /// player's screen holds a town line, so only a nod (one line on screen at a time); Again = acknowledged within
+            /// AgainGap already, nothing. Ok and Screen both start the AgainGap.</summary>
+            public No CheckAgain(uint npc, uint player, double now)
+            {
+                if (m_Again.TryGetValue((npc, player), out var t) && now - t < L.AgainGap) return No.Again;
+                return ScreenFree(player, now) ? No.Ok : No.Screen;
+            }
+
+            public No TryAgain(uint npc, uint player, double now)
+            {
+                var r = CheckAgain(npc, player, now);
+                if (r != No.Again) m_Again[(npc, player)] = now;
+                return r;
+            }
+
             /// <summary>An event (a raid, a PK death, a level-up) is answered by one NPC: the first to claim it within the window.</summary>
             public bool ClaimEvent(string key, double now)
             {
@@ -163,6 +182,9 @@ namespace RevivalGuard
                 var old = new List<(uint, uint)>();
                 foreach (var kv in m_Greeted) if (now - kv.Value > L.GreetGap) old.Add(kv.Key);
                 foreach (var k in old) m_Greeted.Remove(k);
+                old.Clear();
+                foreach (var kv in m_Again) if (now - kv.Value > L.AgainGap) old.Add(kv.Key);
+                foreach (var k in old) m_Again.Remove(k);
                 var oe = new List<string>();
                 foreach (var kv in m_Events) if (now - kv.Value > L.EventWindow) oe.Add(kv.Key);
                 foreach (var k in oe) m_Events.Remove(k);

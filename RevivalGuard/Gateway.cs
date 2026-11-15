@@ -16,16 +16,16 @@ namespace RevivalGuard
     /// and the account query's rate limit exempt it. Through the gateway that trust would extend to anyone.
     ///
     /// So a loopback endpoint is asked about: the gateway answers GET /who?port=N (loopback only) with the
-    /// address of the player behind its UDP port N, and every check here uses that address instead. A loopback
-    /// endpoint the gateway does not know (a client on this machine, the fleet) stays loopback. Answers are
-    /// cached for the life of the port; a gateway that does not answer within 500 ms leaves the address as it
-    /// was, which for a browser session means NOT trusted: <see cref="RealAddress"/> returns a marker address
-    /// outside every local range when the gateway is configured and silent, so a failure fails closed.
+    /// address of the player behind its UDP port N, and every check here uses that address instead. The decision
+    /// table is GatewayAddressRule (pure, unit-tested in tools/nettest): it FAILS CLOSED (security review
+    /// 2026-11-14, SEC-001): a loopback endpoint stays local only when no gateway runs here or a version-2 gateway
+    /// is sure the port is not its own; anything else that is not a positive address is UNKNOWN (not trusted).
     ///
-    /// The gateway is asked at http://127.0.0.1:9080 (REVIVAL_GATEWAY to move it, "off" to never ask). No
-    /// gateway running (the connection refused) means nobody can be on one, so a loopback client stays local;
-    /// a gateway that answers 404 for a port says that client is not one of its players; only a gateway that
-    /// is up and fails to answer makes the session UNKNOWN (not trusted).
+    /// No answer is cached for trust decisions. <see cref="RealAddress"/> always asks; the packet-thread rate
+    /// limits use <see cref="RealAddressForLimits"/>, whose port-keyed cache holds only positive OUTSIDE answers
+    /// for a few seconds, so a port the gateway hands to the next browser session never inherits local trust.
+    ///
+    /// The gateway is asked at http://127.0.0.1:9080 (REVIVAL_GATEWAY to move it, "off" to never ask).
     /// </summary>
     static class Gateway
     {
@@ -38,44 +38,60 @@ namespace RevivalGuard
         }
         static readonly HttpClient s_Http = new HttpClient { Timeout = TimeSpan.FromMilliseconds(500) };
         static readonly ConcurrentDictionary<int, (IPAddress addr, DateTime at)> s_Cache = new ConcurrentDictionary<int, (IPAddress, DateTime)>();
-        static readonly TimeSpan CACHE = TimeSpan.FromMinutes(10);
-
-        /// <summary>192.0.2.1 (TEST-NET-1): "a browser player whose address the gateway could not give". Not
-        /// local, so nothing trusts it; shared, so the per-address limits fall on all such sessions together.</summary>
-        static readonly IPAddress UNKNOWN = IPAddress.Parse("192.0.2.1");
+        const int CACHE_MAX = 4096;
 
         /// <summary>Is this the "gateway could not say" marker?</summary>
-        internal static bool IsUnknown(IPAddress a) => a != null && a.Equals(UNKNOWN);
+        internal static bool IsUnknown(IPAddress a) => a != null && a.Equals(GatewayAddressRule.UNKNOWN);
 
-        /// <summary>The address to judge this endpoint by.</summary>
+        /// <summary>The address to judge this endpoint by, asked now (never cached): every trust decision.</summary>
         internal static IPAddress RealAddress(IPEndPoint ep)
         {
             if (ep == null) return null;
-            var a = ep.Address.IsIPv4MappedToIPv6 ? ep.Address.MapToIPv4() : ep.Address;
-            if (s_Url == null || !IPAddress.IsLoopback(a)) return ep.Address;
-            if (s_Cache.TryGetValue(ep.Port, out var hit) && DateTime.UtcNow - hit.at < CACHE) return hit.addr;
-            IPAddress real;
+            if (!GatewayAddressRule.NeedsAsking(ep.Address, s_Url != null)) return ep.Address;
+            return Ask(ep);
+        }
+
+        /// <summary>The same, for the unauthenticated packet-thread rate limits (AccountQuery, PasswordRecovery):
+        /// a positive outside answer is reused for a few seconds. Never use it to grant trust.</summary>
+        internal static IPAddress RealAddressForLimits(IPEndPoint ep)
+        {
+            if (ep == null) return null;
+            if (!GatewayAddressRule.NeedsAsking(ep.Address, s_Url != null)) return ep.Address;
+            var now = DateTime.UtcNow;
+            if (s_Cache.TryGetValue(ep.Port, out var hit) && GatewayAddressRule.Fresh(hit.at, now)) return hit.addr;
+            var real = Ask(ep);
+            if (GatewayAddressRule.Cacheable(ep.Address, real, StaffLoginGate.IsLocal(real)))
+            {
+                if (s_Cache.Count >= CACHE_MAX)
+                    foreach (var kv in s_Cache)
+                        if (!GatewayAddressRule.Fresh(kv.Value.at, now)) s_Cache.TryRemove(kv.Key, out _);
+                if (s_Cache.Count < CACHE_MAX) s_Cache[ep.Port] = (real, now);
+            }
+            else s_Cache.TryRemove(ep.Port, out _);
+            return real;
+        }
+
+        static IPAddress Ask(IPEndPoint ep)
+        {
             try
             {
-                var r = s_Http.GetAsync($"{s_Url}/who?port={ep.Port}").GetAwaiter().GetResult();
-                if (r.StatusCode == HttpStatusCode.NotFound) real = ep.Address;   // not a gateway port: a local client
-                else
-                {
-                    string body = r.Content.ReadAsStringAsync().GetAwaiter().GetResult().Trim();
-                    real = r.IsSuccessStatusCode && IPAddress.TryParse(body, out var p) ? p : UNKNOWN;
-                }
+                using var r = s_Http.GetAsync($"{s_Url}/who?port={ep.Port}").GetAwaiter().GetResult();
+                string version = r.Headers.TryGetValues(GatewayAddressRule.VERSION_HEADER, out var vs) ? string.Join(",", vs) : null;
+                string body = r.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                var real = GatewayAddressRule.Decide(ep.Address, GatewayAddressRule.Reply.Answered, (int)r.StatusCode, version, body);
+                if (IsUnknown(real))
+                    Mod.Log.Warn($"[RevivalGuard] gateway could not say who is on port {ep.Port} (HTTP {(int)r.StatusCode}, who-version {version ?? "none"}); not trusting it");
+                return real;
             }
             catch (Exception e) when (Refused(e))
             {
-                real = ep.Address;   // no gateway on this machine: nobody can have come through one
+                return GatewayAddressRule.Decide(ep.Address, GatewayAddressRule.Reply.Refused);
             }
             catch (Exception e)
             {
                 Mod.Log.Warn($"[RevivalGuard] gateway did not say who is on port {ep.Port} ({e.Message}); not trusting it");
-                real = UNKNOWN;
+                return GatewayAddressRule.Decide(ep.Address, GatewayAddressRule.Reply.Failed);
             }
-            s_Cache[ep.Port] = (real, DateTime.UtcNow);
-            return real;
         }
 
         static bool Refused(Exception e)

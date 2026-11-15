@@ -6,6 +6,8 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using ACE.Database;
 using ACE.Database.Models.Auth;
 using ACE.Entity.Enum;
@@ -31,7 +33,7 @@ namespace RevivalGuard
     ///                                                                      and a real request look the same)
     ///   'HTRP' claim(16)                                  ->  'HTRB' status [password]
     ///                                                        status 0 unknown, 1 waiting, 2 approved, 3 declined
-    /// Limits per address (none for the shard's own network, StaffLoginGate.IsLocal): REQ_PER_DAY requests a day, one
+    /// Limits per address (none for the shard's own network, StaffLoginGate.IsLocal): REQ_PER_DAY requests a day (and GLOBAL_PER_MINUTE stored outside requests a minute in all, MAX_OPEN open), one
     /// poll per POLL_GAP. Staff: @pwreq next | approve | decline | list (Admin), the admin panel's buttons; approve and
     /// decline act on the request that staff session last saw with next, so nobody types an id or a password.
     /// The claim code is stored only as its SHA-256; the temporary password stays until TEMP_KEEP after approval.
@@ -44,6 +46,13 @@ namespace RevivalGuard
         internal const uint POLL_Q = 0x50525448, POLL_A = 0x42525448;   // "HTRP" / "HTRB"
         internal const string REPLY = "[PwReq] ";
         const int CLAIM = 16, MAX_NAME = 50, MAX_NOTE = 300, REQ_PER_DAY = 3;
+        // BOUNDS FOR THE UNAUTHENTICATED PATH (security review 2026-11-14, SEC-003). Outside requests that would be stored
+        // share GLOBAL_PER_MINUTE (spent only on a request actually added, so one address cannot use it up); at most
+        // MAX_OPEN wait for staff at once. The per-address tables gain entries only for stored requests and real
+        // claimants and are pruned hourly; the file is written off the packet thread; drop warnings are throttled.
+        const int GLOBAL_PER_MINUTE = 10, MAX_OPEN = 200;
+        static DateTime s_BudgetStart, s_LastPrune, s_LastDropWarn;
+        static int s_BudgetUsed, s_Dropped;
         static readonly TimeSpan POLL_GAP = TimeSpan.FromSeconds(5), TEMP_KEEP = TimeSpan.FromHours(48), OPEN_KEEP = TimeSpan.FromDays(14);
         const string TEMP_CHARS = "abcdefghjkmnpqrstuvwxyz23456789";   // no 0/o, 1/l/i
 
@@ -97,7 +106,7 @@ namespace RevivalGuard
                 if (got != buf.Length || BitConverter.ToUInt32(buf, 0) != h.Sequence) return true;
                 ours = true;
 
-                var real = Gateway.RealAddress(endPoint);
+                var real = Gateway.RealAddressForLimits(endPoint);
                 string key = real.ToString();
                 bool local = StaffLoginGate.IsLocal(real);
                 string claimHash = Convert.ToHexString(SHA256.HashData(buf.AsSpan(4, CLAIM)));
@@ -127,15 +136,24 @@ namespace RevivalGuard
             var now = DateTime.UtcNow;
             lock (s_Lock)
             {
-                if (!local)
+                PruneHourly(now);
+                Queue<DateTime> q = null;
+                if (!local && s_ReqsBy.TryGetValue(key, out q))
                 {
-                    if (!s_ReqsBy.TryGetValue(key, out var q)) s_ReqsBy[key] = q = new Queue<DateTime>();
                     while (q.Count > 0 && now - q.Peek() > TimeSpan.FromDays(1)) q.Dequeue();
-                    if (q.Count >= REQ_PER_DAY) { Mod.Log.Warn($"[RevivalGuard] PasswordRecovery: {key} passed {REQ_PER_DAY} requests a day; dropped"); return reply; }
-                    q.Enqueue(now);
+                    if (q.Count >= REQ_PER_DAY) { Dropped(now, $"{key} passed {REQ_PER_DAY} requests a day"); return reply; }
                 }
                 Load();
                 if (s_Reqs.Any(r => r.ClaimHash == claimHash)) return reply;   // a resend of the same request
+                if (!local)
+                {
+                    if (s_Reqs.Count(r => r.Status == "open") >= MAX_OPEN) { Dropped(now, $"{MAX_OPEN} requests already open"); return reply; }
+                    if (now - s_BudgetStart >= TimeSpan.FromMinutes(1)) { s_BudgetStart = now; s_BudgetUsed = 0; }
+                    if (s_BudgetUsed >= GLOBAL_PER_MINUTE) { Dropped(now, $"{GLOBAL_PER_MINUTE} outside requests this minute already"); return reply; }
+                    s_BudgetUsed++;
+                    if (q == null) s_ReqsBy[key] = q = new Queue<DateTime>();
+                    q.Enqueue(now);
+                }
                 var req = new Req { Id = s_Reqs.Count == 0 ? 1 : s_Reqs.Max(r => r.Id) + 1, Account = name, Note = note, Address = key, At = now, ClaimHash = claimHash };
                 s_Reqs.Add(req);
                 Save();
@@ -150,13 +168,16 @@ namespace RevivalGuard
             byte status = 0; string pw = null;
             lock (s_Lock)
             {
-                if (!local)
+                PruneHourly(now);
+                Load();
+                var r = s_Reqs.FirstOrDefault(x => x.ClaimHash == claimHash);
+                // A claim that matches no request gets the "unknown" answer without touching the per-address table, so
+                // spoofed polls cannot grow it (SEC-003). Only real claimants are rate-limited.
+                if (r != null && !local)
                 {
                     if (s_PollBy.TryGetValue(key, out var last) && now - last < POLL_GAP) return null;
                     s_PollBy[key] = now;
                 }
-                Load();
-                var r = s_Reqs.FirstOrDefault(x => x.ClaimHash == claimHash);
                 if (r != null)
                 {
                     if (r.Status == "open") status = 1;
@@ -170,6 +191,25 @@ namespace RevivalGuard
             reply[4] = status;
             pwb.CopyTo(reply, 5);
             return reply;
+        }
+
+        /// <summary>Drop per-address entries that no longer limit anyone, at most once an hour (SEC-003). Under s_Lock.</summary>
+        static void PruneHourly(DateTime now)
+        {
+            if (now - s_LastPrune < TimeSpan.FromHours(1)) return;
+            s_LastPrune = now;
+            foreach (var k in s_ReqsBy.Where(kv => kv.Value.Count == 0 || now - kv.Value.Last() > TimeSpan.FromDays(1)).Select(kv => kv.Key).ToList()) s_ReqsBy.Remove(k);
+            foreach (var k in s_PollBy.Where(kv => now - kv.Value >= POLL_GAP).Select(kv => kv.Key).ToList()) s_PollBy.Remove(k);
+        }
+
+        /// <summary>A dropped request, logged at most once a minute with the count since, so a flood cannot fill the log. Under s_Lock.</summary>
+        static void Dropped(DateTime now, string why)
+        {
+            s_Dropped++;
+            if (now - s_LastDropWarn < TimeSpan.FromMinutes(1)) return;
+            s_LastDropWarn = now;
+            Mod.Log.Warn($"[RevivalGuard] PasswordRecovery: dropped {s_Dropped} request(s) in the last minute (latest: {why})");
+            s_Dropped = 0;
         }
 
         static string Printable(string s) => new string(s.Where(c => !char.IsControl(c)).ToArray());
@@ -314,17 +354,32 @@ namespace RevivalGuard
             if (changed) Save();
         }
 
+        static readonly object s_WriteLock = new object();
+        static int s_SaveQueued;
+
+        /// <summary>Write the requests file OFF THE CALLER'S THREAD (SEC-003: it was rewritten on ACE's packet thread for every
+        /// request). Changes made while a write is queued ride along with it; writes run one at a time, each from a fresh
+        /// snapshot, so an older snapshot never lands after a newer one. Called under s_Lock.</summary>
         static void Save()
         {
-            if (s_File == null) return;
-            try
+            if (s_File == null || Interlocked.Exchange(ref s_SaveQueued, 1) == 1) return;
+            Task.Run(() =>
             {
-                string tmp = s_File + ".tmp";
-                File.WriteAllText(tmp, JsonSerializer.Serialize(s_Reqs, new JsonSerializerOptions { WriteIndented = true }));
-                if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(tmp, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-                File.Move(tmp, s_File, true);
-            }
-            catch (Exception e) { Mod.Log.Error("[RevivalGuard] PasswordRecovery save: " + e.Message); }
+                lock (s_WriteLock)
+                {
+                    Interlocked.Exchange(ref s_SaveQueued, 0);   // a change from here on queues the next write
+                    try
+                    {
+                        string json, file;
+                        lock (s_Lock) { json = JsonSerializer.Serialize(s_Reqs, new JsonSerializerOptions { WriteIndented = true }); file = s_File; }
+                        string tmp = file + ".tmp";
+                        File.WriteAllText(tmp, json);
+                        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(tmp, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                        File.Move(tmp, file, true);
+                    }
+                    catch (Exception e) { Mod.Log.Error("[RevivalGuard] PasswordRecovery save: " + e.Message); }
+                }
+            });
         }
     }
 }

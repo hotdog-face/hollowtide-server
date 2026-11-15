@@ -58,7 +58,7 @@ namespace RevivalGuard
 
         static readonly object s_Lock = new object();
         static readonly ConditionalWeakTable<Session, Mark> s_OptedIn = new ConditionalWeakTable<Session, Mark>();
-        static readonly Random s_Rng = new Random();
+        static readonly Random s_Rng = Random.Shared;   // thread-safe: landblocks tick in parallel, and a shared new Random() corrupts under races
 
         static bool s_Registered;
         static List<Line> s_Channel = new List<Line>();

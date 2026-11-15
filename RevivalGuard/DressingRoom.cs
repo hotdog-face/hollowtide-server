@@ -387,7 +387,7 @@ namespace RevivalGuard
 
         // ---- Random (owner 261108-0038: "give me a random button to make starting tailors in the dressing room") ----
         static readonly uint[] SUIT = { 0x1, 0x200, 0x400, 0x800, 0x1000, 0x20, 0x2000, 0x4000, 0x100 };   // head, chest, girth, arms, hands, legs, feet
-        static readonly Random s_Rng = new Random();
+        static readonly Random s_Rng = Random.Shared;   // thread-safe: landblocks tick in parallel, and a shared new Random() corrupts under races
 
         /// <summary>A random piece of armour or clothing for each body part, in a random colour template and shade; each
         /// fits with the others (nothing takes another off). One Undo step.</summary>

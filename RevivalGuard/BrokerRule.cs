@@ -270,8 +270,8 @@ namespace RevivalGuard
         /// <summary>Who runs the stall (owner 2026-10-31: Joe the Sho; the first cast was Vessik the Sclavus, the generator's
         /// --look vessik). His name in the mod's lines and the price box's title.</summary>
         internal const string WHO = "Joe", WHO_FULL = "Joe the Sho";
-        static readonly Random s_Rng = new Random();
-        static string Pick(string[] lines) { lock (s_Rng) return lines[s_Rng.Next(lines.Length)]; }
+        static readonly Random s_Rng = Random.Shared;   // thread-safe: landblocks tick in parallel, and a shared new Random() corrupts under races
+        static string Pick(string[] lines) => lines[s_Rng.Next(lines.Length)];
 
         internal static string RefusalLine(Refusal r) => r switch
         {

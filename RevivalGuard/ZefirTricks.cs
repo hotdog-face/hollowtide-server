@@ -36,7 +36,7 @@ namespace RevivalGuard
 
         // per player: the next trick in the cycle and when the next one may start
         static readonly ConcurrentDictionary<uint, (int next, DateTime until)> s_State = new();
-        static readonly Random s_Rng = new();
+        static readonly Random s_Rng = Random.Shared;   // thread-safe: landblocks tick in parallel, and a shared new Random() corrupts under races
 
         internal static bool IsCharm(WorldObject wo)
             => wo is PetDevice && wo.WeenieClassId >= FirstCharm && wo.WeenieClassId <= LastCharm;

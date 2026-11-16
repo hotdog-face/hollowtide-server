@@ -1,0 +1,96 @@
+{
+  "_": "Holtburg raids (RevivalGuard TownRaid.cs, TownRaidRule.cs; docs/findings/holtburg-raids-2026-11-15.md). Retail monsters only, unchanged (owner 2026-11-15: existing weenies, no new or modified ones). The copy beside the mod dll is the live one: edit it there and it is read again within a minute, no restart; a newer copy built into the mod replaces it only if it was not hand-edited (SeedFileRule). Points are [x, y] in A9B4 metres (Holtburg's block; the lifestone is at 81, 12); the server puts them on the ground. Every leg was checked on the outdoor layer (findings doc). Turbine voice: plain ASCII, no em dashes, nothing modern. Tokens: {group} {side} {leader} {count} {n} {item} {name}.",
+  "town": "Holtburg",
+  "schedule": {
+    "minGapMinutes": 75,
+    "meanExtraMinutes": 50,
+    "deadHoursPacific": [1, 2, 3, 4, 5, 6, 7],
+    "deadHourWeight": 0.35,
+    "onlineFactorPer": 0.08,
+    "onlineFactorMin": 0.6,
+    "onlineFactorMax": 1.4,
+    "minPlayersInTown": 1,
+    "warningSeconds": 60,
+    "idleTimeoutMinutes": 10,
+    "maxMinutes": 25,
+    "emptyTownMinutes": 3,
+    "heldShare": 0.75,
+    "stuckOutsideSeconds": 60,
+    "restartUtc": "09:30",
+    "quietBeforeRestartMinutes": 45,
+    "quietAfterRestartMinutes": 20,
+    "pauseForEvents": ["holtburg"]
+  },
+  "tierFloors": [1, 20, 60, 110],
+  "townBox": [-12, -12, 204, 180],
+  "lifestone": [81.3, 11.8],
+  "noSpawnNearLifestone": 60,
+  "homeRadius": 60,
+  "sides": [
+    { "key": "south", "name": "the south road", "from": [95, -70], "to": [112, 16],
+      "guardsFrom": [150, 30], "guardsAt": [[118, 22], [112, 24], [124, 20]],
+      "muster": "east", "musterPath": [[150, 60], [128, 22]] },
+    { "key": "west", "name": "the western woods", "from": [-70, 95], "to": [30, 118],
+      "guardsFrom": [70, 125], "guardsAt": [[34, 120], [36, 114], [32, 126]] },
+    { "key": "north", "name": "the lake shore", "from": [85, 245], "to": [85, 150],
+      "guardsFrom": [120, 140], "guardsAt": [[88, 150], [80, 148], [94, 148]],
+      "muster": "west", "musterPath": [[38, 119], [51, 142], [80, 146]] },
+    { "key": "east", "name": "the east road", "from": [270, 120], "to": [178, 118],
+      "guardsFrom": [130, 128], "guardsAt": [[172, 118], [170, 112], [174, 124]] }
+  ],
+  "kinds": [
+    { "key": "drudge", "group": "drudges", "weight": 6, "sides": ["south", "west"], "bigChance": 0.12,
+      "tiers": [
+        { "tier": 1, "wave": [7, 940, 193, 192, 1464], "leader": 30490, "escort": [192, 1464], "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 0 },
+        { "tier": 2, "wave": [1608, 1609], "leader": 1610, "escort": [1609], "base": 3, "perPlayer": 2, "max": 12, "treasure": 450, "protectBelow": 12 },
+        { "tier": 3, "wave": [1610, 24279, 24280], "leader": 24283, "escort": [1610], "base": 3, "perPlayer": 2, "max": 12, "treasure": 448, "protectBelow": 30 },
+        { "tier": 4, "wave": [23480, 24278, 24282], "leader": 22899, "escort": [24282], "base": 3, "perPlayer": 1.5, "max": 10, "treasure": 449, "protectBelow": 50 }
+      ] },
+    { "key": "mosswart", "group": "mosswarts", "weight": 2, "sides": ["north"],
+      "tiers": [
+        { "tier": 1, "wave": [948, 8, 4249], "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 0 },
+        { "tier": 2, "wave": [211, 1619, 210], "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 12 },
+        { "tier": 3, "wave": [7102, 27864, 27863, 35141], "base": 3, "perPlayer": 2, "max": 12, "treasure": 450, "protectBelow": 30 }
+      ] },
+    { "key": "bandit", "group": "bandits", "weight": 2, "sides": ["east"],
+      "tiers": [
+        { "tier": 1, "wave": [11499], "base": 3, "perPlayer": 2, "max": 10, "treasure": 453, "protectBelow": 0 },
+        { "tier": 3, "wave": [187, 188], "base": 3, "perPlayer": 1.5, "max": 10, "treasure": 448, "protectBelow": 30 },
+        { "tier": 4, "wave": [187, 188], "base": 4, "perPlayer": 2, "max": 12, "treasure": 448, "protectBelow": 50 }
+      ] }
+  ],
+  "big": { "waveFactor": 1.5, "escorts": 3, "leaderAfterShare": 0.6, "leaderAfterSeconds": 180, "defenders": 3, "defenderWcid": 37518 },
+  "rewards": {
+    "rolls": [1, 2, 3],
+    "shareFor2": 0.25,
+    "shareFor3": 0.5,
+    "minDamage": 10,
+    "counter": "rg_townraid_defended",
+    "title": "HoltburgsSurvivorChampion",
+    "titleAfter": 25,
+    "stripItems": [30486]
+  },
+  "lines": {
+    "warn.drudge.south": ["Drudges on the south road, up from the Hideout! To arms!", "Drudges coming up the south road! Clear the square!"],
+    "warn.drudge.west": ["Drudges out of the western woods! To arms, Holtburg!", "Drudges in the west fields! Look sharp!"],
+    "warn.mosswart.north": ["Mosswarts up from the lake shore! Guard the lower lanes!", "Mosswarts on the north bank! To arms!"],
+    "warn.bandit.east": ["Bandits on the east road! Bar your doors and take up your swords!", "Riders on the east road, and not friendly ones! To arms!"],
+    "area.warn": ["Raid on Holtburg! {Group} are coming from {side}. They reach the town in about a minute."],
+    "area.big": ["This is a war band, not a raiding party. Something bigger walks behind them."],
+    "area.arrive": ["The {group} reach the edge of Holtburg!"],
+    "leader": ["{leader} leads the second wave in!"],
+    "guard.reinforce": ["Too many of them! Reinforcements! To me!", "We need more swords here! Sound the call!"],
+    "guard.reserve": ["The reserve is here. Hold the line!", "Fall in! We hold the town!"],
+    "guard.held": ["They break! Holtburg holds!", "That is the last of them. Well fought, all of you."],
+    "area.held": ["Holtburg holds! The raiders are beaten off. Those who fought have earned the town's thanks."],
+    "area.withdrew": ["The raiders give up on Holtburg and slip back the way they came."],
+    "area.stopped": ["The raiders scatter and are gone."],
+    "reward": ["For the defence of Holtburg you are given {item}."],
+    "reward.full": ["For the defence of Holtburg you are given {item}, but your pack is full: it is at your feet."],
+    "counter": ["You have helped defend Holtburg {n} times."],
+    "title": ["Holtburg will not forget you. You have earned a title."],
+    "discord.start": ["Raid on Holtburg: {group} from {side}."],
+    "discord.held": ["Holtburg holds! {count} defenders beat off the {group}."],
+    "discord.withdrew": ["The {group} gave up on Holtburg and withdrew."]
+  }
+}

@@ -24,7 +24,7 @@ namespace RevivalGuard
             public bool Online;
             public double LastLogin;      // unix seconds
             public bool Deleted;          // deleted or pending deletion
-            public long Level, Xp, Lum, Kills, PkKills, PkDeaths, Quests;
+            public long Level, Xp, Lum, Kills, PkKills, PkDeaths, Quests, Raids;
         }
 
         public sealed class Board
@@ -32,6 +32,7 @@ namespace RevivalGuard
             public string Key, Title, Unit;
             public string[] Aliases;
             public Func<Entry, long> Value;
+            public bool InDiscord = true;     // the daily Discord post (already approved) lists only the boards it had
         }
 
         // the order /top lists them in; Title is said in "Top 10 by <Title>"
@@ -43,7 +44,12 @@ namespace RevivalGuard
             new Board { Key = "kills",  Title = "creatures slain",    Unit = " kills",          Aliases = new[] { "kill", "creatures", "monsters" }, Value = e => e.Kills },
             new Board { Key = "pk",     Title = "player kills",       Unit = " player kills",   Aliases = new[] { "pkkills", "pvp" },                Value = e => e.PkKills },
             new Board { Key = "quests", Title = "quest milestones",   Unit = " quest milestones", Aliases = new[] { "quest", "q" },                  Value = e => e.Quests },
+            // Holtburg raids held (TownRaid's counter, quest flag RAID_FLAG); not in the daily Discord post without the owner's yes
+            new Board { Key = "raids",  Title = "Holtburg raids defended", Unit = " raids defended", Aliases = new[] { "raid", "defense", "defence", "holtburg" }, Value = e => e.Raids, InDiscord = false },
         };
+
+        /// <summary>TownRaid's per-character counter of raids held (a quest flag; "rg_" flags are never quest milestones).</summary>
+        public const string RAID_FLAG = "rg_townraid_defended";
 
         public static Board Find(string word)
         {
@@ -183,7 +189,7 @@ namespace RevivalGuard
                 lines.Add($"  {Cap(b.Title)}: {lead}{mine}");
             }
             if (callerNote != null) lines.Add(callerNote);
-            lines.Add("/top level, /top xp, /top lum, /top kills, /top pk or /top quests for the top 10. /top hide leaves the boards, /top show comes back.");
+            lines.Add("/top level, /top xp, /top lum, /top kills, /top pk, /top quests or /top raids for the top 10. /top hide leaves the boards, /top show comes back.");
             return lines;
         }
 
@@ -196,7 +202,7 @@ namespace RevivalGuard
             sb.Append("**Hollowtide leaderboards today** (characters active in the last ").Append(activeDays).Append(" days; /top in game)\n");
             foreach (var b in Boards)
             {
-                if (!boards.TryGetValue(b.Key, out var ranked) || ranked.Count == 0) continue;
+                if (!b.InDiscord || !boards.TryGetValue(b.Key, out var ranked) || ranked.Count == 0) continue;
                 sb.Append("**").Append(Cap(b.Title)).Append("**: ");
                 sb.Append(string.Join(", ", ranked.Take(each).Select(r => $"{r.Rank}. {Escape(r.Who.Name)} ({ValueText(b, r.Who, r.Value, pkDeathsSince)})")));
                 if (b.Key == "pk" && pkDeathsSince != null) sb.Append(" (deaths counted from ").Append(pkDeathsSince).Append(')');

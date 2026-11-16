@@ -87,6 +87,8 @@ namespace RevivalGuard
             public double SheathTime;                              // a walk order held back until a gesture ends
             public Creature Target;
             public bool Kitted, FellBack;
+            public List<Position> MusterPath, MusterBack;          // a raid's muster (TownRaid): walked leg by leg, then held
+            public int MusterIdx; public double MusterOrder; public bool Leaving;
         }
 
         static readonly object s_Lock = new object();
@@ -130,7 +132,119 @@ namespace RevivalGuard
         }
 
         // ---- who is a guard ----
-        internal static bool Owns(WorldObject wo) => wo != null && wo.WeenieClassId == WCID && ROUTES.ContainsKey(wo.Guid.Full);
+        internal static bool Owns(WorldObject wo) => wo != null && wo.WeenieClassId == WCID && (ROUTES.ContainsKey(wo.Guid.Full) || IsExtra(wo.Guid.Full));
+
+        // ---- raid reserves (TownRaid): Royal Guards spawned for a raid, guards of this file until they leave ----
+        static volatile uint[] s_ExtraIds = Array.Empty<uint>();
+        static readonly Dictionary<uint, Route> s_Extra = new Dictionary<uint, Route>();
+        static bool IsExtra(uint guid) { var a = s_ExtraIds; for (int i = 0; i < a.Length; i++) if (a[i] == guid) return true; return false; }
+        static Route RouteOf(uint guid) { if (ROUTES.TryGetValue(guid, out var r)) return r; lock (s_Lock) return s_Extra.TryGetValue(guid, out r) ? r : null; }
+
+        /// <summary>A Royal Guard spawned for a raid (TownRaid) fights as these guards do (never dies, takes no credit), walks
+        /// <paramref name="path"/> to its stand and holds it; its station is where it came in.</summary>
+        internal static void AddReserve(Creature c, string name, List<Position> path)
+        {
+            lock (s_Lock)
+            {
+                var at = Local(c.Location);
+                s_Extra[c.Guid.Full] = new Route { Name = name, P = new[] { (at.X, at.Y, c.Location.PositionZ) }, Post = new[] { true } };
+                var l = new List<uint>(s_ExtraIds) { c.Guid.Full };
+                s_ExtraIds = l.ToArray();
+            }
+            var g = Get(c);
+            g.Kitted = false;
+            Kit(g);
+            SetMuster(g, path, false);
+        }
+
+        /// <summary>A reserve walks <paramref name="path"/> out (back to where it came in); TownRaid removes it there.</summary>
+        internal static void SendOff(Creature c, List<Position> path)
+        {
+            var g = GuardBy(c.Guid.Full);
+            if (g != null) SetMuster(g, path, true);
+        }
+
+        internal static void ForgetReserve(uint guid)
+        {
+            lock (s_Lock)
+            {
+                s_Extra.Remove(guid); s_Guards.Remove(guid);
+                var l = new List<uint>(s_ExtraIds); l.Remove(guid); s_ExtraIds = l.ToArray();
+            }
+            SetDutyList();
+        }
+
+        /// <summary>The placed guard on the named route walks <paramref name="path"/> to stand there through a raid
+        /// (null: back the same way to its own round). False when no such guard is loaded.</summary>
+        internal static bool Muster(string route, List<Position> path)
+        {
+            Guard g = null;
+            lock (s_Lock) foreach (var x in s_Guards.Values) if (ROUTES.ContainsKey(x.Obj.Guid.Full) && x.Route.Name == route && !x.Obj.IsDestroyed) { g = x; break; }
+            if (g == null) return false;
+            if (path != null) { g.MusterBack = new List<Position>(path); g.MusterBack.Reverse(); SetMuster(g, path, false); }
+            else if (g.MusterPath != null) { var back = g.MusterBack ?? new List<Position>(); g.MusterBack = null; SetMuster(g, back, true); }
+            return true;
+        }
+
+        /// <summary>The placed guard of a route ("south" stands by the lifestone), if its landblock is loaded.</summary>
+        internal static Creature GuardOn(string route)
+        {
+            lock (s_Lock) foreach (var x in s_Guards.Values) if (ROUTES.ContainsKey(x.Obj.Guid.Full) && x.Route.Name == route && !x.Obj.IsDestroyed && x.Obj.CurrentLandblock != null) return x.Obj;
+            return null;
+        }
+
+        /// <summary>True once a reserve sent off has walked its path out.</summary>
+        internal static bool Gone(Creature c) { var g = GuardBy(c.Guid.Full); return g == null || g.MusterPath == null && g.Leaving; }
+
+        static void SetMuster(Guard g, List<Position> path, bool leaving)
+        {
+            g.MusterPath = path == null || path.Count == 0 ? null : path;
+            g.MusterIdx = 0; g.MusterOrder = 0; g.Leaving = leaving;
+            if (g.MusterPath != null && g.Mind.State != PState.Duty) g.Mind.State = PState.Station;
+            if (g.MusterPath == null && leaving) EndMuster(g, Timers.RunningTime);
+        }
+
+        /// <summary>A guard on a muster path (not fighting): leg by leg with ACE's MoveTo at a run, then holds the last
+        /// point facing out. A leg it cannot finish in 20 s is skipped (no teleport while players look).</summary>
+        static bool MusterThink(Guard g, double now)
+        {
+            if (g.MusterPath == null) return false;
+            var c = g.Obj;
+            if (now < g.MotionUntil) return true;
+            if (g.MusterIdx >= g.MusterPath.Count) { if (g.Leaving) EndMuster(g, now); return true; }
+            var to = g.MusterPath[g.MusterIdx];
+            float d = Vector2.Distance(Local(c.Location), Local(to));
+            if (d <= ARRIVE + 0.5f || (g.MusterOrder > 0 && now - g.MusterOrder > 20))
+            {
+                g.MusterIdx++; g.MusterOrder = 0;
+                if (g.MusterIdx >= g.MusterPath.Count)
+                {
+                    if (g.Leaving) { EndMuster(g, now); return true; }
+                    var dir = Local(c.Location) - new Vector2(CENTRE_X, CENTRE_Y);
+                    var face = new Position(c.Location);
+                    if (dir.LengthSquared() > 0.01f) face.Rotate(new Vector3(Vector2.Normalize(dir), 0));
+                    c.TurnTo(face);
+                }
+                return true;
+            }
+            if (g.MusterOrder == 0 || !c.PhysicsObj.IsMovingTo() && now - g.MusterOrder > 3)
+            {
+                c.MoveTo(new Position(to), Math.Max(1f, c.GetRunRate()));
+                if (g.MusterOrder == 0) g.MusterOrder = now;
+            }
+            return true;
+        }
+
+        static void EndMuster(Guard g, double now)
+        {
+            g.MusterPath = null;
+            if (!ROUTES.ContainsKey(g.Obj.Guid.Full)) return;   // a reserve: TownRaid takes it away
+            g.Leaving = false;
+            var here = Local(g.Obj.Location); int best = 0; float bd = float.MaxValue;
+            for (int i = 0; i < g.Route.P.Length; i++) { var d = Vector2.Distance(here, Wp(g, i)); if (d < bd) { bd = d; best = i; } }
+            ReturnFrom(g.Mind, best, now);
+            g.Obj.MoveTo(WpPos(g, best), 0f);
+        }
 
         static bool OnDuty(uint guid)
         {
@@ -152,7 +266,7 @@ namespace RevivalGuard
             {
                 if (s_Guards.TryGetValue(c.Guid.Full, out var g) && ReferenceEquals(g.Obj, c)) return g;
                 // first sight, or the landblock was built again: a fresh guard at its station
-                g = new Guard { Obj = c, Route = ROUTES[c.Guid.Full] };
+                g = new Guard { Obj = c, Route = RouteOf(c.Guid.Full) };
                 g.Station = new Position(c.Home ?? c.Location);
                 double now = Timers.RunningTime;
                 g.Mind.Until = now + 30 + s_Rng.NextDouble() * STATION_SPAN;
@@ -220,6 +334,7 @@ namespace RevivalGuard
         static void PatrolThink(Guard g, double now, bool on)
         {
             var c = g.Obj;
+            if (MusterThink(g, now)) return;   // a raid's muster (TownRaid) comes before the round
             if (now < g.MotionUntil) return;   // a gesture plays out before any move order
             if (g.PendingWalk) { g.PendingWalk = false; g.Mind.ProgressAt = now; c.MoveTo(WpPos(g, g.Mind.Index), 0f); return; }
             int away = 0;
@@ -854,6 +969,8 @@ namespace RevivalGuard
             for (int i = 0; i < g.Route.P.Length; i++) { var d = Vector2.Distance(here, Wp(g, i)); if (d < bd) { bd = d; best = i; } }
             ReturnFrom(g.Mind, best, now);
             c.MoveTo(WpPos(g, best), 0f);
+            // on a raid's muster: back to its stand (or on its way out), not home
+            if (g.MusterPath != null) { if (!g.Leaving) g.MusterIdx = g.MusterPath.Count - 1; g.MusterOrder = 0; g.Mind.State = PState.Station; }
         }
 
         static void Recover(Guard g)

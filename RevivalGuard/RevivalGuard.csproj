@@ -30,5 +30,7 @@
     <EmbeddedResource Include="NoticeBoard.json" LogicalName="RevivalGuard.NoticeBoard.json" />
     <!-- Holtburg town life: roster, rounds, lines (TownLife), seeded beside the dll; that copy is the live one, replaced by a newer embedded one unless hand-edited (SeedFileRule). -->
     <EmbeddedResource Include="TownLife.json" LogicalName="RevivalGuard.TownLife.json" />
+    <!-- Holtburg raids: schedule, sides, raiders per tier, lines (TownRaid), seeded beside the dll the same way. -->
+    <EmbeddedResource Include="TownRaid.json" LogicalName="RevivalGuard.TownRaid.json" />
   </ItemGroup>
 </Project>

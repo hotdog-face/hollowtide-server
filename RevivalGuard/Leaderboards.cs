@@ -22,7 +22,7 @@ namespace RevivalGuard
 {
     /// <summary>
     /// LEADERBOARDS (ours, not retail; owner's pick 2026-11-14). `/top` shows each board's leader and your place;
-    /// `/top level|xp|lum|kills|pk|quests` the top 10 and your rank; `/top hide` / `/top show` leave or rejoin the boards.
+    /// `/top level|xp|lum|kills|pk|quests|raids` the top 10 and your rank; `/top hide` / `/top show` leave or rejoin the boards.
     /// Who is listed, the ranking and every line are in LeaderboardRule (pure, tested by nettest LeaderboardCase): staff,
     /// test and fleet accounts, the owner's accounts and the Hollow Company are left out; the Borg are listed as players.
     /// Only characters that logged in within rg_top_active_days (30) are listed.
@@ -92,7 +92,7 @@ namespace RevivalGuard
             LoadHidden();
             LoadDeaths();
             CommandManager.TryAddCommand(Handle, "top", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
-                "The leaderboards: each board's leader and your place, or a board's top 10.", "[level | xp | lum | kills | pk | quests | hide | show]");
+                "The leaderboards: each board's leader and your place, or a board's top 10.", "[level | xp | lum | kills | pk | quests | raids | hide | show]");
             // first build two minutes in (the world is still loading before that), then a check every minute
             s_Timer = new Timer(_ => Tick(), null, TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(1));
             Mod.Log.Info($"[RevivalGuard] Leaderboards: /top, rebuilt every {RefreshMinutes} min off the world thread; Discord post {(PropertyManager.GetBool(P_DISCORD, true).Item ? "ON" : "off")}");
@@ -165,7 +165,7 @@ namespace RevivalGuard
                     var board = R.Find(word);
                     if (board == null || !cache.Boards.TryGetValue(board.Key, out var ranked))
                     {
-                        Say(session, "Boards: level, xp, lum, kills, pk, quests. /top hide leaves the boards, /top show comes back.");
+                        Say(session, "Boards: level, xp, lum, kills, pk, quests, raids. /top hide leaves the boards, /top show comes back.");
                         return;
                     }
                     lines = R.BoardLines(board, ranked, me, note, age, cache.Days, cache.PkSince);
@@ -237,6 +237,7 @@ namespace RevivalGuard
                 // logins and deletions, and quest flags: one query each, here on the timer thread
                 var chars = new Dictionary<uint, (bool gone, double last)>();
                 var quests = new Dictionary<uint, long>();
+                var raids = new Dictionary<uint, long>();
                 using (var ctx = new ShardDbContext())
                 {
                     foreach (var c in ctx.Character.AsNoTracking().Select(c => new { c.Id, c.IsDeleted, c.DeleteTime, c.LastLoginTimestamp }).ToList())
@@ -246,8 +247,11 @@ namespace RevivalGuard
                     foreach (var op in PlayerManager.GetAllOnline()) active.Add(op.Guid.Full);
                     foreach (var q in ctx.CharacterPropertiesQuestRegistry.AsNoTracking().Where(q => q.NumTimesCompleted > 0)
                                  .Select(q => new { q.CharacterId, q.QuestName, q.NumTimesCompleted }).ToList())
+                    {
                         if (active.Contains(q.CharacterId) && R.IsQuestMilestone(q.QuestName, q.NumTimesCompleted))
                             quests[q.CharacterId] = (quests.TryGetValue(q.CharacterId, out var n) ? n : 0) + 1;
+                        if (q.QuestName == R.RAID_FLAG) raids[q.CharacterId] = q.NumTimesCompleted;
+                    }
                 }
 
                 HashSet<uint> hidden;
@@ -279,6 +283,8 @@ namespace RevivalGuard
                         e.PkKills = ip.GetProperty(PropertyInt.PlayerKillsPk) ?? 0;
                         lock (s_Lock) e.PkDeaths = s_Deaths.Count.TryGetValue(id, out var d) ? d : 0;
                         e.Quests = quests.TryGetValue(id, out var qn) ? qn : 0;
+                        // online characters: the live count (the database row lags until the next save)
+                        e.Raids = ip is Player op ? op.QuestManager.GetCurrentSolves(R.RAID_FLAG) : raids.TryGetValue(id, out var rn) ? rn : 0;
                         listed.Add(e);
                     }
                     catch (Exception ex) { Mod.Log.Warn($"[RevivalGuard] Leaderboards: skipped 0x{ip?.Guid.Full:X8}: {ex.Message}"); }

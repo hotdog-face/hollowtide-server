@@ -157,6 +157,9 @@ namespace RevivalGuard
             if (wo == null) { Mod.Log.Warn($"[RevivalGuard] TthuunRaids: no weenie {wcid}"); return null; }
             wo.Location = new ACE.Entity.Position(at);
             wo.Location.PositionZ += 0.05f;
+            // never rots: ACE's decay takes any dynamic object with no generator, lifespan or TimeToRot after 5 minutes,
+            // silently (found by the Holtburg raids on the box, 2026-11-16). EventEnded removes the waves.
+            wo.TimeToRot = -1;
             if (radius > 0) wo.ScatterPos = new SetPosition(new ACE.Server.Physics.Common.Position(wo.Location), SetPositionFlags.RandomScatter, radius);
             bool ok = wo.EnterWorld();
             wo.ScatterPos = null;

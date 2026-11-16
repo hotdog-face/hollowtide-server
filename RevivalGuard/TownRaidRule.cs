@@ -26,6 +26,7 @@ namespace RevivalGuard
             public List<Side> Sides { get; set; } = new List<Side>();
             public List<Kind> Kinds { get; set; } = new List<Kind>();
             public BigDef Big { get; set; } = new BigDef();
+            public WaveDef Waves { get; set; } = new WaveDef();
             public RewardDef Rewards { get; set; } = new RewardDef();
             public Dictionary<string, string[]> Lines { get; set; } = new Dictionary<string, string[]>();
 
@@ -89,14 +90,32 @@ namespace RevivalGuard
             public int Max { get; set; } = 12;
             public uint Treasure { get; set; }                 // a retail death treasure (TreasureDeath) id: the reward roll's table
             public int ProtectBelow { get; set; }              // raiders never pick a player under this level who has not hit them
+            public uint[] Adds { get; set; } = Array.Empty<uint>();  // the weaker pack that runs in with each wave (same family)
+        }
+
+        /// <summary>A raid comes in waves (owner 2026-11-16: "need more smaller adds in addition to the group that comes
+        /// and a few waves. there were only 4 drudges"): the main group each wave, a pack of weaker adds with it, the
+        /// next wave once most of the last is down (or after a while, if someone is fighting), the leader with the last.</summary>
+        public sealed class WaveDef
+        {
+            public int Count { get; set; } = 3;
+            public int BigCount { get; set; } = 4;
+            public double LaterFactor { get; set; } = 0.8;      // later waves' main group against the first's
+            public double AddsBase { get; set; } = 2;
+            public double AddsPerPlayer { get; set; } = 1;
+            public int AddsMax { get; set; } = 8;
+            public double NextAtShare { get; set; } = 0.7;     // of the last wave killed
+            public double NextAfterSeconds { get; set; } = 150; // ... or this long after it, if someone hit a raider since
+            public double MinGapSeconds { get; set; } = 40;
+            public double LeaderChance { get; set; } = 0.3;    // a raid that is not big still brings its leader with the last wave
+            public int MaxAlive { get; set; } = 30;            // the next wave waits while this many stand (landblock health)
+            public int MaxTotal { get; set; } = 60;            // all waves of one raid, adds and leader included
         }
 
         public sealed class BigDef
         {
             public double WaveFactor { get; set; } = 1.5;
-            public int Escorts { get; set; } = 3;
-            public double LeaderAfterShare { get; set; } = 0.6;
-            public double LeaderAfterSeconds { get; set; } = 180;
+            public int Escorts { get; set; } = 3;              // with the leader in a big raid's last wave
             public int Defenders { get; set; } = 3;
             public uint DefenderWcid { get; set; } = 37518;   // Royal Guard
         }
@@ -139,6 +158,7 @@ namespace RevivalGuard
                 foreach (var t in k.Tiers) if (t.Wave.Length == 0) p.Add($"kind {k.Key} tier {t.Tier}: empty wave");
             }
             if (!c.Kinds.Any(k => k.TierAt(1) != null)) p.Add("no kind at tier 1");
+            if (c.Waves == null || c.Waves.Count < 1 || c.Waves.BigCount < 1 || c.Waves.MaxAlive < 1 || c.Waves.MaxTotal < 1) p.Add("waves: counts and caps must be 1 or more");
             return p;
         }
 
@@ -213,6 +233,42 @@ namespace RevivalGuard
 
         public static bool CanBeBig(TierDef t) => t != null && t.Leader != 0;
 
+        public static int WaveCount(WaveDef w, bool big) => Math.Max(1, big ? w.BigCount : w.Count);
+
+        /// <summary>One wave: the main group (the first full size, later ones LaterFactor of it; a big raid's all half again),
+        /// the adds (base plus so many per player, up to AddsMax; none when the tier has no adds), the leader with the last
+        /// wave (always for a big raid, else when rolled), and a big raid's escorts with it. MaxTotal, shared among the
+        /// waves, trims the adds first.</summary>
+        public static (int main, int adds, bool leader, int escorts) PlanWave(Config c, TierDef t, int players, bool big, int wave, int waves, bool leaderRolled, int spawnedSoFar)
+        {
+            var w = c.Waves;
+            int main = WaveSize(t, players, big, c.Big.WaveFactor);
+            if (wave > 1) main = Math.Max(1, (int)Math.Round(main * w.LaterFactor, MidpointRounding.AwayFromZero));
+            int adds = t.Adds == null || t.Adds.Length == 0 ? 0
+                : (int)Math.Round(Math.Min(w.AddsBase + w.AddsPerPlayer * Math.Max(1, players), w.AddsMax), MidpointRounding.AwayFromZero);
+            bool comes = t.Leader != 0 && (big || leaderRolled);
+            bool leader = comes && wave >= waves;
+            int escorts = leader && big ? c.Big.Escorts : 0;
+            // the leader (and escorts) are kept room for from the start; the rest shared evenly among the waves
+            int reserve = comes ? 1 + (big ? c.Big.Escorts : 0) : 0;
+            int share = Math.Max(1, (w.MaxTotal - reserve) / Math.Max(1, waves));
+            int room = Math.Min(share, Math.Max(0, w.MaxTotal - reserve - spawnedSoFar));
+            if (main + adds > room) adds = Math.Max(0, room - main);
+            if (main > room) main = room;
+            return (main, adds, leader, escorts);
+        }
+
+        /// <summary>The next wave comes once NextAtShare of the last one is down, or NextAfterSeconds after it if a raider
+        /// was hit since it came (an idle town is not piled on); never sooner than MinGapSeconds, never when it would put
+        /// more than MaxAlive on the field (unless none stand).</summary>
+        public static bool NextWaveDue(int lastWave, int lastWaveAlive, double sinceWave, bool hitSince, int aliveNow, int nextSize, WaveDef w)
+        {
+            if (sinceWave < w.MinGapSeconds) return false;
+            if (aliveNow > 0 && aliveNow + nextSize > w.MaxAlive) return false;
+            if (lastWave <= 0 || lastWave - lastWaveAlive >= Math.Ceiling(lastWave * w.NextAtShare)) return true;
+            return hitSince && sinceWave >= w.NextAfterSeconds;
+        }
+
         // ---- the schedule ---------------------------------------------------------------------------------------------
 
         /// <summary>The chance a raid starts in this minute: none within the minimum gap of the last one; after it, a
@@ -250,7 +306,7 @@ namespace RevivalGuard
         public enum Outcome { Running, Held, Withdrew, Faded }
 
         /// <summary>How a raid stands: held only when every raider spawned died (a later wave still to come keeps it
-        /// running); faded when raiders are gone without dying (a stop, a block taken down); withdrawn when nobody has
+        /// running; the idle clock restarts with each wave); faded when raiders are gone without dying (a stop, a block taken down); withdrawn when nobody has
         /// hit a raider for the idle timeout, the town has stood empty for EmptyTownMinutes, or the raid passed its
         /// longest time. (Box 2026-11-16: the town emptied, the raiders dropped off the live list and a raid read as held.)</summary>
         public static Outcome Judge(int spawned, int alive, int killed, bool moreToCome, double sinceSpawn, double sinceLastHit, ScheduleDef s, double emptyFor = 0)
@@ -267,10 +323,6 @@ namespace RevivalGuard
         /// <summary>Kills that hold the town once no raider is left: HeldShare of those spawned (a raider stuck outside
         /// town is taken away, box 2026-11-16: 11 of 12 killed read as faded).</summary>
         public static int HeldAt(int spawned, ScheduleDef s) => Math.Max(1, (int)Math.Ceiling(spawned * s.HeldShare));
-
-        /// <summary>The big wave's leader comes once the first wave is mostly down, or after a while regardless.</summary>
-        public static bool LeaderDue(int firstWave, int firstWaveAlive, double sinceSpawn, BigDef b) =>
-            firstWave > 0 && ((firstWave - firstWaveAlive) >= Math.Ceiling(firstWave * b.LeaderAfterShare) || sinceSpawn >= b.LeaderAfterSeconds);
 
         /// <summary>Raiders ignore a player below the tier's protection level unless that player has hurt them.</summary>
         public static bool MayTarget(int playerLevel, bool hurtMe, int protectBelow) => hurtMe || playerLevel >= protectBelow;

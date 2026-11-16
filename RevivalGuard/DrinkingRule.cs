@@ -25,6 +25,82 @@ namespace RevivalGuard
 
         public const uint INTOX_I = 3527, INTOX_II = 3528, INTOX_III = 3529;
         public const uint HANGOVER_SPELL = 1457;   // Feeblemind Self I: Self -10
+        public const uint HANGOVER_COORD = 1385;   // Clumsiness Self I: Coordination -10
+        public const uint HANGOVER_QUICK = 1409;   // Slowness Self I: Quickness -10
+
+        // ---- the stumble and the hangover (owner 2026-11-16) ---------------------------------------------------------
+
+        /// <summary>Seconds of stumble before the black on a client that plays it (0.1.117+: Woah, a few lurching steps, the
+        /// fall, a beat on the floor; the client's AcDrunkRule.STUMBLE_S, nettest checks they agree). Out cold is counted
+        /// after it.</summary>
+        public const double STUMBLE_S = 6.5;
+        /// <summary>When the stumble's fall begins, for the onlookers' line.</summary>
+        public const double FALL_AT_S = 4.4;
+        /// <summary>A retail client or one of ours from before 0.1.116: the server shows Woah, then this long after, the fall.</summary>
+        public const double SERVER_WOAH_S = 2.1;
+
+        /// <summary>Waking takes about a third of your health ("so that they have to rest"), never below a quarter of it and
+        /// never below 1: a hangover never kills, and someone already lower loses nothing.</summary>
+        public const double HEALTH_LOSS = 1.0 / 3.0;
+        public const double HEALTH_FLOOR = 0.25;
+
+        /// <summary>The hangover lasts until you have RESTED this long in all (AC's own rest: sitting, crouching or lying
+        /// down out of combat, the postures ACE regenerates two to three times faster in), or HANGOVER_MAX_S passes, or
+        /// Ulgrim's cure. Self, Coordination and Quickness -10 while it lasts.</summary>
+        public const double REST_NEEDED_S = 60.0;
+        public const double HANGOVER_MAX_S = 600.0;
+        public const double HANGOVER_TICK_S = 5.0;
+        public const double GROAN_GAP_S = 75.0;
+
+        /// <summary>Health after waking: a third off, floored at a quarter of the maximum (and at 1), never raised.</summary>
+        public static int HealthAfterWaking(int current, int max)
+        {
+            if (current <= 0 || max <= 0) return current;
+            int floor = Math.Max(1, (int)Math.Ceiling(max * HEALTH_FLOOR));
+            if (current <= floor) return current;
+            int after = current - (int)Math.Round(max * HEALTH_LOSS);
+            return Math.Max(floor, after);
+        }
+
+        /// <summary>Resting, as ACE's regeneration counts it (Creature_Vitals GetRegenModifier): Crouch, Sitting or Sleeping
+        /// as the forward command, out of combat.</summary>
+        public static bool Resting(uint forwardCommand, bool combatStance) =>
+            !combatStance && (forwardCommand == 0x41000012u || forwardCommand == 0x41000013u || forwardCommand == 0x41000014u);
+
+        /// <summary>Is the hangover over: rested long enough, or it has run its longest.</summary>
+        public static bool HangoverOver(double restedS, double sinceWakeS) => restedS >= REST_NEEDED_S || sinceWakeS >= HANGOVER_MAX_S;
+
+        public const string HANGOVER_REST_LINE = "Your head is splitting. Sit or lie down a while to sleep it off.";
+        public const string HANGOVER_HALF_LINE = "The pounding in your head is easing. A little more rest.";
+        public const string HANGOVER_OVER_LINE = "You feel human again. The hangover is gone.";
+
+        public static readonly string[] GROAN_LINES =
+        {
+            "Ugh. Your head.",
+            "You hiccup. It hurts.",
+            "Everything is too bright and too loud.",
+            "You swear off ale forever. Again.",
+            "Your stomach makes a noise like a dying Banderling.",
+        };
+
+        /// <summary>What players nearby see. {0} is the drinker's name.</summary>
+        public static readonly string[] SWAY_OTHERS =
+        {
+            "{0} sways like a tree in a storm.",
+            "{0} squints at the floor as if it moved.",
+            "{0} waves both arms for balance and loses the argument.",
+        };
+        public static readonly string[] FALL_OTHERS =
+        {
+            "{0} topples over like a felled tree, out cold.",
+            "{0} takes a few bold steps and lands flat on their face.",
+            "{0} staggers, wobbles, and goes down like a sack of turnips.",
+        };
+        public const string WAKE_OTHERS = "{0} sits up, blinking, and holds their head.";
+        public const string GROAN_OTHERS = "{0} groans and holds their head.";
+
+        /// <summary>One line of a list for any pick (wraps; negatives too).</summary>
+        public static string Pick(string[] lines, int pick) => lines[(pick % lines.Length + lines.Length) % lines.Length];
         public const uint HANGOVER_CURE = 23924;   // Ulgrim's Hangover Cure (retail): ours, it also clears ours
 
         /// <summary>Every drinkable alcohol on the world (ace_world, weenie type Food, surveyed 2026-11-16), by class id,
@@ -91,6 +167,13 @@ namespace RevivalGuard
 
         public enum Block { None, Fighting, Hostile, PlayerKiller, Stance }
 
+        /// <summary>Is an ACE DamageHistory entry a hit by someone else? ACE logs damage NEGATIVE (DamageHistory.Add:
+        /// -amount, the attacker's guid) and every heal, natural regeneration included, POSITIVE with no attacker
+        /// (OnHeal: ObjectGuid.Invalid). 0.1.116's rule read it the other way round: any player regenerating health in
+        /// the last 30 s was refused "Your blood is still up from the fight", and a real hit never counted (box test
+        /// 2026-11-16, after waking a third down).</summary>
+        public static bool IsHit(int amount, bool attackerIsSelf, bool attackerInvalid) => amount < 0 && !attackerIsSelf && !attackerInvalid;
+
         /// <summary>WHY A DRINK THAT WOULD PASS YOU OUT IS REFUSED. Never in combat, never with a monster near, never in
         /// reach of a red player (owner 2026-11-16); a combat stance counts as combat (there is no lying down in one).</summary>
         public static Block PassOutBlock(bool combatStance, bool hitRecently, bool hostileNear, bool redPlayerNear)
@@ -141,7 +224,7 @@ namespace RevivalGuard
             "You wake up humming a song you are glad nobody heard. You hope.",
         };
 
-        public const string HANGOVER_LINE = "Your head is splitting. You have a hangover.";
+        public const string HANGOVER_LINE = "Your head is splitting. You have a hangover.";   // woken early: only the short one
         public const string CURE_LINE = "Ulgrim's cure works. Your head clears and the world holds still.";
 
         public static string WakeLine(int pick) => WAKE_LINES[(pick % WAKE_LINES.Length + WAKE_LINES.Length) % WAKE_LINES.Length];

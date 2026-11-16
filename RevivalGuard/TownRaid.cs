@@ -39,7 +39,10 @@ namespace RevivalGuard
     ///   WHO     the tier is the lower median level of the players in town; the kind (drudges mostly, mosswarts or bandits)
     ///           and the wave by TownRaid.json. Raiders above tier 1 never pick a player under the tier's protect level who
     ///           has not hit them (new characters arrive at the lifestone).
-    ///   BIG     now and then a drudge war band: a bigger first wave, then its leader with escorts; the lifestone guard calls
+    ///   WAVES   three (a big raid four): each a main group and a pack of weaker adds of the same family; the next comes
+    ///           when most of the last is down, or after a while if someone is fighting, the lifestone guard shouting it in;
+    ///           the leader comes with the last (a big raid always, else now and then). Caps: MaxAlive standing, MaxTotal.
+    ///   BIG     now and then a drudge war band: bigger groups, a fourth wave, the leader with escorts; the lifestone guard calls
     ///           for reinforcements: Royal Guards come in from a gate and a placed guard is mustered up (HoltburgGuards
     ///           fights for them all: no credit taken, never killed). They leave when the raid ends.
     ///   END     held (every raider dead): each defender's reward rolls by damage share from the tier's retail treasure table,
@@ -70,10 +73,13 @@ namespace RevivalGuard
             public R.Kind Kind; public R.TierDef Def; public int Tier; public R.Side Side; public bool Big, Forced;
             public Phase Phase = Phase.Warning;
             public double WarnAt, SpawnAt, LastHit, EndAt, EmptySince;
-            public int Players, FirstWave, Spawned, Killed, Pending;
-            public bool LeaderSent, Reinforced, Arrived;
+            public int Players, Spawned, Killed, Pending;
+            public int WaveNo, Waves, WaveSize;                // waves sent, waves in all, the size of the last one
+            public double WaveAt;                              // when the last wave appeared
+            public bool LeaderRolled, Reinforced, Arrived;
+            public readonly List<string> WaveLog = new List<string>();
             public R.Outcome Outcome;
-            public readonly List<WeakReference<Creature>> First = new List<WeakReference<Creature>>();
+            public readonly List<WeakReference<Creature>> Wave = new List<WeakReference<Creature>>();   // the last wave's
             public readonly List<WeakReference<Creature>> All = new List<WeakReference<Creature>>();
             public readonly List<WeakReference<Creature>> Reserves = new List<WeakReference<Creature>>();
             public readonly Dictionary<uint, double> Damage = new Dictionary<uint, double>();
@@ -305,7 +311,7 @@ namespace RevivalGuard
             switch (r.Phase)
             {
                 case Phase.Warning:
-                    if (now >= r.WarnAt + s_Cfg.Schedule.WarningSeconds && r.Pending == 0) SpawnWave(r, first: true);
+                    if (now >= r.WarnAt + s_Cfg.Schedule.WarningSeconds && r.Pending == 0) SpawnWave(r);
                     break;
                 case Phase.Active:
                     Watch(r, now);
@@ -347,6 +353,8 @@ namespace RevivalGuard
             if (sd == null) return "no such side";
             bool isBig = R.CanBeBig(def) && (big ?? s_Rng.NextDouble() < k.BigChance);
             var r = new Raid { Id = s_NextId++, Kind = k, Def = def, Tier = def.Tier, Side = sd, Big = isBig, Forced = forced, WarnAt = now, Players = Math.Max(1, town.Count) };
+            r.Waves = R.WaveCount(s_Cfg.Waves, isBig);
+            r.LeaderRolled = s_Rng.NextDouble() < s_Cfg.Waves.LeaderChance;
             s_Raid = r;
             s_State.LastStart = now;
             var tok = Tokens(r);
@@ -355,59 +363,80 @@ namespace RevivalGuard
             Tell(around, L("area.warn", tok));
             if (isBig) Tell(around, L("area.big", tok));
             var to = sd.To;
-            TownLife.Notice("raid", new Vector2(to[0], to[1]), s_Cfg.Schedule.WarningSeconds + 180);
+            TownLife.Notice("raid", new Vector2(to[0], to[1]), s_Cfg.Schedule.WarningSeconds + 180 + (r.Waves - 1) * s_Cfg.Waves.NextAfterSeconds);
             Post(L("discord.start", tok));
-            Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} {(forced ? "started by staff" : "rolled")}: {k.Key} tier {r.Tier}{(isBig ? " BIG" : "")} from the {sd.Key}, {town.Count} in town ({string.Join(", ", town.Select(p => $"{p.Name} {p.Level}"))}); raiders in {s_Cfg.Schedule.WarningSeconds:0} s");
+            Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} {(forced ? "started by staff" : "rolled")}: {k.Key} tier {r.Tier}{(isBig ? " BIG" : "")} from the {sd.Key}, {r.Waves} waves{(def.Leader != 0 && (isBig || r.LeaderRolled) ? ", leader with the last" : "")}, {town.Count} in town ({string.Join(", ", town.Select(p => $"{p.Name} {p.Level}"))}); raiders in {s_Cfg.Schedule.WarningSeconds:0} s");
             return $"#{r.Id}: {k.Group} tier {r.Tier}{(isBig ? ", a big wave" : "")} from {sd.Name}; they appear in {s_Cfg.Schedule.WarningSeconds:0} s";
         }
 
         // ---------------------------------------------------------------- spawning
 
-        static void SpawnWave(Raid r, bool first)
+        static int NextSize(Raid r)
+        {
+            var (main, adds, leader, escorts) = R.PlanWave(s_Cfg, r.Def, r.Players, r.Big, r.WaveNo + 1, r.Waves, r.LeaderRolled, r.Spawned);
+            return main + adds + escorts + (leader ? 1 : 0);
+        }
+
+        /// <summary>The next wave: the main group, its adds, and with the last the leader (and a big raid's escorts).</summary>
+        static void SpawnWave(Raid r)
         {
             var def = r.Def;
-            var wcids = new List<uint>();
-            if (first)
-            {
-                int n = R.WaveSize(def, r.Players, r.Big, s_Cfg.Big.WaveFactor);
-                for (int i = 0; i < n; i++) wcids.Add(def.Wave[s_Rng.Next(def.Wave.Length)]);
-            }
-            else
-            {
-                wcids.Add(def.Leader);
-                var esc = def.Escort.Length > 0 ? def.Escort : def.Wave;
-                for (int i = 0; i < s_Cfg.Big.Escorts; i++) wcids.Add(esc[s_Rng.Next(esc.Length)]);
-            }
+            int no = r.WaveNo + 1;
+            bool first = no == 1;
+            var (main, adds, leader, escorts) = R.PlanWave(s_Cfg, def, r.Players, r.Big, no, r.Waves, r.LeaderRolled, r.Spawned);
+            var wcids = new List<(uint wcid, bool add)>();
+            if (leader) wcids.Add((def.Leader, false));
+            var esc = def.Escort.Length > 0 ? def.Escort : def.Wave;
+            for (int i = 0; i < escorts; i++) wcids.Add((esc[s_Rng.Next(esc.Length)], false));
+            for (int i = 0; i < main; i++) wcids.Add((def.Wave[s_Rng.Next(def.Wave.Length)], false));
+            for (int i = 0; i < adds; i++) wcids.Add((def.Adds[s_Rng.Next(def.Adds.Length)], true));
+            r.WaveNo = no;
             r.Pending++;
             var side = r.Side;
+            if (!first)
+            {
+                var tok = Tokens(r);
+                Shout(LIFESTONE_GUARD, L(no >= r.Waves ? "guard.lastwave" : "guard.wave", tok));
+                Tell(Around(), L("area.wave", tok));
+            }
             WorldManager.EnqueueAction(new ActionEventDelegate(() =>
             {
                 try
                 {
                     var made = new List<Creature>();
-                    foreach (var w in wcids)
+                    int madeAdds = 0;
+                    r.Wave.Clear();
+                    foreach (var (w, add) in wcids)
                     {
-                        var c = Spawn(w, At(side.From), 8f) as Creature;
+                        // adds scatter wider and come in a little behind and around the group
+                        var c = Spawn(w, At(side.From, add ? 6f : 0f), add ? 12f : 8f) as Creature;
                         if (c == null) continue;
                         s_Raiders.AddOrUpdate(c, new Tag { RaidId = r.Id, ProtectBelow = def.ProtectBelow });
                         r.All.Add(new WeakReference<Creature>(c));
-                        if (first) r.First.Add(new WeakReference<Creature>(c));
+                        r.Wave.Add(new WeakReference<Creature>(c));
                         made.Add(c);
-                        Send(c, At(side.To, 5f));
+                        if (add) madeAdds++;
+                        Send(c, At(side.To, add ? 8f : 5f));
                     }
                     r.Spawned += made.Count;
-                    if (first) { r.FirstWave = made.Count; r.SpawnAt = Now; r.LastHit = r.SpawnAt; r.Phase = Phase.Active; }
-                    if (made.Count == 0) { Mod.Log.Warn($"[RevivalGuard] TownRaid: #{r.Id} nothing spawned (weenies {string.Join(",", wcids)})"); if (first) End(r, R.Outcome.Faded, Now, "nothing spawned"); return; }
-                    if (!first)
+                    r.WaveSize = made.Count;
+                    double t = Now;
+                    r.WaveAt = t;
+                    r.LastHit = Math.Max(r.LastHit, t);          // each wave gets a full idle window
+                    if (first) { r.SpawnAt = t; r.Phase = Phase.Active; }
+                    r.WaveLog.Add($"{made.Count - madeAdds - (leader ? 1 + escorts : 0)}+{madeAdds}{(leader ? "+L" : "")}{(escorts > 0 ? $"+{escorts}e" : "")}");
+                    if (made.Count == 0) { Mod.Log.Warn($"[RevivalGuard] TownRaid: #{r.Id} wave {no}: nothing spawned (weenies {string.Join(",", wcids.Select(x => x.wcid))})"); if (first) End(r, R.Outcome.Faded, Now, "nothing spawned"); return; }
+                    if (leader)
                     {
                         var lead = made.FirstOrDefault(c => c.WeenieClassId == def.Leader) ?? made[0];
                         Tell(Around(), L("leader", Tokens(r, lead.Name)));
                     }
-                    Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} {(first ? "first wave" : "leader's wave")}: {made.Count} x [{string.Join(", ", made.GroupBy(c => c.Name).Select(g => $"{g.Count()} {g.Key} ({g.First().WeenieClassId}, level {g.First().Level})"))}] at the {side.Key} ({side.From[0]:0},{side.From[1]:0}) running to ({side.To[0]:0},{side.To[1]:0})");
+                    Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} wave {no} of {r.Waves}: {made.Count} ({made.Count - madeAdds - (leader ? 1 + escorts : 0)} in the group, {madeAdds} adds{(leader ? $", the leader{(escorts > 0 ? $" and {escorts} escorts" : "")}" : "")}) x [{string.Join(", ", made.GroupBy(c => c.Name).Select(g => $"{g.Count()} {g.Key} ({g.First().WeenieClassId}, level {g.First().Level})"))}] at the {side.Key} ({side.From[0]:0},{side.From[1]:0}) running to ({side.To[0]:0},{side.To[1]:0}); {r.Spawned} in all, {Live(r.All).Count()} standing");
                 }
                 catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] TownRaid: spawn: {e}"); }
                 finally { r.Pending--; }
             }));
+            if (leader && r.Big) Reinforce(r);
         }
 
         /// <summary>A Generic object entering the world, scattered on the ground as ACE's own generators place theirs
@@ -515,12 +544,11 @@ namespace RevivalGuard
             if (Tracing)
                 foreach (var c in alive.Where(x => x.Location != null)) { var at = Local(c.Location); Mod.Log.Info($"[RevivalGuard] TownRaid trace: #{r.Id} {c.Name} 0x{c.Guid.Full:X8} at {at.X:0},{at.Y:0} lb {(c.CurrentLandblock?.Id.Raw ?? 0) >> 16:X4}{(c.CurrentLandblock?.IsDormant == true ? " DORMANT" : "")} {c.MonsterState} hp {c.Health.Current}/{c.Health.MaxValue} target {c.AttackTarget?.Name ?? "-"}"); }
 
-            bool moreToCome = r.Big && !r.LeaderSent;
-            if (moreToCome && r.Pending == 0 && R.LeaderDue(r.FirstWave, Live(r.First).Count(), now - r.SpawnAt, s_Cfg.Big))
+            bool moreToCome = r.WaveNo < r.Waves;
+            if (moreToCome && r.Pending == 0
+                && R.NextWaveDue(r.WaveSize, Live(r.Wave).Count(), now - r.WaveAt, r.LastHit > r.WaveAt, alive.Count, NextSize(r), s_Cfg.Waves))
             {
-                r.LeaderSent = true;
-                SpawnWave(r, first: false);
-                Reinforce(r);
+                SpawnWave(r);
                 return;
             }
             if (r.Pending > 0) return;
@@ -606,9 +634,9 @@ namespace RevivalGuard
                 chain.EnqueueChain();
             }
             if (r.Mustered) HoltburgGuards.Muster(r.Side.Muster, null);
-            s_State.History.Add($"{DateTime.UtcNow:yyyy-MM-dd HH:mm}Z #{r.Id} {r.Kind.Key} t{r.Tier}{(r.Big ? " big" : "")} {r.Side.Key}: {outcome}, {r.Killed}/{r.Spawned} killed, {defenders} rewarded{(r.Forced ? " (staff)" : "")}");
+            s_State.History.Add($"{DateTime.UtcNow:yyyy-MM-dd HH:mm}Z #{r.Id} {r.Kind.Key} t{r.Tier}{(r.Big ? " big" : "")} {r.Side.Key}: {outcome}, waves {string.Join(" ", r.WaveLog)} of {r.Waves}, {r.Killed}/{r.Spawned} killed, {defenders} rewarded{(r.Forced ? " (staff)" : "")}");
             SaveState();
-            Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} ends {outcome}{(why != null ? $" ({why})" : "")}: {r.Killed} of {r.Spawned} raiders killed in {(r.SpawnAt > 0 ? now - r.SpawnAt : 0):0} s, {r.Damage.Count} player(s) did damage, {defenders} rewarded");
+            Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} ends {outcome}{(why != null ? $" ({why})" : "")}: {r.WaveNo} of {r.Waves} waves ({string.Join(" ", r.WaveLog)}), {r.Killed} of {r.Spawned} raiders killed in {(r.SpawnAt > 0 ? now - r.SpawnAt : 0):0} s, {r.Damage.Count} player(s) did damage, {defenders} rewarded");
         }
 
         static void Leave(Raid r, double now)
@@ -812,7 +840,7 @@ namespace RevivalGuard
                         + (gapLeft > 0 ? $"next roll in {gapLeft / 60:0} min" : "rolling each minute")
                         + (R.QuietForRestart(DateTime.UtcNow, sch) ? "; quiet for the restart" : ""));
                     if (r != null)
-                        Reply($"#{r.Id} {r.Kind.Key} tier {r.Tier}{(r.Big ? " big" : "")} from the {r.Side.Key}: {r.Phase}, {Live(r.All).Count()} alive, {r.Killed} of {r.Spawned} killed, "
+                        Reply($"#{r.Id} {r.Kind.Key} tier {r.Tier}{(r.Big ? " big" : "")} from the {r.Side.Key}: {r.Phase}, wave {r.WaveNo} of {r.Waves} ({string.Join(" ", r.WaveLog)}), {Live(r.All).Count()} alive, {r.Killed} of {r.Spawned} killed, "
                             + $"{r.Damage.Count} defender(s), last hit {(r.SpawnAt > 0 ? now - r.LastHit : 0):0} s ago, reserves {Live(r.Reserves).Count()}");
                     foreach (var h in s_State.History.Skip(Math.Max(0, s_State.History.Count - 5))) Reply(h);
                     return;

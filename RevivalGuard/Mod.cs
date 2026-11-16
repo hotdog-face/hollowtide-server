@@ -63,6 +63,7 @@ namespace RevivalGuard
             Try(nameof(QuestLog), QuestLog.Register);
             Try(nameof(ModChannel), ModChannel.Register);
             Try(nameof(Mail), Mail.Register);
+            Try(nameof(DeathLog), DeathLog.Register);          // /deaths: your last 10 deaths (owner 2026-11-16)
             Try(nameof(Broker), Broker.Register);
             Try(nameof(TownCrier), TownCrier.Register);        // the Holtburg Town Crier's question desk (rg_crier, off by default)
             Try(nameof(DressingRoom), DressingRoom.Register);

@@ -1,5 +1,5 @@
 {
-  "_": "Holtburg raids (RevivalGuard TownRaid.cs, TownRaidRule.cs; docs/findings/holtburg-raids-2026-11-15.md). Retail monsters only, unchanged (owner 2026-11-15: existing weenies, no new or modified ones). The copy beside the mod dll is the live one: edit it there and it is read again within a minute, no restart; a newer copy built into the mod replaces it only if it was not hand-edited (SeedFileRule). Points are [x, y] in A9B4 metres (Holtburg's block; the lifestone is at 81, 12); the server puts them on the ground. Every leg was checked on the outdoor layer (findings doc). Turbine voice: plain ASCII, no em dashes, nothing modern. Tokens: {group} {side} {leader} {count} {n} {item} {name}.",
+  "_": "Holtburg raids (RevivalGuard TownRaid.cs, TownRaidRule.cs; docs/findings/holtburg-raids-2026-11-15.md). Retail monsters only, unchanged (owner 2026-11-15: existing weenies, no new or modified ones). The copy beside the mod dll is the live one: edit it there and it is read again within a minute, no restart; a newer copy built into the mod replaces it only if it was not hand-edited (SeedFileRule). Points are [x, y] in A9B4 metres (Holtburg's block; the lifestone is at 81, 12); the server puts them on the ground. Every leg was checked on the outdoor layer (findings doc). Turbine voice: plain ASCII, no em dashes, nothing modern. Waves: the main group, a pack of weaker adds of the same family with it, the next wave when most of the last is down (or after nextAfterSeconds if someone is fighting), the leader with the last (a big raid always, else leaderChance). Tokens: {group} {side} {leader} {count} {n} {item} {name}.",
   "town": "Holtburg",
   "schedule": {
     "minGapMinutes": 75,
@@ -41,25 +41,27 @@
   "kinds": [
     { "key": "drudge", "group": "drudges", "weight": 6, "sides": ["south", "west"], "bigChance": 0.12,
       "tiers": [
-        { "tier": 1, "wave": [7, 940, 193, 192, 1464], "leader": 30490, "escort": [192, 1464], "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 0 },
-        { "tier": 2, "wave": [1608, 1609], "leader": 1610, "escort": [1609], "base": 3, "perPlayer": 2, "max": 12, "treasure": 450, "protectBelow": 12 },
-        { "tier": 3, "wave": [1610, 24279, 24280], "leader": 24283, "escort": [1610], "base": 3, "perPlayer": 2, "max": 12, "treasure": 448, "protectBelow": 30 },
-        { "tier": 4, "wave": [23480, 24278, 24282], "leader": 22899, "escort": [24282], "base": 3, "perPlayer": 1.5, "max": 10, "treasure": 449, "protectBelow": 50 }
+        { "tier": 1, "wave": [7, 940, 1464], "adds": [192, 193], "leader": 30490, "escort": [192, 1464], "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 0 },
+        { "tier": 2, "wave": [1608, 1609], "adds": [7, 940, 193, 192], "leader": 1610, "escort": [1609], "base": 3, "perPlayer": 2, "max": 12, "treasure": 450, "protectBelow": 12 },
+        { "tier": 3, "wave": [1610, 24279, 24280], "adds": [1608, 1609], "leader": 24283, "escort": [1610], "base": 3, "perPlayer": 2, "max": 12, "treasure": 448, "protectBelow": 30 },
+        { "tier": 4, "wave": [23480, 24278, 24282], "adds": [1610, 24279, 24280], "leader": 22899, "escort": [24282], "base": 3, "perPlayer": 1.5, "max": 10, "treasure": 449, "protectBelow": 50 }
       ] },
     { "key": "mosswart", "group": "mosswarts", "weight": 2, "sides": ["north"],
       "tiers": [
-        { "tier": 1, "wave": [948, 8, 4249], "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 0 },
-        { "tier": 2, "wave": [211, 1619, 210], "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 12 },
-        { "tier": 3, "wave": [7102, 27864, 27863, 35141], "base": 3, "perPlayer": 2, "max": 12, "treasure": 450, "protectBelow": 30 }
+        { "tier": 1, "wave": [948, 8, 4249], "adds": [948, 4249], "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 0 },
+        { "tier": 2, "wave": [211, 1619], "adds": [8, 948, 4249], "leader": 210, "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 12 },
+        { "tier": 3, "wave": [7102, 27864, 27863], "adds": [211, 1619, 210], "leader": 35141, "base": 3, "perPlayer": 2, "max": 12, "treasure": 450, "protectBelow": 30 }
       ] },
     { "key": "bandit", "group": "bandits", "weight": 2, "sides": ["east"],
       "tiers": [
-        { "tier": 1, "wave": [11499], "base": 3, "perPlayer": 2, "max": 10, "treasure": 453, "protectBelow": 0 },
-        { "tier": 3, "wave": [187, 188], "base": 3, "perPlayer": 1.5, "max": 10, "treasure": 448, "protectBelow": 30 },
-        { "tier": 4, "wave": [187, 188], "base": 4, "perPlayer": 2, "max": 12, "treasure": 448, "protectBelow": 50 }
+        { "tier": 1, "wave": [11499], "adds": [11499], "leader": 11500, "base": 3, "perPlayer": 2, "max": 10, "treasure": 453, "protectBelow": 0 },
+        { "tier": 3, "wave": [187, 188], "adds": [11503, 11500], "base": 3, "perPlayer": 1.5, "max": 10, "treasure": 448, "protectBelow": 30 },
+        { "tier": 4, "wave": [187, 188], "adds": [11503], "base": 4, "perPlayer": 2, "max": 12, "treasure": 448, "protectBelow": 50 }
       ] }
   ],
-  "big": { "waveFactor": 1.5, "escorts": 3, "leaderAfterShare": 0.6, "leaderAfterSeconds": 180, "defenders": 3, "defenderWcid": 37518 },
+  "big": { "waveFactor": 1.25, "escorts": 3, "defenders": 3, "defenderWcid": 37518 },
+  "waves": { "count": 3, "bigCount": 4, "laterFactor": 0.8, "addsBase": 2, "addsPerPlayer": 1, "addsMax": 8,
+    "nextAtShare": 0.7, "nextAfterSeconds": 150, "minGapSeconds": 40, "leaderChance": 0.3, "maxAlive": 30, "maxTotal": 60 },
   "rewards": {
     "rolls": [1, 2, 3],
     "shareFor2": 0.25,
@@ -78,7 +80,10 @@
     "area.warn": ["Raid on Holtburg! {Group} are coming from {side}. They reach the town in about a minute."],
     "area.big": ["This is a war band, not a raiding party. Something bigger walks behind them."],
     "area.arrive": ["The {group} reach the edge of Holtburg!"],
-    "leader": ["{leader} leads the second wave in!"],
+    "leader": ["{leader} comes in with the last of them!", "{leader} leads the last wave in!"],
+    "guard.wave": ["More of them on {side}! Hold your ground!", "Another lot coming up {side}! Stand fast!", "They are not done yet! Here come more!"],
+    "guard.lastwave": ["This is the last of them! Hold, and Holtburg is safe!", "Here comes the last of them! Do not give ground now!"],
+    "area.wave": ["More {group} come from {side}!"],
     "guard.reinforce": ["Too many of them! Reinforcements! To me!", "We need more swords here! Sound the call!"],
     "guard.reserve": ["The reserve is here. Hold the line!", "Fall in! We hold the town!"],
     "guard.held": ["They break! Holtburg holds!", "That is the last of them. Well fought, all of you."],

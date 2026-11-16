@@ -48,6 +48,10 @@ namespace RevivalGuard
             public uint HealthAtOut;
             public int Stage;              // the last stage a line was said for
             public double BarkAt;          // the last barkeeper word
+            public bool Hungover;          // the hangover after a normal wake, until rested (DrinkingRule.REST_NEEDED_S)
+            public double HangoverAt, Rested, GroanAt;
+            public bool HalfSaid;
+            public int HToken;             // which hangover a scheduled tick belongs to
         }
 
         static readonly ConcurrentDictionary<uint, St> s_State = new ConcurrentDictionary<uint, St>();
@@ -115,11 +119,13 @@ namespace RevivalGuard
             int stage = DrinkingRule.Stage(st.Drinks);
             if (stage > st.Stage) { var line = DrinkingRule.StageLine(st.Stage, stage); if (line != null) PkCommon.Say(p, line); }
             st.Stage = stage;
-            if (!DrinkingRule.OwnIntoxication(wcid) && st.Drinks >= DrinkingRule.SPELL_AT && PropertyManager.GetBool(P_SPELL, true).Item)
+            bool passes = DrinkingRule.PassesOut(st.Drinks) && PropertyManager.GetBool(P_PASSOUT, true).Item;
+            // not on the drink that passes you out: its sparkle hid the Woah (box capture 2026-11-16), and waking sobers you
+            if (!passes && !DrinkingRule.OwnIntoxication(wcid) && st.Drinks >= DrinkingRule.SPELL_AT && PropertyManager.GetBool(P_SPELL, true).Item)
                 Cast(p, DrinkingRule.INTOX_I);
             Send(p, st);
             if (stage >= 2) Barkeep(p, st, stage - 2);
-            if (DrinkingRule.PassesOut(st.Drinks) && PropertyManager.GetBool(P_PASSOUT, true).Item)
+            if (passes)
             {
                 // after the drink's own motion has played out
                 var chain = new ActionChain();
@@ -130,6 +136,20 @@ namespace RevivalGuard
         }
 
         // ---- out cold ----------------------------------------------------------------------------------------------
+
+        /// <summary>The first client that draws drinking (and lies its own body down when out cold) is 0.1.116. An older
+        /// client of ours reads the mod channel but ignores "drunk", so the server must lay it down like a retail one.</summary>
+        public const string FIRST_DRAWING_CLIENT = "0.1.116";
+        static bool LiesItselfDown(Player p) => ModChannel.Capable(p.Session)
+            && ModChannel.CompareVersions(ModChannel.ClientVersion(p.Session), FIRST_DRAWING_CLIENT) >= 0;
+
+        /// <summary>The first client that plays the stumble itself (Woah, a few lurching steps, the fall, then the black;
+        /// owner 2026-11-16: "I want to see my character stumble, maybe take a few steps forward and then fall over"). Its
+        /// steps and poses go out as its own movement, so everyone near sees them. Must name the release that carries
+        /// AcDrunk's stumble.</summary>
+        public const string FIRST_STUMBLE_CLIENT = "0.1.117";
+        static bool Stumbles(Player p) => ModChannel.Capable(p.Session)
+            && ModChannel.CompareVersions(ModChannel.ClientVersion(p.Session), FIRST_STUMBLE_CLIENT) >= 0;
 
         static void PassOut(Player p, St st, bool forced)
         {
@@ -144,18 +164,42 @@ namespace RevivalGuard
             }
             st.Out = true; st.Token++; st.OutAt = Now; st.HealthAtOut = p.Health.Current;
             int token = st.Token;
-            PkCommon.Say(p, DrinkingRule.PASS_LINE);
-            Others(p, $"{p.Name} slumps to the ground, out cold.");
-            // our client lies its own body down (its MoveToState carries it to everyone else); a retail client is shown it
-            if (!ModChannel.Capable(p.Session)) p.EnqueueBroadcastMotion(new Motion(MotionStance.NonCombat, MotionCommand.Sleeping));
-            Send(p, st, DrinkingRule.OUT_S);
-            Barkeep(p, st, 2, force: true);
-            Mod.Log.Info($"[RevivalGuard] Drinking: {p.Name} passed out{(forced ? " (@drunk pass)" : "")}");
-            Watch(p, st, token, 1);
+            // Three kinds of client. 0.1.117+ plays the whole stumble. 0.1.116 lies its own body down at once (Sleeping),
+            // as it shipped. Any other (retail, ours before 0.1.116) is shown it by the server: Woah, then the PossumState
+            // drop (owner 2026-11-16 on 0.1.115: "right now all it does is text lines").
+            bool stumbles = Stumbles(p), selfDown = LiesItselfDown(p);
+            double fallAt = stumbles ? DrinkingRule.FALL_AT_S : selfDown ? 0.0 : DrinkingRule.SERVER_WOAH_S;
+            double lead = stumbles ? DrinkingRule.STUMBLE_S : fallAt;
+            if (fallAt > 0) Others(p, string.Format(DrinkingRule.Pick(DrinkingRule.SWAY_OTHERS, s_Rng.Next()), p.Name));
+            // Woah is the server's for everyone: our client's own gesture right after the drink's server motions did not
+            // reach onlookers on the box test (2026-11-16); the server's motion does, to the drinker too
+            if (stumbles || !selfDown) p.EnqueueBroadcastMotion(new Motion(MotionStance.NonCombat, MotionCommand.Woah));
+            Send(p, st, DrinkingRule.OUT_S + lead, stumble: stumbles ? DrinkingRule.STUMBLE_S : 0);
+            After(p, fallAt, () =>
+            {
+                if (!st.Out || st.Token != token || p.IsDead) return;
+                PkCommon.Say(p, DrinkingRule.PASS_LINE);
+                Others(p, string.Format(DrinkingRule.Pick(DrinkingRule.FALL_OTHERS, s_Rng.Next()), p.Name));
+                if (!stumbles && !selfDown) p.EnqueueBroadcastMotion(new Motion(MotionStance.NonCombat, MotionCommand.PossumState));
+                Barkeep(p, st, 2, force: true);
+            });
+            Mod.Log.Info($"[RevivalGuard] Drinking: {p.Name} passed out{(forced ? " (@drunk pass)" : "")} ({(stumbles ? "stumbles" : selfDown ? "lies down" : "server shows it")})");
+            Watch(p, st, token, 1, (int)Math.Ceiling(DrinkingRule.OUT_S + lead));
         }
 
-        /// <summary>Once a second while out: a hit or a monster closing in wakes you; else wake after OUT_S.</summary>
-        static void Watch(Player p, St st, int token, int second)
+        /// <summary>Run <paramref name="a"/> on the player's chain after <paramref name="secs"/> (at once for 0).</summary>
+        static void After(Player p, double secs, Action a)
+        {
+            if (secs <= 0) { try { a(); } catch (Exception e) { TickGuard.Report("Drinking", e); } return; }
+            var chain = new ActionChain();
+            chain.AddDelaySeconds(secs);
+            chain.AddAction(p, () => { try { a(); } catch (Exception e) { TickGuard.Report("Drinking", e); } });
+            chain.EnqueueChain();
+        }
+
+        /// <summary>Once a second while out (the stumble included): a hit or a monster closing in wakes you; else wake
+        /// after <paramref name="total"/> seconds.</summary>
+        static void Watch(Player p, St st, int token, int second, int total)
         {
             var chain = new ActionChain();
             chain.AddDelaySeconds(1.0);
@@ -167,8 +211,8 @@ namespace RevivalGuard
                     if (p.IsDead || p.Session == null || p.CurrentLandblock == null) { Clear(p, st); return; }
                     bool hurt = p.Health.Current < st.HealthAtOut;
                     if (hurt || HostileNear(p, 12f)) { Wake(p, st, early: true); return; }
-                    if (second >= (int)DrinkingRule.OUT_S) { Wake(p, st, early: false); return; }
-                    Watch(p, st, token, second + 1);
+                    if (second >= total) { Wake(p, st, early: false); return; }
+                    Watch(p, st, token, second + 1, total);
                 }
                 catch (Exception e) { TickGuard.Report("Drinking", e); }
             });
@@ -181,17 +225,72 @@ namespace RevivalGuard
             Sober(p);
             string line = early ? DrinkingRule.WAKE_EARLY_LINE : DrinkingRule.WakeLine(s_Rng.Next());
             PkCommon.Say(p, line);
-            Others(p, $"{p.Name} sits up, blinking.");
-            if (!ModChannel.Capable(p.Session))
+            Others(p, string.Format(DrinkingRule.WAKE_OTHERS, p.Name));
+            // 0.1.116+ gets up by itself; the server stands any other up (PossumState's own exit, or the Sleeping one)
+            if (!LiesItselfDown(p)) p.EnqueueBroadcastMotion(new Motion(MotionStance.NonCombat, MotionCommand.Ready));
+            if (early)
             {
-                p.EnqueueBroadcastMotion(new Motion(MotionStance.NonCombat, MotionCommand.Sitting));
-                var chain = new ActionChain();
-                chain.AddDelaySeconds(2.0);
-                chain.AddAction(p, () => { if (!p.IsDead) p.EnqueueBroadcastMotion(new Motion(MotionStance.NonCombat, MotionCommand.Ready)); });
-                chain.EnqueueChain();
+                // woken by danger: on your feet at once, no health taken, only the short hangover (never a fight made harder)
+                Send(p, st, 0, wake: true, line: line, early: true);
+                Hangover(p);
+                return;
             }
-            Send(p, st, 0, wake: true, line: line, early: early);
-            Hangover(p);
+            // owner 2026-11-16: "The health of the player should also drop a bit, maybe 1/3 down, so that they have to rest"
+            int cur = (int)p.Health.Current, after = DrinkingRule.HealthAfterWaking(cur, (int)p.Health.MaxValue);
+            if (after < cur) p.UpdateVital(p.Health, after);
+            Send(p, st, 0, wake: true, line: line, hangover: DrinkingRule.HANGOVER_MAX_S);
+            StartHangover(p, st);
+        }
+
+        // ---- the hangover: until you rest ------------------------------------------------------------------------------
+
+        /// <summary>Self, Coordination and Quickness -10 (Feeblemind, Clumsiness, Slowness Self I), held until you have rested
+        /// DrinkingRule.REST_NEEDED_S in all (sitting, crouching or lying down, out of combat: AC's own rest, which also
+        /// regenerates the lost health two to three times faster), or HANGOVER_MAX_S, or Ulgrim's cure.</summary>
+        static void StartHangover(Player p, St st)
+        {
+            foreach (var id in new[] { DrinkingRule.HANGOVER_SPELL, DrinkingRule.HANGOVER_COORD, DrinkingRule.HANGOVER_QUICK })
+                Hold(p, id, DrinkingRule.HANGOVER_MAX_S);
+            st.Hungover = true; st.HangoverAt = Now; st.Rested = 0; st.HalfSaid = false; st.GroanAt = Now; st.HToken++;
+            PkCommon.Say(p, DrinkingRule.HANGOVER_REST_LINE, ChatMessageType.Magic);
+            HangoverTick(p, st, st.HToken);
+        }
+
+        static void HangoverTick(Player p, St st, int token)
+        {
+            After(p, DrinkingRule.HANGOVER_TICK_S, () =>
+            {
+                if (!st.Hungover || st.HToken != token) return;
+                if (p.Session == null) return;   // logged off: Hello picks it up again
+                if (p.IsDead) { Lift(p, st, null); return; }
+                bool combat = p.CombatMode != CombatMode.NonCombat;
+                var md = p.CurrentMovementData;
+                uint fwd = md != null && md.MovementType == MovementType.Invalid && md.Invalid != null ? (uint)md.Invalid.State.ForwardCommand : 0u;
+                bool resting = DrinkingRule.Resting(fwd, combat);
+                if (resting) st.Rested += DrinkingRule.HANGOVER_TICK_S;
+                if (!st.HalfSaid && st.Rested >= DrinkingRule.REST_NEEDED_S / 2) { st.HalfSaid = true; PkCommon.Say(p, DrinkingRule.HANGOVER_HALF_LINE, ChatMessageType.Magic); }
+                if (DrinkingRule.HangoverOver(st.Rested, Now - st.HangoverAt)) { Lift(p, st, DrinkingRule.HANGOVER_OVER_LINE); return; }
+                if (!resting && !combat && Now - st.GroanAt >= DrinkingRule.GROAN_GAP_S)
+                {
+                    st.GroanAt = Now;
+                    PkCommon.Say(p, DrinkingRule.Pick(DrinkingRule.GROAN_LINES, s_Rng.Next()));
+                    if (s_Rng.NextDouble() < 0.5) Others(p, string.Format(DrinkingRule.GROAN_OTHERS, p.Name));
+                }
+                HangoverTick(p, st, token);
+            });
+        }
+
+        /// <summary>The hangover is over: its three spells go (only ours: a held one of the same id would be ours too).</summary>
+        static void Lift(Player p, St st, string line)
+        {
+            st.Hungover = false; st.HToken++;
+            foreach (var id in new[] { DrinkingRule.HANGOVER_SPELL, DrinkingRule.HANGOVER_COORD, DrinkingRule.HANGOVER_QUICK })
+            {
+                var e = p.EnchantmentManager.GetEnchantment(id);
+                if (e != null) p.EnchantmentManager.Dispel(e);
+            }
+            if (line != null) PkCommon.Say(p, line, ChatMessageType.Magic);
+            if (p.Session != null) Send(p, st, hangover: 0);
         }
 
         /// <summary>Dead, logged off or gone while out: nothing more to show; the count goes.</summary>
@@ -205,14 +304,12 @@ namespace RevivalGuard
         static void Cure(Player p, St st)
         {
             if (st.Out) return;
-            bool had = Count(st) > 0.01 || p.EnchantmentManager.GetEnchantment(DrinkingRule.HANGOVER_SPELL) != null
+            bool had = Count(st) > 0.01 || st.Hungover || p.EnchantmentManager.GetEnchantment(DrinkingRule.HANGOVER_SPELL) != null
                        || p.EnchantmentManager.GetEnchantment(DrinkingRule.INTOX_I) != null;
             st.Drinks = 0; st.At = Now; st.Stage = 0;
             Sober(p);
-            var h = p.EnchantmentManager.GetEnchantment(DrinkingRule.HANGOVER_SPELL);
-            if (h != null) p.EnchantmentManager.Dispel(h);
+            Lift(p, st, null);
             if (had) PkCommon.Say(p, DrinkingRule.CURE_LINE);
-            Send(p, st);
         }
 
         static void Sober(Player p)
@@ -224,21 +321,27 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Feeblemind Self I (Self -10), held for HANGOVER_S instead of its own 60 s.</summary>
+        /// <summary>Woken early (danger): only Feeblemind Self I (Self -10), held for HANGOVER_S instead of its own 60 s.</summary>
         static void Hangover(Player p)
+        {
+            if (Hold(p, DrinkingRule.HANGOVER_SPELL, DrinkingRule.HANGOVER_S)) PkCommon.Say(p, DrinkingRule.HANGOVER_LINE, ChatMessageType.Magic);
+        }
+
+        /// <summary>A self spell on the player, held <paramref name="secs"/> instead of its own length.</summary>
+        static bool Hold(Player p, uint id, double secs)
         {
             try
             {
-                var spell = new Spell(DrinkingRule.HANGOVER_SPELL);
-                if (spell.NotFound) return;
+                var spell = new Spell(id);
+                if (spell.NotFound) return false;
                 var r = p.EnchantmentManager.Add(spell, p, null);
-                if (r?.Enchantment == null) return;
-                r.Enchantment.Duration = DrinkingRule.HANGOVER_S;
+                if (r?.Enchantment == null) return false;
+                r.Enchantment.Duration = secs;
                 p.Session.Network.EnqueueSend(new GameEventMagicUpdateEnchantment(p.Session, new ACE.Server.Network.Structure.Enchantment(p, r.Enchantment)));
                 p.HandleSpellHooks(spell);
-                PkCommon.Say(p, DrinkingRule.HANGOVER_LINE, ChatMessageType.Magic);
+                return true;
             }
-            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] Drinking: hangover: {e.Message}"); }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] Drinking: hold {id}: {e.Message}"); return false; }
         }
 
         static void Cast(Player p, uint id)
@@ -266,7 +369,7 @@ namespace RevivalGuard
                 {
                     var e = log[i];
                     if (e == null || e.Time < cut) continue;
-                    if (e.Amount > 0 && e.Attacker != p.Guid) return true;
+                    if (DrinkingRule.IsHit(e.Amount, e.Attacker == p.Guid, e.Attacker == ACE.Entity.ObjectGuid.Invalid)) return true;
                 }
             }
             catch { }
@@ -343,23 +446,37 @@ namespace RevivalGuard
 
         /// <summary>"drunk": {"d": count now, "r": wear-off per second, "p": the pass-out count, "o": seconds out cold
         /// starting now (0 = not out), "w": 1 on waking, "e": 1 when woken early (a hit, a monster: up at once), "l": the
-        /// wake line}.</summary>
-        static void Send(Player p, St st, double outSecs = 0, bool wake = false, string line = null, bool early = false)
+        /// wake line, "s": seconds of stumble before the black (0.1.117+ only), "hk":1 with "h": seconds the hangover may
+        /// still last (0 = it lifted)}.</summary>
+        static void Send(Player p, St st, double outSecs = 0, bool wake = false, string line = null, bool early = false,
+                         double stumble = 0, double hangover = -1)
         {
             if (p?.Session == null || !ModChannel.Capable(p.Session)) return;
             var ci = CultureInfo.InvariantCulture;
             string json = "{\"d\":" + Count(st).ToString("0.###", ci) + ",\"r\":" + DrinkingRule.DECAY_PER_S.ToString("0.######", ci)
                         + ",\"p\":" + DrinkingRule.PASS.ToString("0.##", ci) + ",\"o\":" + outSecs.ToString("0.#", ci)
-                        + ",\"w\":" + (wake ? 1 : 0) + (early ? ",\"e\":1" : "") + (line != null ? ",\"l\":" + Telemetry.J(line) : "") + "}";
+                        + (stumble > 0 ? ",\"s\":" + stumble.ToString("0.##", ci) : "")
+                        + ",\"w\":" + (wake ? 1 : 0) + (early ? ",\"e\":1" : "") + (line != null ? ",\"l\":" + Telemetry.J(line) : "")
+                        + (hangover >= 0 ? ",\"hk\":1,\"h\":" + hangover.ToString("0", ci) : "") + "}";
             ModChannel.Send(p.Session, "drunk", json);
         }
 
-        /// <summary>From ModChannel's hello: a character that relogs while drunk keeps its sway (out cold is not resumed).</summary>
+        /// <summary>From ModChannel's hello: a character that relogs while drunk keeps its sway (out cold is not resumed),
+        /// and one hung over keeps the hangover (its clock and rest go on).</summary>
         internal static void Hello(Session session)
         {
             var p = session?.Player;
             if (p == null || !s_State.TryGetValue(p.Guid.Full, out var st)) return;
-            if (st.Out && Now - st.OutAt > DrinkingRule.OUT_S + 5) { st.Out = false; st.Drinks = 0; st.At = Now; }
+            if (st.Out && Now - st.OutAt > DrinkingRule.OUT_S + DrinkingRule.STUMBLE_S + 5) { st.Out = false; st.Drinks = 0; st.At = Now; }
+            if (st.Hungover)
+            {
+                double left = DrinkingRule.HANGOVER_MAX_S - (Now - st.HangoverAt);
+                if (left <= 0) { Lift(p, st, DrinkingRule.HANGOVER_OVER_LINE); return; }
+                st.HToken++;
+                HangoverTick(p, st, st.HToken);
+                Send(p, st, hangover: left);
+                return;
+            }
             if (Count(st) > 0.01) Send(p, st);
         }
 
@@ -382,11 +499,14 @@ namespace RevivalGuard
             if (a.Length > 0 && double.TryParse(a, NumberStyles.Float, CultureInfo.InvariantCulture, out var n))
             {
                 st.Drinks = Math.Clamp(n, 0.0, DrinkingRule.PASS - 0.01); st.At = Now; st.Stage = DrinkingRule.Stage(st.Drinks);
-                if (n <= 0) { Sober(p); var h = p.EnchantmentManager.GetEnchantment(DrinkingRule.HANGOVER_SPELL); if (h != null) p.EnchantmentManager.Dispel(h); }
+                if (n <= 0) { Sober(p); Lift(p, st, null); }
                 Send(p, st);
             }
+            string ver = ModChannel.ClientVersion(session) is var v && v.Length > 0 ? v : "no version";
             PkCommon.Say(p, $"[Drinking] count {Count(st):0.00} of {DrinkingRule.PASS} (stage {DrinkingRule.Stage(Count(st))}, out {st.Out}); "
-                          + $"switch {P_ON} {(On ? "ON" : "off")}; this client {(ModChannel.Capable(session) ? "draws it" : "does not read the mod channel")}");
+                          + $"hangover {(st.Hungover ? $"{Now - st.HangoverAt:0}s in, rested {st.Rested:0}s of {DrinkingRule.REST_NEEDED_S:0}" : "no")}; "
+                          + $"switch {P_ON} {(On ? "ON" : "off")}; this client ({ver}) "
+                          + (Stumbles(p) ? "plays the stumble" : LiesItselfDown(p) ? "lies itself down (no stumble before " + FIRST_STUMBLE_CLIENT + ")" : "is shown it by the server (needs " + FIRST_DRAWING_CLIENT + ")"));
         }
     }
 

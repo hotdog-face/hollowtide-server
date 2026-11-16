@@ -32,5 +32,9 @@
     <EmbeddedResource Include="TownLife.json" LogicalName="RevivalGuard.TownLife.json" />
     <!-- Holtburg raids: schedule, sides, raiders per tier, lines (TownRaid), seeded beside the dll the same way. -->
     <EmbeddedResource Include="TownRaid.json" LogicalName="RevivalGuard.TownRaid.json" />
+    <!-- /deaths place names (DeathLog): towns from tools/web/towns.json, dungeon landblocks from dungeon-names.json. -->
+    <EmbeddedResource Include="DeathPlaces.json" LogicalName="RevivalGuard.DeathPlaces.json" />
+    <!-- Corpse capsules: real 2017 player corpses, retail looks, proven-floor sites, item pools, invented names (tools/corpse-capsules/gen.py). -->
+    <EmbeddedResource Include="CorpseCapsules.json" LogicalName="RevivalGuard.CorpseCapsules.json" />
   </ItemGroup>
 </Project>

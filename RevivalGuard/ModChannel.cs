@@ -73,6 +73,7 @@ namespace RevivalGuard
             FestivalChannel.Hello(session);         // the running festivals (the Lightbringer's red water)
             TreeStatsUpload.Hello(session);         // the TreeStats switch's state (and that the feature is here)
             DerethChatHost.Hello(session);          // the Dereth channel (other servers): the Cross-Server tab and its on/off
+            Drinking.Hello(session);                // a character that relogs while drunk keeps its sway
             SendRecalls(session);                   // the lifestone, for the tracker's recall routes
         }
 

@@ -42,9 +42,17 @@ namespace RevivalGuard
     ///   LOOK    "Corpse of Name", the player body with a real retail look (setup, motion table, palettes, texture and part
     ///           swaps), "Killed by &lt;the creature that spawns there&gt;." Anyone may open and loot it (no victim, so ACE asks no
     ///           permission); a monster-kind corpse to ACE, so it is never saved and drops nothing when it rots.
-    ///   LIFE    An emptied corpse rots like any (ACE: 15 s after the last item). An unvisited one lasts retail's player-corpse
-    ///           time (5 minutes a level, at least an hour) times 0.5-1.5, then goes quietly while its landblock is unloaded.
-    ///           Each one gone is replaced by a new record on a site in an UNLOADED landblock, so the count stays steady.
+    ///   LIFE    Owner 2026-11-17: "keep the corpses for as long as retail kept corpses. i think they stayed until someone
+    ///           loots them." A generated corpse STAYS until someone loots it: no timer, and it survives restarts (records
+    ///           kept in Mods/RevivalGuard/CorpseCapsules/state.json; contents are rolled again after a restart). Retail
+    ///           (wiki Death Penalty; ACE Corpse.RecalculateDecayTime): a player corpse decayed after 5 minutes a level, at
+    ///           least an hour, counted only while its landblock was active, so in rarely visited spots it lay for months.
+    ///           An emptied corpse rots like any (ACE: 15 s after the last item). A looted one is replaced by a new record
+    ///           on a site in an UNLOADED landblock, so the count stays at the target. ANTI-FARM: at most LB_CAP_OUT/IN standing in a
+    ///           landblock; a landblock where a corpse was looted gets none new for LB_COOL; replacements are limited to
+    ///           rg_corpse_capsules_refill_per_hour (default 40) server-wide.
+    ///   SITES   Owner 2026-11-17: PK battle spots (Arwic, Bandit Castle...), mansion and villa lawns (outdoor yard squares,
+    ///           never inside, never at the door), daily-run dungeons (the Eater vaults first), plus some hunting spread.
     ///   REAL    The 11 never expire; looted empty they rot and come back at the next restart.
     ///   NAMES   Owner 2026-11-16: "i want the corpses to show real player names. especially if we can get darktide names and
     ///           tailors." Real names never go in git or this published source: the embedded names are invented, and an
@@ -59,13 +67,18 @@ namespace RevivalGuard
     /// </summary>
     static class CorpseCapsules
     {
-        internal const string P_ON = "rg_corpse_capsules", P_COUNT = "rg_corpse_capsules_count";
+        internal const string P_ON = "rg_corpse_capsules", P_COUNT = "rg_corpse_capsules_count", P_REFILL = "rg_corpse_capsules_refill_per_hour";
+        const int LB_CAP_OUT = 16, LB_CAP_IN = 30;   // generated corpses standing in one landblock at most (dungeons are big)
+        const double LB_COOL = 6 * 3600;     // a landblock where a corpse was looted gets no new one for this long
+        const double FOREVER = 10.0 * 365 * 24 * 3600;   // TimeToRot: never by time (empty still rots in 15 s, ACE)
         const uint PYREAL = 273;
         const float SPACING = 8f;            // never two corpses this close in one landblock
 
         static bool On { get { try { return PropertyManager.GetBool(P_ON, false).Item; } catch { return false; } } }
         static int Target { get { try { var v = PropertyManager.GetLong(P_COUNT, 0).Item; return v > 0 ? (int)v : s_Data?.Target ?? 450; } catch { return s_Data?.Target ?? 450; } } }
-        static double Now => ACE.Common.Time.GetUnixTime();
+        static double s_Skew;                // staff test clock (@corpses age): seconds added to now
+        static double Now => ACE.Common.Time.GetUnixTime() + s_Skew;
+        static int RefillPerHour { get { try { var v = PropertyManager.GetLong(P_REFILL, 0).Item; return v > 0 ? (int)v : 40; } catch { return 40; } } }
 
         // ------------------------------------------------------------ data
         sealed class Look { public uint Setup, MTable, Pal; public (byte i, uint g)[] Parts; public (byte i, uint o, uint n)[] Tex; public (uint p, ushort o, ushort l)[] Subs; public int Seen; }
@@ -74,26 +87,31 @@ namespace RevivalGuard
         sealed class Real { public string Name; public uint Cell; public float[] Pos; public Look Look; public uint[] Items; }
         sealed class Data
         {
-            public int Target; public double[] Shares = new double[3];
+            public int Target; public double[] Shares;
             public Dictionary<int, uint> TierProfile = new Dictionary<int, uint>();
             public List<Real> Real = new List<Real>(); public List<Look> Looks = new List<Look>(); public List<string> Killers = new List<string>();
-            public List<Site>[] Sites = { new List<Site>(), new List<Site>(), new List<Site>() };
-            public double[][] Cum = new double[3][];
+            public List<Site>[] Sites;
+            public double[][] Cum;
             public double[] LookCum;
             public List<Item> Common = new List<Item>(), Uncommon = new List<Item>(), Valuable = new List<Item>();
             public Dictionary<ushort, List<Item>> ByLb = new Dictionary<ushort, List<Item>>();
             public List<string> Names = new List<string>();
         }
         /// <summary>The server-only real names file (see NAMES above); null when absent.</summary>
-        sealed class Person { public string Name; public Look Look; public bool Darktide; }
+        sealed class Person { public string Name; public Look Look; public bool Darktide; public string[] Killers; }
         sealed class RealNames
         {
             public string Path;
             public List<(uint cell, float x, float y, string name)> Real = new List<(uint, float, float, string)>();
             public List<Person> People = new List<Person>();
             public List<Site> DtSites = new List<Site>();
+            public List<string> DtKillers = new List<string>();   // real Darktide player killers (server-only file)
         }
         const int DT_MAX = 6;                // Darktide-place corpses standing at once
+        const int KIND_PK = 3, KIND_LAWN = 4, KIND_DT = 6, KIND_TN = 7, KIND_HUB = 8, KIND_AYAN = 9;
+        // Owner 2026-11-17: "town network was also littered with corpses and facility hub of noob corpses." One busy
+        // indoor space each: a small cap so they read as littered, not cluttered.
+        const int CAP_TN = 25, CAP_HUB = 15;
 
         // ------------------------------------------------------------ state
         sealed class Rec
@@ -103,7 +121,7 @@ namespace RevivalGuard
             public int Level, Tier; public string Killer;
             public double Born, Expires;            // Expires 0: never (the real ones)
             public uint[] RealItems;
-            public bool Rolled, Gone;
+            public bool Rolled, Gone; public int RolledN = -1, LookIdx = -1, SiteIdx = -1, DtIdx = -1;
             public Corpse Corpse;                   // made, in a loaded landblock
             public List<WorldObject> Held = new List<WorldObject>();   // its items while its landblock is unloaded
             public ushort Lb => (ushort)(Cell >> 16);
@@ -131,11 +149,12 @@ namespace RevivalGuard
             {
                 var l = MonsterAi.Inner(DefaultPropertyManager.DefaultLongProperties);
                 if (!l.ContainsKey(P_COUNT)) l[P_COUNT] = new Property<long>(0, "RevivalGuard CorpseCapsules: how many stand at once (0: the data's target)");
+                if (!l.ContainsKey(P_REFILL)) l[P_REFILL] = new Property<long>(0, "RevivalGuard CorpseCapsules: replacements for looted corpses an hour, server-wide (0: 40)");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] CorpseCapsules: count switch not registered ({e.Message})"); }
             CommandManager.TryAddCommand(Cmd, "corpses", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld,
                 "Corpse capsules (old player corpses across Dereth): status, spawn n (or here), clear, reload, near, goto id, budget n.",
-                "[status | spawn [n|here] | clear | reload | near | goto <id> | budget [n]]");
+                "[status | spawn [n|here] | clear | reload | near | find <name> | goto <id> | budget [n] | age <hours>]");
             try { s_Data = LoadData(); }
             catch (Exception e) { Mod.Log.Error($"[RevivalGuard] CorpseCapsules: data not loaded ({e.Message}); none will appear"); }
             s_Names = LoadNames();
@@ -146,7 +165,7 @@ namespace RevivalGuard
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ace", "corpse-capsules", "names.json");
 
         static string NamesLine() => s_Names == null ? "names invented (no server names file)"
-            : $"real names from {s_Names.Path}: {s_Names.Real.Count} real corpses, {s_Names.People.Count} people ({s_Names.People.Count(p => p.Look != null)} in their own look, {s_Names.People.Count(p => p.Darktide)} Darktide), {s_Names.DtSites.Count} Darktide places";
+            : $"real names from {s_Names.Path}: {s_Names.Real.Count} real corpses, {s_Names.People.Count} people ({s_Names.People.Count(p => p.Look != null)} in their own look, {s_Names.People.Count(p => p.Darktide)} Darktide), {s_Names.DtKillers.Count} Darktide killers, {s_Names.DtSites.Count} Darktide places";
 
         /// <summary>The optional server-only real names file; any problem means the invented names (logged, never fatal).</summary>
         static RealNames LoadNames()
@@ -163,11 +182,17 @@ namespace RevivalGuard
                 {
                     var name = x[0].GetString();
                     if (string.IsNullOrWhiteSpace(name)) continue;
-                    n.People.Add(new Person { Name = name, Look = x[1].ValueKind == JsonValueKind.Array ? ReadLook(x[1]) : null, Darktide = (x[2].GetInt32() & 1) != 0 });
+                    n.People.Add(new Person
+                    {
+                        Name = name, Look = x[1].ValueKind == JsonValueKind.Array ? ReadLook(x[1]) : null, Darktide = (x[2].GetInt32() & 1) != 0,
+                        Killers = x.GetArrayLength() > 3 && x[3].ValueKind == JsonValueKind.Array ? x[3].EnumerateArray().Select(k => k.GetString()).Where(k => !string.IsNullOrWhiteSpace(k)).ToArray() : null,
+                    });
                 }
+                if (r.TryGetProperty("dtKillers", out var dk))
+                    foreach (var x in dk.EnumerateArray()) { var k = x.GetString(); if (!string.IsNullOrWhiteSpace(k)) n.DtKillers.Add(k); }
                 if (r.TryGetProperty("dtSites", out var ds))
                     foreach (var x in ds.EnumerateArray())
-                        n.DtSites.Add(new Site { Cell = x[0].GetUInt32(), X = (float)x[1].GetDouble(), Y = (float)x[2].GetDouble(), Z = (float)x[3].GetDouble(), Lv = 100, Tier = 6, Kind = 3, W = 1 });
+                        n.DtSites.Add(new Site { Cell = x[0].GetUInt32(), X = (float)x[1].GetDouble(), Y = (float)x[2].GetDouble(), Z = (float)x[3].GetDouble(), Lv = 100, Tier = 6, Kind = KIND_DT, W = 1 });
                 if (n.People.Count == 0) { Mod.Log.Warn($"[RevivalGuard] CorpseCapsules: {path} has no people; invented names"); return null; }
                 return n;
             }
@@ -181,7 +206,8 @@ namespace RevivalGuard
             using var doc = JsonDocument.Parse(rs);
             var r = doc.RootElement; var d = new Data();
             d.Target = r.GetProperty("target").GetInt32();
-            int k = 0; foreach (var s in r.GetProperty("shares").EnumerateArray()) d.Shares[k++] = s.GetDouble();
+            d.Shares = r.GetProperty("shares").EnumerateArray().Select(s => s.GetDouble()).ToArray();
+            d.Sites = d.Shares.Select(_ => new List<Site>()).ToArray(); d.Cum = new double[d.Shares.Length][];
             foreach (var p in r.GetProperty("tierProfiles").EnumerateObject()) d.TierProfile[int.Parse(p.Name)] = p.Value.GetUInt32();
             foreach (var x in r.GetProperty("looks").EnumerateArray()) d.Looks.Add(ReadLook(x));
             double c = 0; d.LookCum = d.Looks.Select(l => c += Math.Sqrt(Math.Max(1, l.Seen))).ToArray();
@@ -209,9 +235,9 @@ namespace RevivalGuard
                     Cell = x[0].GetUInt32(), X = (float)x[1].GetDouble(), Y = (float)x[2].GetDouble(), Z = (float)x[3].GetDouble(),
                     Lv = x[4].GetInt32(), Tier = Math.Clamp(x[5].GetInt32(), 1, 8), W = x[6].GetDouble(), Killer = x[7].GetInt32(), Kind = x[8].GetInt32(),
                 };
-                if (s.Kind >= 0 && s.Kind < 3) d.Sites[s.Kind].Add(s);
+                if (s.Kind >= 0 && s.Kind < d.Sites.Length) d.Sites[s.Kind].Add(s);
             }
-            for (int i = 0; i < 3; i++) { double t = 0; d.Cum[i] = d.Sites[i].Select(s => t += s.W).ToArray(); }
+            for (int i = 0; i < d.Sites.Length; i++) { double t = 0; d.Cum[i] = d.Sites[i].Select(s => t += s.W).ToArray(); }
             var pools = r.GetProperty("pools");
             List<Item> Pool(JsonElement a) => a.EnumerateArray().Select(e => new Item { Wcid = e[0].GetUInt32(), W = e[1].GetInt32(), Min = e.GetArrayLength() > 2 ? e[2].GetInt32() : 1, Max = e.GetArrayLength() > 3 ? e[3].GetInt32() : 1 }).ToList();
             d.Common = Pool(pools.GetProperty("common")); d.Uncommon = Pool(pools.GetProperty("uncommon")); d.Valuable = Pool(pools.GetProperty("valuable"));
@@ -243,22 +269,87 @@ namespace RevivalGuard
                 return;
             }
             s_WasOn = true;
-            if (!s_RealMade) { MakeReal(); s_RealMade = true; }
-            List<Rec> drop = null;
-            lock (s_Lock)
-            {
-                foreach (var r in s_Recs.Values)
-                    if (!r.IsReal && r.Corpse == null && r.Expires > 0 && now > r.Expires && !Loaded(r.Lb)) (drop ??= new List<Rec>()).Add(r);
-                if (drop != null) foreach (var r in drop) { Forget(r); s_Expired++; }
-            }
+            if (!s_RealMade) { MakeReal(); s_RealMade = true; if (!s_Restored) { s_Restored = true; Restore(); } }
+            // no expiry (owner 2026-11-17): a generated corpse stays until someone loots it
+            if (now > s_NextSave) { s_NextSave = now + 300; Save(); }
             if (s_Paused) return;
             int want = Target, made = 0;
             while (made < 25 && Generated() < want)
             {
-                var r = NewRecord(now, initial: s_Made < want);
+                bool initial = s_Made < want;
+                if (!initial)
+                {
+                    // replacements for looted corpses: at most RefillPerHour an hour, so the loot that enters the world is capped
+                    while (s_Refills.Count > 0 && s_Refills.Peek() < now - 3600) s_Refills.Dequeue();
+                    if (s_Refills.Count >= RefillPerHour) break;
+                }
+                var r = NewRecord(now, initial);
                 if (r == null) break;
+                if (!initial) s_Refills.Enqueue(now);
                 made++;
             }
+        }
+
+        static readonly Queue<double> s_Refills = new Queue<double>();
+        static readonly Dictionary<ushort, double> s_LbCool = new Dictionary<ushort, double>();
+        static bool s_Restored; static double s_NextSave; static int s_RestoredN;
+        static string StatePath => Path.Combine(ModFolder.Sub("CorpseCapsules"), "state.json");
+
+        /// <summary>A record whose corpse lost an item to a player (or emptied): not kept over a restart.</summary>
+        static bool Taken(Rec r) => r.Rolled && r.RolledN >= 0 && (r.Corpse != null ? r.Corpse.Inventory.Count : r.Held.Count) < r.RolledN;
+
+        /// <summary>The standing generated corpses, so they outlive a restart (owner: they stay until looted).</summary>
+        static void Save()
+        {
+            try
+            {
+                List<object> rows;
+                lock (s_Lock)
+                    rows = s_Recs.Values.Where(r => !r.IsReal && r.Site != null && !r.Gone && !Taken(r))
+                        .Select(r => (object)new object[] { r.Name, r.OwnLook ? -1 : r.LookIdx, r.DtSite ? KIND_DT : r.Site.Kind, r.DtSite ? r.DtIdx : r.SiteIdx,
+                            r.Cell, r.Level, r.Tier, r.Killer, Math.Round(r.Born), r.Qw, r.Qz }).ToList();
+                var tmp = StatePath + ".tmp";
+                File.WriteAllText(tmp, JsonSerializer.Serialize(new { saved = Now, rows }));
+                File.Move(tmp, StatePath, true);
+            }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] CorpseCapsules: state not saved ({e.Message})"); }
+        }
+
+        static void Restore()
+        {
+            try
+            {
+                if (!File.Exists(StatePath)) return;
+                using var doc = JsonDocument.Parse(File.ReadAllText(StatePath));
+                int bad = 0;
+                foreach (var x in doc.RootElement.GetProperty("rows").EnumerateArray())
+                {
+                    string name = x[0].GetString(); int lookIdx = x[1].GetInt32(), kind = x[2].GetInt32(), idx = x[3].GetInt32();
+                    uint cell = x[4].GetUInt32();
+                    Site site = kind == KIND_DT ? (s_Names?.DtSites != null && idx >= 0 && idx < s_Names.DtSites.Count ? s_Names.DtSites[idx] : null)
+                              : kind >= 0 && kind < s_Data.Sites.Length && idx >= 0 && idx < s_Data.Sites[kind].Count ? s_Data.Sites[kind][idx] : null;
+                    if (site == null || site.Cell != cell || LiveName(name)) { bad++; continue; }     // the data changed, or a character took the name
+                    Look look = lookIdx >= 0 && lookIdx < s_Data.Looks.Count ? s_Data.Looks[lookIdx] : null;
+                    if (lookIdx < 0) look = s_Names?.People.FirstOrDefault(pp => pp.Name == name)?.Look;
+                    var r = new Rec
+                    {
+                        Name = name, Look = look ?? PickLook(), OwnLook = lookIdx < 0 && look != null, Site = site, DtSite = kind == KIND_DT,
+                        Cell = site.Cell, X = site.X, Y = site.Y, Z = site.Z, Level = x[5].GetInt32(), Tier = x[6].GetInt32(),
+                        Killer = x[7].ValueKind == JsonValueKind.String ? x[7].GetString() : null, Born = x[8].GetDouble(),
+                        Qw = (float)x[9].GetDouble(), Qz = (float)x[10].GetDouble(), LookIdx = lookIdx,
+                        SiteIdx = kind == KIND_DT ? -1 : idx, DtIdx = kind == KIND_DT ? idx : -1,
+                    };
+                    if (r.Look != null && r.LookIdx < 0 && !r.OwnLook) r.LookIdx = s_Data.Looks.IndexOf(r.Look);
+                    if (r.Killer == "a player killer" || r.Killer == null) r.Killer = KillerFor(r, PersonNamed(name), r.Killer);
+                    lock (s_Lock)
+                    {
+                        if (s_NamesInUse.Contains(name)) { bad++; continue; }
+                        r.Id = s_NextId++; Add(r); s_NamesInUse.Add(name); s_Made++; s_RestoredN++;
+                    }
+                }
+                Mod.Log.Info($"[RevivalGuard] CorpseCapsules: {s_RestoredN} standing corpses kept from before the restart ({bad} dropped: data or names changed)");
+            }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] CorpseCapsules: state not restored ({e.Message}); a fresh set"); }
         }
 
         static int Generated() { lock (s_Lock) return s_Recs.Values.Count(r => !r.IsReal); }
@@ -304,13 +395,35 @@ namespace RevivalGuard
         }
 
         // ------------------------------------------------------------ a new record on a site in an unloaded landblock
-        static Rec NewRecord(double now, bool initial, Site at = null, Position here = null)
+        /// <summary>Owner 2026-11-17: "make sure they say a real darktide name." A Darktide-named corpse is killed by a real
+        /// Darktide player killer (one it was seen fighting in his logs, else any), and so is a corpse on a PK spot, lawn or
+        /// Darktide place when the server-only file has killers. Never its own name, never a name a character here has.
+        /// Without the file: the embedded line ("a player killer" or the creature).</summary>
+        static string KillerFor(Rec r, Person person, string fallback)
+        {
+            var all = s_Names?.DtKillers;
+            if (all == null || all.Count == 0) return fallback;
+            bool pkPlace = r.DtSite || (r.Site != null && (r.Site.Kind == KIND_PK || r.Site.Kind == KIND_LAWN || r.Site.Kind == KIND_TN || r.Site.Kind == KIND_AYAN));
+            if (person?.Darktide != true && !pkPlace) return fallback;
+            var fought = person?.Killers?.Where(k => !k.Equals(r.Name, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (fought != null && fought.Length > 0) return fought[s_Rng.Next(fought.Length)];
+            for (int tries = 0; tries < 12; tries++)
+            {
+                var k = all[s_Rng.Next(all.Count)];
+                if (!k.Equals(r.Name, StringComparison.OrdinalIgnoreCase) && !LiveName(k)) return k;
+            }
+            return fallback;
+        }
+
+        static Person PersonNamed(string name) => s_Names?.People.FirstOrDefault(pp => pp.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+        static Rec NewRecord(double now, bool initial, Site at = null, Position here = null, Person who = null)
         {
             var d = s_Data;
-            var person = PickPerson();
+            var person = who ?? PickPerson();
             if (person == null) return null;
             var name = person.Name;
-            Site site = at; bool dt = false;
+            Site site = at; bool dt = false; int dtIdx = -1, siteIdx = -1;
             if (site == null && here == null)
             {
                 // a Darktide name goes first to where Darktide player corpses lay (the PK places), a few at once
@@ -320,20 +433,28 @@ namespace RevivalGuard
                     int standing; lock (s_Lock) standing = s_Recs.Values.Count(o => o.DtSite);
                     for (int tries = 0; standing < DT_MAX && tries < 8 && site == null; tries++)
                     {
-                        var s = dts[s_Rng.Next(dts.Count)];
-                        if (Free(s)) { site = s; dt = true; }
+                        int di = s_Rng.Next(dts.Count); var s = dts[di];
+                        if (Free(s)) { site = s; dt = true; dtIdx = di; }
                     }
                 }
+                // Ayan Baqur, the Direlands PK town (owner 2026-11-17): a Darktide name goes there half the time
+                if (site == null && person.Darktide && d.Sites.Length > KIND_AYAN && d.Sites[KIND_AYAN].Count > 0 && s_Rng.NextDouble() < 0.5)
+                    for (int tries = 0; tries < 8 && site == null; tries++)
+                    {
+                        int si = PickIdx(d.Cum[KIND_AYAN]); var s = si >= 0 ? d.Sites[KIND_AYAN][si] : null;
+                        if (Free(s)) { site = s; siteIdx = si; }
+                    }
                 for (int tries = 0; tries < 40 && site == null; tries++)
                 {
                     int kind = PickKind();
                     if (kind < 0) return null;
-                    var s = Pick(d.Sites[kind], d.Cum[kind]);
-                    if (Free(s)) site = s;
+                    int si = PickIdx(d.Cum[kind]); var s = si >= 0 ? d.Sites[kind][si] : null;
+                    if (Free(s)) { site = s; siteIdx = si; }
                 }
                 if (site == null) return null;
             }
-            var r = new Rec { Name = name, Look = person.Look ?? PickLook(), OwnLook = person.Look != null, Site = site, DtSite = dt };
+            var r = new Rec { Name = name, Look = person.Look ?? PickLook(), OwnLook = person.Look != null, Site = site, DtSite = dt, DtIdx = dtIdx, SiteIdx = siteIdx };
+            if (!r.OwnLook) r.LookIdx = s_Data.Looks.IndexOf(r.Look);
             if (dt)
             {
                 var near = d.Sites.SelectMany(x => x).Where(s => s.Cell >> 16 == site.Cell >> 16).FirstOrDefault();
@@ -353,12 +474,12 @@ namespace RevivalGuard
                 r.Level = Math.Clamp((int)Math.Round(site.Lv * (0.9 + 0.35 * s_Rng.NextDouble())), 1, 275);
                 r.Tier = site.Tier; r.Killer = d.Killers[site.Killer];
             }
+            r.Killer = KillerFor(r, person, r.Killer);
             double a = s_Rng.NextDouble() * Math.PI * 2;
             r.Qw = (float)Math.Cos(a / 2); r.Qz = (float)Math.Sin(a / 2);
-            double life = Math.Max(3600, r.Level * 300) * (0.5 + s_Rng.NextDouble());
-            // at start the world has been "lived in" for a while: a record is part way through its life
-            r.Born = initial ? now - s_Rng.NextDouble() * life : now;
-            r.Expires = here != null ? 0 : r.Born + life;
+            // at start the world has been "lived in" for a while (retail's 5 min a level, at least an hour, as an age only)
+            r.Born = initial ? now - s_Rng.NextDouble() * Math.Max(3600, r.Level * 300) : now;
+            r.Expires = 0;                     // never: it stays until someone loots it (owner 2026-11-17)
             lock (s_Lock)
             {
                 r.Id = s_NextId++;
@@ -373,19 +494,22 @@ namespace RevivalGuard
         static int PickKind()
         {
             var d = s_Data; double tot = 0;
-            for (int i = 0; i < 3; i++) if (d.Sites[i].Count > 0) tot += d.Shares[i];
+            for (int i = 0; i < d.Sites.Length; i++) if (d.Sites[i].Count > 0) tot += d.Shares[i];
             if (tot <= 0) return -1;
             double x = s_Rng.NextDouble() * tot;
-            for (int i = 0; i < 3; i++) { if (d.Sites[i].Count == 0) continue; if ((x -= d.Shares[i]) <= 0) return i; }
-            return 2;
+            for (int i = 0; i < d.Sites.Length; i++) { if (d.Sites[i].Count == 0) continue; if ((x -= d.Shares[i]) <= 0) return i; }
+            for (int i = d.Sites.Length - 1; i >= 0; i--) if (d.Sites[i].Count > 0) return i;
+            return -1;
         }
 
-        static Site Pick(List<Site> l, double[] cum)
+        static Site Pick(List<Site> l, double[] cum) { int i = PickIdx(cum); return i < 0 ? null : l[i]; }
+
+        static int PickIdx(double[] cum)
         {
-            if (l.Count == 0) return null;
+            if (cum == null || cum.Length == 0) return -1;
             double x = s_Rng.NextDouble() * cum[^1];
             int i = Array.BinarySearch(cum, x); if (i < 0) i = ~i;
-            return l[Math.Min(i, l.Count - 1)];
+            return Math.Min(i, cum.Length - 1);
         }
 
         static Look PickLook()
@@ -420,7 +544,13 @@ namespace RevivalGuard
             var lb = (ushort)(s.Cell >> 16);
             if (Loaded(lb)) return false;
             lock (s_Lock)
-                return !(s_ByLb.TryGetValue(lb, out var l) && l.Any(o => (o.X - s.X) * (o.X - s.X) + (o.Y - s.Y) * (o.Y - s.Y) + (o.Z - s.Z) * (o.Z - s.Z) < SPACING * SPACING));
+            {
+                if (s_LbCool.TryGetValue(lb, out var until) && Now < until) return false;     // looted here lately: not a farm
+                if (!s_ByLb.TryGetValue(lb, out var l)) return true;
+                int cap = s.Kind == KIND_TN ? CAP_TN : s.Kind == KIND_HUB ? CAP_HUB : (s.Cell & 0xFFFF) >= 0x100 ? LB_CAP_IN : LB_CAP_OUT;
+                if (l.Count(o => !o.IsReal) >= cap) return false;
+                return !l.Any(o => (o.X - s.X) * (o.X - s.X) + (o.Y - s.Y) * (o.Y - s.Y) + (o.Z - s.Z) * (o.Z - s.Z) < SPACING * SPACING);
+            }
         }
 
         // ------------------------------------------------------------ made when the landblock loads
@@ -467,8 +597,8 @@ namespace RevivalGuard
             corpse.RemoveProperty(PropertyInt.Value);
             corpse.Location = pos;
             // the rest of its life, ticking only while its landblock is awake (ACE: 15 s once empty)
-            corpse.TimeToRot = r.Expires > 0 ? Math.Max(600, r.Expires - Now) : 7 * 24 * 3600;
-            if (!r.Rolled) { Roll(r); r.Rolled = true; }
+            corpse.TimeToRot = FOREVER;
+            if (!r.Rolled) { Roll(r); r.Rolled = true; r.RolledN = r.Held.Count; }
             foreach (var it in r.Held) corpse.TryAddToInventory(it, burdenCheck: false);
             r.Held.Clear();
             if (!lb.AddWorldObject(corpse))
@@ -487,9 +617,21 @@ namespace RevivalGuard
         static Position PlaceOf(AceLandblock lb, Rec r)
         {
             var rot = r.Rot != null ? new Quaternion(r.Rot[1], r.Rot[2], r.Rot[3], r.Rot[0]) : new Quaternion(0, 0, r.Qz, r.Qw);
-            if ((r.Cell & 0xFFFF) >= 0x100) return new Position(r.Cell, new Vector3(r.X, r.Y, r.Z), rot);
+            if ((r.Cell & 0xFFFF) >= 0x100)
+            {
+                // a generated indoor site's cell may be a neighbour's (gen.py takes the nearest known cell for a walked node):
+                // put it in the EnvCell that really holds the point, or drop the site
+                if (!r.IsReal && !(LScape.get_landcell(r.Cell) is EnvCell ec && ec.point_in_cell(new Vector3(r.X, r.Y, r.Z + 0.3f))))
+                {
+                    var hit = lb.PhysicsLandblock?.get_envcells()?.FirstOrDefault(c => c.point_in_cell(new Vector3(r.X, r.Y, r.Z + 0.3f)));
+                    if (hit == null) return null;
+                    r.Cell = hit.ID;
+                }
+                return new Position(r.Cell, new Vector3(r.X, r.Y, r.Z), rot);
+            }
             var cell = (r.Cell & 0xFFFF0000) | (uint)((int)(r.X / 24) * 8 + (int)(r.Y / 24) + 1);
-            if (LScape.get_landcell(cell) is SortCell sc && sc.has_building() && !r.IsReal) return null;
+            bool gridProven = r.Site != null && (r.Site.Kind == KIND_PK || r.Site.Kind == KIND_LAWN || r.Site.Kind == KIND_AYAN);   // gen.py: 4 m clear of any building
+            if (LScape.get_landcell(cell) is SortCell sc && sc.has_building() && !r.IsReal && !gridProven) return null;
             float z = r.IsReal ? r.Z : lb.PhysicsLandblock.GetZ(new Vector3(r.X, r.Y, 0));
             return new Position(cell, new Vector3(r.X, r.Y, z + 0.02f), rot);
         }
@@ -513,10 +655,11 @@ namespace RevivalGuard
                 foreach (var w in r.RealItems) { var it = Fixed(new Item { Wcid = w, Min = 1, Max = 1 }); if (it != null) r.Held.Add(it); }
                 return;
             }
-            r.Held.AddRange(Contents(r.Level, r.Tier, r.Lb));
+            r.Held.AddRange(Contents(r.Level, r.Tier, r.Lb, r.Site?.Kind == KIND_HUB));
         }
 
-        internal static List<WorldObject> Contents(int level, int tier, ushort lb)
+        /// <param name="noob">Facility Hub newbies: commons only (kits, potions, newbie gear), small caps, no valuable roll.</param>
+        internal static List<WorldObject> Contents(int level, int tier, ushort lb, bool noob = false)
         {
             var d = s_Data; var got = new List<WorldObject>();
             d.ByLb.TryGetValue(lb, out var local);
@@ -534,13 +677,13 @@ namespace RevivalGuard
                 }
                 got.Add(wo);
             }
-            int capC = Math.Min(4000, 600 * tier), capU = Math.Min(8000, 1200 * tier);
+            int capC = noob ? 300 : Math.Min(4000, 600 * tier), capU = Math.Min(8000, 1200 * tier);
             // retail death drop: floor(level/20) + 0..2 items over level 20 (fewer below), half the pyreals
             int n = level <= 10 ? 1 + s_Rng.Next(2) : level <= 20 ? 1 + s_Rng.Next(3) : Math.Min(10, level / 20 + s_Rng.Next(3));
             n = Math.Max(1, n);
             for (int i = 0; i < n; i++)
             {
-                bool uncommon = s_Rng.NextDouble() < 0.20;
+                bool uncommon = !noob && s_Rng.NextDouble() < 0.20;
                 double x = s_Rng.NextDouble();
                 if (!uncommon)
                 {
@@ -554,7 +697,7 @@ namespace RevivalGuard
                     else Put(Fixed(PickItem(d.Uncommon)), capU);
                 }
             }
-            if (s_Rng.NextDouble() < 0.02)           // about 1 in 50: something genuinely valuable
+            if (!noob && s_Rng.NextDouble() < 0.02)  // about 1 in 50: something genuinely valuable
             {
                 double x = s_Rng.NextDouble();
                 if (x < 0.4) Put(Loot(Math.Min(8, tier + 2), TreasureItemCategory.MagicItem), 0);
@@ -614,6 +757,7 @@ namespace RevivalGuard
                     if (c == null) continue;
                     foreach (var g in c.Inventory.Keys.ToList())
                         if (c.TryRemoveFromInventory(g, out var it)) r.Held.Add(it);
+                    if (!r.IsReal && r.RolledN >= 0 && r.Held.Count < r.RolledN) s_LbCool[r.Lb] = Now + LB_COOL;   // partly looted
                     s_ByGuid.Remove(c.Guid.Full);
                     r.Corpse = null;
                 }
@@ -629,7 +773,7 @@ namespace RevivalGuard
                 s_ByGuid.Remove(wo.Guid.Full);
                 r.Corpse = null;
                 s_Rotted++;
-                if ((wo as Corpse).Inventory.Count == 0) s_Looted++;
+                if ((wo as Corpse).Inventory.Count == 0) { s_Looted++; if (!r.IsReal) s_LbCool[r.Lb] = Now + LB_COOL; }
                 if (r.IsReal) r.Gone = true;     // back at the next restart
                 else Forget(r);                  // the tick puts a new one in an unloaded landblock
             }
@@ -642,7 +786,7 @@ namespace RevivalGuard
             {
                 made = s_Recs.Values.Where(r => r.Corpse != null).Select(r => r.Corpse).ToList();
                 foreach (var r in s_Recs.Values.ToList()) { if (r.Corpse != null) { s_ByGuid.Remove(r.Corpse.Guid.Full); r.Corpse = null; } Forget(r); }
-                s_RealMade = false;
+                s_RealMade = false; s_Made = 0; s_Refills.Clear();   // the next fill is a fresh start, not refills
             }
             foreach (var c in made)
             {
@@ -672,7 +816,10 @@ namespace RevivalGuard
                     if (s_Data == null) { Tell(session, "no data"); break; }
                     if (a.Length > 1 && a[1] == "here" && p != null)
                     {
-                        var r = NewRecord(Now, false, here: new Position(p.Location));
+                        var who = a.Length > 2 ? PersonNamed(string.Join(" ", a.Skip(2))) : null;   // staff test: a named one
+                        if (a.Length > 2 && who == null) { Tell(session, "no such person in the names file"); break; }
+                        lock (s_Lock) if (who != null && s_NamesInUse.Contains(who.Name)) { Tell(session, $"{who.Name} already lies somewhere"); break; }
+                        var r = NewRecord(Now, false, here: new Position(p.Location), who: who);
                         if (r == null) { Tell(session, "no name or site free"); break; }
                         var lb = p.CurrentLandblock;
                         lb?.EnqueueAction(new ActionEventDelegate(() => { try { Make(lb, r); } catch (Exception e) { TickGuard.Report("CorpseCapsules.Here", e); } }));
@@ -716,12 +863,26 @@ namespace RevivalGuard
                     p.Teleport(to);
                     Tell(session, $"to {Line(g)}");
                     break;
+                case "find":
+                    var q = string.Join(" ", a.Skip(1));
+                    lock (s_Lock) list = s_Recs.Values.Where(r => q.Length > 0 && r.Name.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0).Take(8).ToList();
+                    if (list.Count == 0) Tell(session, "no corpse by that name");
+                    foreach (var r in list) Tell(session, Line(r));
+                    break;
+                case "age":
+                    // staff test clock: pretend this many hours passed (proves nothing expires; also runs out cooldowns)
+                    double h = a.Length > 1 && double.TryParse(a[1], out var hh) ? Math.Clamp(hh, 0, 24 * 365) : 24;
+                    int before = Generated();
+                    s_Skew += h * 3600;
+                    Tell(session, $"Corpse capsules: clock moved {h:0.#} h ahead (total {s_Skew / 3600:0.#} h). Generated standing {before}; " +
+                                  $"under the old retail timer every corpse older than max(1 h, level x 5 min) x 1.5 would have gone. Run @corpses status after 10 s.");
+                    break;
                 case "budget":
                     if (s_Data == null) break;
                     int nb = a.Length > 1 && int.TryParse(a[1], out var kb) ? Math.Clamp(kb, 10, 2000) : 200;
-                    Tell(session, Budget(nb));
+                    Tell(session, Budget(nb, a.Length > 2 && int.TryParse(a[2], out var bk2) ? bk2 : -1));
                     break;
-                default: Tell(session, "@corpses status | spawn [n|here] | clear | reload | near | list [0|1|2|real] | goto <id> | budget [n]"); break;
+                default: Tell(session, "@corpses status | spawn [n|here] | clear | reload | near | list [0-6|real] | find <name> | goto <id> | budget [n] | age <hours>"); break;
             }
         }
 
@@ -731,13 +892,13 @@ namespace RevivalGuard
             return Math.Sqrt((at.PositionX - r.X) * (at.PositionX - r.X) + (at.PositionY - r.Y) * (at.PositionY - r.Y));
         }
 
-        static string KindName(int k) => k == 0 ? "2017" : k == 1 ? "dungeon" : k == 2 ? "outdoor" : "darktide";
+        static string KindName(int k) => k switch { 0 => "2017", 1 => "dungeon", 2 => "outdoor", 3 => "pk", 4 => "lawn", 5 => "daily", 7 => "townnet", 8 => "hub", 9 => "ayan", _ => "darktide" };
 
         static string Line(Rec r)
         {
             string kind = r.IsReal ? "REAL" : r.Site == null ? "here" : KindName(r.Site.Kind);
             string state = r.Corpse != null ? $"made, {r.Corpse.Inventory.Count} items" : r.Gone ? "gone" : r.Rolled ? $"held {r.Held.Count}" : "unrolled";
-            string left = r.Expires > 0 ? $"{(r.Expires - Now) / 3600:0.0} h left" : "no expiry";
+            string left = $"lying {(Now - r.Born) / 3600:0.0} h, until looted";
             return $"#{r.Id} {kind} Corpse of {r.Name} lv {r.Level} t{r.Tier} {r.Cell:X8} [{r.X:0.0} {r.Y:0.0} {r.Z:0.0}] {state}, {left}, killer {r.Killer}, {(r.IsReal || r.OwnLook ? "own look" : "retail look")}";
         }
 
@@ -748,7 +909,7 @@ namespace RevivalGuard
             {
                 var recs = s_Recs.Values.ToList();
                 int real = recs.Count(r => r.IsReal), made = recs.Count(r => r.Corpse != null), held = recs.Count(r => r.Corpse == null && r.Rolled);
-                var kinds = recs.Where(r => !r.IsReal && r.Site != null).GroupBy(r => r.Site.Kind).OrderBy(g => g.Key).Select(g => $"{KindName(g.Key)} {g.Count()}");
+                var kinds = recs.Where(r => !r.IsReal && r.Site != null).GroupBy(r => r.DtSite ? KIND_DT : r.Site.Kind).OrderBy(g => g.Key).Select(g => $"{KindName(g.Key)} {g.Count()}");
                 long value = 0; int items = 0, rolled = 0;
                 foreach (var r in recs)
                 {
@@ -759,20 +920,20 @@ namespace RevivalGuard
                 var lbs = recs.Select(r => r.Lb).Distinct().Count();
                 return $"Corpse capsules {(On ? "ON" : "off")}{(s_Paused ? " (paused)" : "")}: {recs.Count - real} standing (target {Target}) + {real} real ({recs.Count(r => r.Gone)} real gone); " +
                        $"{string.Join(", ", kinds)}; in {lbs} landblocks; made now {made}, held {held}. Contents rolled {rolled}: {items} items worth {value:N0} " +
-                       $"({(rolled > 0 ? value / rolled : 0):N0} a corpse). Since start: made {s_Made}, replaced {s_Replaced}, rotted {s_Rotted} (emptied {s_Looted}), expired unseen {s_Expired}, bad sites {s_BadSites}; " +
+                       $"({(rolled > 0 ? value / rolled : 0):N0} a corpse). Since start: made {s_Made}, replaced {s_Replaced}, rotted {s_Rotted} (emptied {s_Looted}), expired {s_Expired} (none: no timer), kept over the restart {s_RestoredN}, refills this hour {s_Refills.Count}/{RefillPerHour}, landblocks cooling {s_LbCool.Count(kv => kv.Value > Now)}, test clock +{s_Skew / 3600:0.#} h, bad sites {s_BadSites}; " +
                        $"making a corpse {(s_MakeN > 0 ? s_MakeMs / s_MakeN : 0):0.00} ms avg over {s_MakeN}, {s_MakeMax:0.0} ms max. Names: {NamesLine()}.";
             }
         }
 
-        static string Budget(int n)
+        static string Budget(int n, int only = -1)
         {
             var vals = new List<long>(); int valuable = 0, itemsN = 0;
             var sw = System.Diagnostics.Stopwatch.StartNew();
             for (int i = 0; i < n; i++)
             {
-                int kind = PickKind(); var s = Pick(s_Data.Sites[kind], s_Data.Cum[kind]);
+                int kind = only >= 0 && only < s_Data.Sites.Length && s_Data.Sites[only].Count > 0 ? only : PickKind(); var s = Pick(s_Data.Sites[kind], s_Data.Cum[kind]);
                 int lv = Math.Clamp((int)Math.Round(s.Lv * (0.9 + 0.35 * s_Rng.NextDouble())), 1, 275);
-                var got = Contents(lv, s.Tier, (ushort)(s.Cell >> 16));
+                var got = Contents(lv, s.Tier, (ushort)(s.Cell >> 16), kind == KIND_HUB);
                 long v = got.Sum(w => (long)(w.Value ?? 0));
                 if (got.Any(w => (w.Value ?? 0) >= 8000)) valuable++;
                 itemsN += got.Count; vals.Add(v);

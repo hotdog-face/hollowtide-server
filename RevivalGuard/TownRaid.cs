@@ -103,6 +103,8 @@ namespace RevivalGuard
         static R.Config s_Cfg = new R.Config();
         static DateTime s_Stamp; static double s_NextLoad, s_NextRoll, s_NextTick;
         static Raid s_Raid;
+        /// <summary>A raid on Holtburg now (Drinking never carries a drunk into one).</summary>
+        internal static bool Running => s_Raid != null;
         static int s_NextId = 1;
         static State s_State = new State();
 

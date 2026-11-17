@@ -5,7 +5,10 @@ using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Command;
 using ACE.Server.Network;
+using ACE.Server.Network.GameEvent;
+using ACE.Server.Network.GameMessages;
 using ACE.Server.Network.GameMessages.Messages;
+using ACE.Server.Network.Structure;
 using ACE.Server.WorldObjects;
 using Spell = ACE.Server.Entity.Spell;
 
@@ -17,16 +20,29 @@ namespace RevivalGuard
     ///
     ///   @itemlink make 0xGUID   (the client's /link, or an item dropped on the chat box) takes the stats of an item
     ///                           you carry NOW, keeps them under a number, and answers "ITEMLINK n Name", a data line
-    ///                           the client turns into "[Name #n]" in your chat entry. Send it on any channel.
-    ///   @itemlink show n        (a click on "[Name #n]" in anyone's chat) sends that snapshot's lines to the asker.
+    ///                           the client turns into "[Name]" in your chat entry (clients up to 0.1.117 wrote
+    ///                           "[Name #n]", which put the number in everyone's chat, retail's too).
+    ///   @itemlink view n        (a click on a link whose number the client knows) and
+    ///   @itemlink find age Speaker|Name   (a click on "[Name]" in Speaker's line, said `age` seconds ago) answer with
+    ///                           the snapshot as an examine response (IdentifyObjectResponse) for guid
+    ///                           0xFE000000 | n, so the clicker's appraisal window opens with the item as it was.
+    ///   @itemlink show n        (clients up to 0.1.117) sends that snapshot's lines to the asker as text.
     ///
-    /// The snapshot is text taken at link time, so a link stays right after the item is sold, changed or gone. The
-    /// newest 5,000 are kept in memory; a restart forgets them ("That item link has expired.").
+    /// The snapshot is taken at link time, so a link stays right after the item is sold, changed or gone. The newest
+    /// 5,000 are kept in memory; a restart forgets them ("That item link has expired.").
     /// </summary>
     public static class ItemLink
     {
         const int KEEP = 5000;
-        sealed class Snap { public string Name, By; public List<string> Lines; }
+        const uint LINK_GUID_BASE = 0xFE000000u;   // client AcItemLinkText.LinkGuid: no live object has these
+        sealed class Snap { public string Name, By; public List<string> Lines; public byte[] Appraisal; public DateTime At; }
+
+        /// <summary>An examine response built from a stored AppraiseInfo (written at link time).</summary>
+        sealed class LinkAppraisal : GameEventMessage
+        {
+            public LinkAppraisal(Session s, uint guid, byte[] info) : base(GameEventType.IdentifyObjectResponse, GameMessageGroup.UIQueue, s)
+            { Writer.Write(guid); Writer.Write(info); }
+        }
         static readonly Dictionary<int, Snap> s_Snaps = new Dictionary<int, Snap>();
         static readonly Queue<int> s_Order = new Queue<int>();
         static readonly object s_Lock = new object();
@@ -38,7 +54,7 @@ namespace RevivalGuard
         public static void Register()
         {
             CommandManager.TryAddCommand(Handle, "itemlink", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
-                "Item links in chat (the client's /link and its clickable [Item #n]).", "make 0xGUID | show n");
+                "Item links in chat (the client's /link and its clickable [Item]).", "make 0xGUID | view n | find age Speaker|Name | show n");
         }
 
         static void Say(Session s, string t, ChatMessageType type = ChatMessageType.Broadcast) =>
@@ -54,7 +70,8 @@ namespace RevivalGuard
                 if (!arg.StartsWith("0x", StringComparison.OrdinalIgnoreCase) || !uint.TryParse(arg.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out uint guid)) return;
                 var item = me.FindObject(guid, Player.SearchLocations.MyInventory | Player.SearchLocations.MyEquippedItems);
                 if (item == null) { Say(session, "You can only link an item you are carrying."); return; }
-                var snap = new Snap { Name = Clean(item.GetNameWithMaterial()), By = me.Name.TrimStart('+'), Lines = Describe(item) };
+                var snap = new Snap { Name = Clean(item.GetNameWithMaterial()), By = me.Name.TrimStart('+'), Lines = Describe(item),
+                                      Appraisal = AppraisalOf(item, me), At = DateTime.UtcNow };
                 int id;
                 lock (s_Lock)
                 {
@@ -72,7 +89,61 @@ namespace RevivalGuard
                 if (snap == null) { Say(session, "That item link has expired."); return; }
                 Say(session, $"{snap.Name} (linked by {snap.By})", ChatMessageType.Appraisal);
                 foreach (var l in snap.Lines) Say(session, "   " + l, ChatMessageType.Appraisal);
+                return;
             }
+            if (verb == "view" || verb == "find")
+            {
+                int id = 0; Snap snap = null;
+                lock (s_Lock)
+                {
+                    if (verb == "view") { if (int.TryParse(arg.TrimStart('#'), out id)) s_Snaps.TryGetValue(id, out snap); }
+                    else if (int.TryParse(arg, out int age) && parameters.Length >= 3)
+                    {
+                        string rest = string.Join(" ", parameters, 2, parameters.Length - 2);
+                        int bar = rest.IndexOf('|');
+                        string by = bar >= 0 ? rest.Substring(0, bar).Trim().TrimStart('+') : "", name = (bar >= 0 ? rest.Substring(bar + 1) : rest).Trim();
+                        id = FindSnap(by, name, DateTime.UtcNow.AddSeconds(-Math.Max(0, age)));
+                        if (id != 0) snap = s_Snaps[id];
+                    }
+                }
+                if (snap == null) { Say(session, "That item link has expired."); return; }
+                if (snap.Appraisal == null) { Say(session, $"{snap.Name} (linked by {snap.By})", ChatMessageType.Appraisal); foreach (var l in snap.Lines) Say(session, "   " + l, ChatMessageType.Appraisal); return; }
+                session.Network.EnqueueSend(new LinkAppraisal(session, LINK_GUID_BASE | ((uint)id & 0x00FFFFFFu), snap.Appraisal));
+            }
+        }
+
+        /// <summary>The snapshot a "[Name]" in `by`'s line points at: theirs of that name made at or before the line was
+        /// said (plus a little clock slack), newest first; else their newest of that name; else anyone's newest of that
+        /// name (a link pasted on by someone else). Under s_Lock. 0 = none.</summary>
+        static int FindSnap(string by, string name, DateTime saidAt)
+        {
+            DateTime cut = saidAt.AddSeconds(10);
+            int best = 0, newest = 0, anyone = 0; DateTime bestAt = DateTime.MinValue, newestAt = DateTime.MinValue, anyAt = DateTime.MinValue;
+            foreach (var kv in s_Snaps)
+            {
+                var s = kv.Value;
+                if (!string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase)) continue;
+                if (s.At > anyAt) { anyAt = s.At; anyone = kv.Key; }
+                if (!string.Equals(s.By, by, StringComparison.OrdinalIgnoreCase)) continue;
+                if (s.At > newestAt) { newestAt = s.At; newest = kv.Key; }
+                if (s.At <= cut && s.At > bestAt) { bestAt = s.At; best = kv.Key; }
+            }
+            return best != 0 ? best : newest != 0 ? newest : anyone;
+        }
+
+        /// <summary>The item's examine response body as its owner would get it now (ACE's AppraiseInfo, written once).
+        /// null if ACE cannot build it (the click then falls back to the text lines).</summary>
+        static byte[] AppraisalOf(WorldObject item, Player me)
+        {
+            try
+            {
+                using var ms = new System.IO.MemoryStream();
+                using var w = new System.IO.BinaryWriter(ms);
+                w.Write(new AppraiseInfo(item, me, true));
+                w.Flush();
+                return ms.ToArray();
+            }
+            catch (Exception e) { Console.WriteLine($"[RevivalGuard] ItemLink: appraisal of 0x{item.Guid.Full:X8} failed: {e.Message}"); return null; }
         }
 
         /// <summary>A link's name may not hold the characters the tag is built from.</summary>

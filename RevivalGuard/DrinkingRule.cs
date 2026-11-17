@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace RevivalGuard
 {
@@ -11,7 +12,7 @@ namespace RevivalGuard
     /// A character carries a "drinks" count: each alcoholic drink adds its weight, and it wears off at DECAY_PER_S (one
     /// ordinary drink every 2.5 minutes). The client draws the effect from the count; at PASS the character passes out.
     /// </summary>
-    public static class DrinkingRule
+    public static partial class DrinkingRule
     {
         public const double PASS = 9.0;            // drinks: out cold (about nine ales in a few minutes)
         public const double CAP = 12.0;            // the count never climbs past this
@@ -27,6 +28,70 @@ namespace RevivalGuard
         public const uint HANGOVER_SPELL = 1457;   // Feeblemind Self I: Self -10
         public const uint HANGOVER_COORD = 1385;   // Clumsiness Self I: Coordination -10
         public const uint HANGOVER_QUICK = 1409;   // Slowness Self I: Quickness -10
+
+        // ---- the picture: brief by design (owner 2026-11-17) ----------------------------------------------------------
+
+        // "the drunk effect is bugged where it doesnt stop. it should never hang and be on long term. its awful to look at
+        // so it needs to be brief and never lock a player into that effect ... i got locked into it because of the pk's
+        // nearby". The picture no longer follows the slow count (one drink per 150 s: 8.5 drinks stayed blurred for about
+        // 15 minutes, and a refused last drink held you there). It is sent as its own count: the real count at your last
+        // drink, falling to nothing PICTURE_S later. Every client extrapolates d - r * t by itself, so even 0.1.117 clears
+        // on time with no later message. The real count (stages, Intoxication, passing out) still wears off slowly.
+        public const double PICTURE_S = 90.0;        // from your last drink to a clear screen, at most
+        /// <summary>A pass-out drink refused for danger (a fight, a monster, a red player, a stance): the count drops to a
+        /// mild stage and the picture to a faint sway gone in BLOCK_PICTURE_S. Never held at the edge of passing out.</summary>
+        public const double BLOCK_COUNT = 3.0, BLOCK_PICTURE = 2.0, BLOCK_PICTURE_S = 15.0;
+
+        /// <summary>The picture's count <paramref name="since"/> seconds after it was set to <paramref name="d0"/>, falling
+        /// at <paramref name="rate"/> per second (never negative).</summary>
+        public static double Picture(double d0, double rate, double since) => Math.Max(0.0, d0 - Math.Max(0.0, since) * Math.Max(0.0, rate));
+
+        /// <summary>The rate that takes <paramref name="d0"/> to nothing in <paramref name="secs"/> seconds.</summary>
+        public static double PictureRate(double d0, double secs) => d0 <= 0.0 || secs <= 0.0 ? 0.0 : d0 / secs;
+
+        // ---- carried off: waking in a town tavern (owner 2026-11-17) ---------------------------------------------------
+
+        // "make the drunk effect make you wake up later in a random place in a town. a tavern or something." A normal wake
+        // (not one woken early by danger) from an outdoor land block or a building on one: still out cold, the drinker is
+        // carried to a random town tavern (DrinkingTaverns.cs, tools/drinking/taverns.py: a clear floor spot by the
+        // barkeeper, a Portal to Town Network within a block) and wakes there. Never from a dungeon block. Nothing is taken.
+        public const double CARRY_EXTRA_S = 30.0;      // added to the out-cold time told to the client: its own fallback
+                                                       // wake must not fire while it is still in portal space
+        public const double CARRY_TIMEOUT_S = 45.0;    // no arrival by then: wake wherever the body is
+        public const double CARRY_WAKE_AFTER_S = 2.5;
+        /// <summary>0.1.117 and older draw a minute of hangover sway: the server ends their drawn hangover this long after
+        /// the wake (the server's hangover goes on).</summary>
+        public const double OLD_CLIENT_HANGOVER_VIEW_S = 4.0;  // lying in the tavern a moment before waking
+        public const int CARRY_LOCAL_BELOW = 20;       // under this level: only one of the three taverns nearest the fall
+        public const int CARRY_PK_BLOCKS = 1;          // a player killer is never left within this many blocks of another
+
+        /// <summary>Choose a tavern: the allowed ones (<paramref name="allowed"/>: no raid there, no red player near for a
+        /// player killer), for a low level only among the three nearest <paramref name="fromLb"/>; null when none.</summary>
+        public static Tavern ChooseTavern(IList<Tavern> all, Func<Tavern, bool> allowed, int level, uint fromLb, int pick)
+        {
+            IEnumerable<Tavern> pool = all;
+            if (level < CARRY_LOCAL_BELOW)
+                pool = all.OrderBy(t => BlockDistance(t.Cell >> 16, fromLb)).Take(3);
+            var ok = pool.Where(t => allowed == null || allowed(t)).ToList();
+            if (ok.Count == 0) return null;
+            return ok[(pick % ok.Count + ok.Count) % ok.Count];
+        }
+
+        /// <summary>Chebyshev distance in land blocks between two block ids (0xXXYY).</summary>
+        public static int BlockDistance(uint a, uint b) =>
+            Math.Max(Math.Abs((int)((a >> 8) & 0xFF) - (int)((b >> 8) & 0xFF)), Math.Abs((int)(a & 0xFF) - (int)(b & 0xFF)));
+
+        /// <summary>The wake line in the tavern. {0} the town. Says the pack is untouched (it is: nothing is taken).</summary>
+        public static readonly string[] CARRY_LINES =
+        {
+            "You wake up on the floor of a tavern in {0}. Someone carried you here and tucked your pack under your head. Everything is still in it.",
+            "You come to in {0}, propped in a tavern corner. A note pinned to your shirt reads: Found this one in the road. Pack untouched. You owe us a round.",
+            "You wake up in {0} with no idea how you got here. Your pack is all there. Your dignity is not.",
+            "You wake up in a tavern in {0}, wrapped in a borrowed blanket. Someone counted your pyreals and put every one of them back.",
+            "You come around in {0}. The barkeeper says two strangers dropped you off and left without a word. Your pack is exactly as you left it.",
+        };
+        public const string CARRY_GONE_OTHERS = "Two passing strangers haul {0} off by the boots.";
+        public const string CARRY_ARRIVE_OTHERS = "Two strangers drop {0} on the floor and leave without a word.";
 
         // ---- the stumble and the hangover (owner 2026-11-16) ---------------------------------------------------------
 

@@ -80,7 +80,7 @@ namespace RevivalGuard
             if (verb == "state")
             {
                 Say($"[stuckqueuetest] {p.Name}: melee {p.MeleeTarget?.Name ?? "none"} seq {p.AttackSequence} swinging {p.Attacking}, moving to {p.IsPlayerMovingTo2}, "
-                    + $"callback {p.MoveToParams?.Callback != null}, velocity {po.Velocity.Length():0.00}, fast tick {p.FastTick}, latched {IsLatched(p)}; {BusyLedger.Describe(p)}");
+                    + $"callback {p.MoveToParams?.Callback != null}, chain {p.IsPlayerMovingTo}, charging {p.IsMoving}, restart pending {MeleeRestart.Pending(p)}, velocity {po.Velocity.Length():0.00}, fast tick {p.FastTick}, latched {IsLatched(p)}; {BusyLedger.Describe(p)}");
                 return;
             }
             // "hard": a head no later animation can finish (box 2026-11-14: a SlashMed/1 head was finished by the next link)

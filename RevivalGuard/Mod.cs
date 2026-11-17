@@ -108,6 +108,7 @@ namespace RevivalGuard
             // shard that has never stored the key (ACE answers "Unknown bool property" otherwise; review 2026-11-10).
             Try(nameof(MoveGuard), MoveGuard.Register);         // rg_moveguard_mode 0 off / 1 log (default) / 2 enforce; rg_moveguard_staff
             Try(nameof(MeleeLatchGuard), MeleeLatchGuard.Register);   // rg_melee_latch_mode 0 off / 1 log (default) / 2 finish
+            Try(nameof(MeleeRestart), () => PkCommon.RegisterBool(MeleeRestart.P_ON, true, "RevivalGuard MeleeRestart: a new melee attack replaces one still waiting on its walk to a monster it cannot reach, as a jump frees it (false: ACE drops the new attack)"));
             Try(nameof(HoltburgOnly), () => PkCommon.RegisterBool(HoltburgOnly.P_ON, true, "RevivalGuard HoltburgOnly: every new character starts in Holtburg whatever town the client asked for (false: the client's town)"));
             Try(nameof(GroundSettle), () => PkCommon.RegisterBool(GroundSettle.P_ON, true, "RevivalGuard GroundSettle: an at-rest PK body ACE left off the ground is ticked so it lands (false: ACE)"));
             Try(nameof(LostObjectResend), () => PkCommon.RegisterBool(LostObjectResend.P_ON, true, "RevivalGuard LostObjectResend: a retail client asking for a monster it lost (0xF6EA) is sent the whole object again (false: ACE, appearance only)"));

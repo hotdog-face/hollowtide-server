@@ -36,5 +36,20 @@ namespace RevivalGuard
         /// </summary>
         public static bool DrainQueue(int queueCount, bool sameHeadSinceLatch, bool sameCounterSinceLatch)
             => queueCount > 0 && sameHeadSinceLatch && sameCounterSinceLatch;
+
+        /// <summary>MeleeRestart waits this long on an attack that has not swung before a NEW press replaces it: a press on
+        /// another monster at once (past a turn already begun), the same monster only after a run to it had its chance.</summary>
+        public const double OTHER_TARGET_WAIT = 0.5, SAME_TARGET_WAIT = 3.0;
+
+        /// <summary>
+        /// A new attack request REPLACES the one still waiting on its walk or turn (MeleeRestart, F7 261117-0010 Mystic
+        /// Warrior: "Occasionally I cannot attack until I tap spacebar. Especially with olthoi"). ACE keeps a live MeleeTarget
+        /// while CreateMoveToChain polls for the player to come within 0.6 m (15 s for a non-PK player), and drops every
+        /// later request at "already in melee loop?" with no AttackDone. Never while a swing is in flight, never between
+        /// auto-repeat swings (no walk pending), never on a dead target (ACE ends that itself).
+        /// </summary>
+        public static bool Restart(bool liveTarget, bool attacking, bool moveToPending, bool sameTarget, double secondsSinceAccepted)
+            => liveTarget && !attacking && moveToPending
+               && secondsSinceAccepted >= (sameTarget ? SAME_TARGET_WAIT : OTHER_TARGET_WAIT);
     }
 }

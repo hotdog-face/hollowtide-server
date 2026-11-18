@@ -96,6 +96,8 @@ namespace RevivalGuard
             public List<Item> Common = new List<Item>(), Uncommon = new List<Item>(), Valuable = new List<Item>();
             public Dictionary<ushort, List<Item>> ByLb = new Dictionary<ushort, List<Item>>();
             public List<string> Names = new List<string>();
+            public Dictionary<ushort, string[]> LocalMonsters = new Dictionary<ushort, string[]>();   // CorpseKillerRule
+            public HashSet<string> Monsters = new HashSet<string>(StringComparer.Ordinal);
         }
         /// <summary>The server-only real names file (see NAMES above); null when absent.</summary>
         sealed class Person { public string Name; public Look Look; public bool Darktide; public string[] Killers; }
@@ -106,6 +108,8 @@ namespace RevivalGuard
             public List<Person> People = new List<Person>();
             public List<Site> DtSites = new List<Site>();
             public List<string> DtKillers = new List<string>();   // real Darktide player killers (server-only file)
+            public List<int> DtIdx = new List<int>(), OtherIdx = new List<int>();   // People indices: Darktide first (PickVictim)
+            public Dictionary<string, Person> ByName = new Dictionary<string, Person>(StringComparer.OrdinalIgnoreCase);
         }
         const int DT_MAX = 6;                // Darktide-place corpses standing at once
         const int KIND_PK = 3, KIND_LAWN = 4, KIND_DT = 6, KIND_TN = 7, KIND_HUB = 8, KIND_AYAN = 9;
@@ -193,6 +197,11 @@ namespace RevivalGuard
                 if (r.TryGetProperty("dtSites", out var ds))
                     foreach (var x in ds.EnumerateArray())
                         n.DtSites.Add(new Site { Cell = x[0].GetUInt32(), X = (float)x[1].GetDouble(), Y = (float)x[2].GetDouble(), Z = (float)x[3].GetDouble(), Lv = 100, Tier = 6, Kind = KIND_DT, W = 1 });
+                for (int i = 0; i < n.People.Count; i++)
+                {
+                    (n.People[i].Darktide ? n.DtIdx : n.OtherIdx).Add(i);
+                    n.ByName.TryAdd(n.People[i].Name, n.People[i]);
+                }
                 if (n.People.Count == 0) { Mod.Log.Warn($"[RevivalGuard] CorpseCapsules: {path} has no people; invented names"); return null; }
                 return n;
             }
@@ -238,6 +247,10 @@ namespace RevivalGuard
                 if (s.Kind >= 0 && s.Kind < d.Sites.Length) d.Sites[s.Kind].Add(s);
             }
             for (int i = 0; i < d.Sites.Length; i++) { double t = 0; d.Cum[i] = d.Sites[i].Select(s => t += s.W).ToArray(); }
+            // who could have killed a corpse where (bug 261117-0025): each landblock's creatures, from its own sites
+            d.LocalMonsters = CorpseKillerRule.LocalMonsters(d.Sites.SelectMany(l => l).Where(s => s.Killer >= 0 && s.Killer < d.Killers.Count)
+                .Select(s => (s.Cell, s.Kind, d.Killers[s.Killer])));
+            foreach (var k in d.Killers) if (k != CorpseKillerRule.PK_LINE && k != CorpseKillerRule.MISADVENTURE) d.Monsters.Add(k);
             var pools = r.GetProperty("pools");
             List<Item> Pool(JsonElement a) => a.EnumerateArray().Select(e => new Item { Wcid = e[0].GetUInt32(), W = e[1].GetInt32(), Min = e.GetArrayLength() > 2 ? e[2].GetInt32() : 1, Max = e.GetArrayLength() > 3 ? e[3].GetInt32() : 1 }).ToList();
             d.Common = Pool(pools.GetProperty("common")); d.Uncommon = Pool(pools.GetProperty("uncommon")); d.Valuable = Pool(pools.GetProperty("valuable"));
@@ -321,7 +334,8 @@ namespace RevivalGuard
             {
                 if (!File.Exists(StatePath)) return;
                 using var doc = JsonDocument.Parse(File.ReadAllText(StatePath));
-                int bad = 0;
+                int bad = 0, relabeled = 0, renamed = 0;
+                var saved = new HashSet<string>(doc.RootElement.GetProperty("rows").EnumerateArray().Select(x => x[0].GetString() ?? ""), StringComparer.OrdinalIgnoreCase);
                 foreach (var x in doc.RootElement.GetProperty("rows").EnumerateArray())
                 {
                     string name = x[0].GetString(); int lookIdx = x[1].GetInt32(), kind = x[2].GetInt32(), idx = x[3].GetInt32();
@@ -340,14 +354,37 @@ namespace RevivalGuard
                         SiteIdx = kind == KIND_DT ? -1 : idx, DtIdx = kind == KIND_DT ? idx : -1,
                     };
                     if (r.Look != null && r.LookIdx < 0 && !r.OwnLook) r.LookIdx = s_Data.Looks.IndexOf(r.Look);
-                    if (r.Killer == "a player killer" || r.Killer == null) r.Killer = KillerFor(r, PersonNamed(name), r.Killer);
+                    r.Level = CorpseKillerRule.SiteLevel(KindOf(r), r.Level, ShieldLevel);
+                    // owner 2026-11-17 "real darktide names at all cost": a corpse saved under another name takes a free
+                    // Darktide one (place, level and contents stay; a 2017 player's own look goes with that player)
+                    var person = PersonNamed(name);
+                    if (s_Names != null && person?.Darktide != true && s_Names.DtIdx.Count > 0)
+                    {
+                        var dt = PickPerson(darktideOnly: true, avoid: saved);
+                        if (dt != null)
+                        {
+                            saved.Add(dt.Name); name = r.Name = dt.Name; person = dt; renamed++;
+                            if (r.OwnLook || r.LookIdx < 0) { r.Look = dt.Look ?? PickLook(); r.OwnLook = dt.Look != null; r.LookIdx = r.OwnLook ? -1 : s_Data.Looks.IndexOf(r.Look); }
+                            if (r.Killer != null && !s_Data.Monsters.Contains(r.Killer) && r.Killer != CorpseKillerRule.MISADVENTURE)
+                                r.Killer = SiteKiller(r) ?? CorpseKillerRule.PK_LINE;   // a player: chosen again for this victim
+                        }
+                    }
+                    // bug 261117-0025: a corpse saved with a killer that could not have killed it there gets one that could
+                    bool fits = Plausible(r, r.Killer);
+                    if (r.Killer == CorpseKillerRule.PK_LINE || r.Killer == null || !fits)
+                    {
+                        var k = KillerFor(r, person, fits ? r.Killer : SiteKiller(r));
+                        if (!fits && k != r.Killer) relabeled++;
+                        r.Killer = k;
+                    }
                     lock (s_Lock)
                     {
                         if (s_NamesInUse.Contains(name)) { bad++; continue; }
                         r.Id = s_NextId++; Add(r); s_NamesInUse.Add(name); s_Made++; s_RestoredN++;
                     }
                 }
-                Mod.Log.Info($"[RevivalGuard] CorpseCapsules: {s_RestoredN} standing corpses kept from before the restart ({bad} dropped: data or names changed)");
+                Mod.Log.Info($"[RevivalGuard] CorpseCapsules: {s_RestoredN} standing corpses kept from before the restart ({bad} dropped: data or names changed; {relabeled} killers that could not have killed them there replaced; {renamed} given a Darktide name)");
+                s_Relabeled = relabeled; s_Renamed = renamed;
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] CorpseCapsules: state not restored ({e.Message}); a fresh set"); }
         }
@@ -368,6 +405,7 @@ namespace RevivalGuard
                     };
                     var near = s_Data.Sites.SelectMany(x => x).Where(s => s.Cell >> 16 == re.Cell >> 16).OrderBy(s => (s.X - r.X) * (s.X - r.X) + (s.Y - r.Y) * (s.Y - r.Y)).FirstOrDefault();
                     r.Level = near?.Lv ?? 50; r.Tier = near?.Tier ?? 3; r.Killer = near != null ? s_Data.Killers[near.Killer] : null;
+                    r.Killer = KillerFor(r, null, r.Killer);
                     // its real name from the server-only file, unless a character on this shard has it
                     var real = s_Names?.Real.FirstOrDefault(x => x.cell == re.Cell && Math.Abs(x.x - r.X) < 0.05f && Math.Abs(x.y - r.Y) < 0.05f).name;
                     if (real != null && !LiveName(real)) r.Name = real;      // a character's two corpses share it
@@ -396,15 +434,31 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------ a new record on a site in an unloaded landblock
         /// <summary>Owner 2026-11-17: "make sure they say a real darktide name." A Darktide-named corpse is killed by a real
-        /// Darktide player killer (one it was seen fighting in his logs, else any), and so is a corpse on a PK spot, lawn or
-        /// Darktide place when the server-only file has killers. Never its own name, never a name a character here has.
-        /// Without the file: the embedded line ("a player killer" or the creature).</summary>
+        /// Darktide player killer (one it was seen fighting in his logs, else any), and so is a corpse on a PK spot, lawn,
+        /// Darktide place, Town Network or Facility Hub when the server-only file has killers. Never its own name, never a
+        /// name a character here has. Bug 261117-0025: only a killer that could have killed it WHERE IT LIES
+        /// (CorpseKillerRule): a player only where PK is possible (not in a dungeon, not under the newcomer shield), a
+        /// creature only one that spawns in that landblock. Without the file: the embedded line, if it fits.</summary>
         static string KillerFor(Rec r, Person person, string fallback)
         {
+            bool pkOk = PkOk(r);
+            // a Darktide victim on a hunting spot in the open world: the PK it was seen fighting, else a PK a third of the
+            // time and the local creature otherwise (with every victim Darktide, "always a PK" would empty the hunting grounds)
+            bool dtPk = person?.Darktide == true && (person.Killers?.Length > 0 || s_Rng.NextDouble() < DT_OPEN_PK);
+            if (pkOk && (CorpseKillerRule.PkKind(KindOf(r)) || dtPk))
+            {
+                var pk = PkName(r, person);
+                if (pk != null) return pk;
+            }
+            if (Plausible(r, fallback)) return fallback;
+            return CorpseKillerRule.Replacement(fallback, Local(r.Lb), pkOk, () => PkName(r, person), s_Rng);
+        }
+
+        /// <summary>A real Darktide PK for this corpse (server-only file), or null.</summary>
+        static string PkName(Rec r, Person person)
+        {
             var all = s_Names?.DtKillers;
-            if (all == null || all.Count == 0) return fallback;
-            bool pkPlace = r.DtSite || (r.Site != null && (r.Site.Kind == KIND_PK || r.Site.Kind == KIND_LAWN || r.Site.Kind == KIND_TN || r.Site.Kind == KIND_AYAN));
-            if (person?.Darktide != true && !pkPlace) return fallback;
+            if (all == null || all.Count == 0) return null;
             var fought = person?.Killers?.Where(k => !k.Equals(r.Name, StringComparison.OrdinalIgnoreCase)).ToArray();
             if (fought != null && fought.Length > 0) return fought[s_Rng.Next(fought.Length)];
             for (int tries = 0; tries < 12; tries++)
@@ -412,10 +466,21 @@ namespace RevivalGuard
                 var k = all[s_Rng.Next(all.Count)];
                 if (!k.Equals(r.Name, StringComparison.OrdinalIgnoreCase) && !LiveName(k)) return k;
             }
-            return fallback;
+            return null;
         }
 
-        static Person PersonNamed(string name) => s_Names?.People.FirstOrDefault(pp => pp.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        static int ShieldLevel { get { try { return (int)Tunables.D("newcomer.shield_level", 5); } catch { return 5; } } }
+        static int KindOf(Rec r) => r.DtSite ? KIND_DT : r.Site?.Kind ?? -1;
+        static bool PkOk(Rec r) => CorpseKillerRule.PkPossible(KindOf(r), r.Cell, r.Level, ShieldLevel);
+        static string[] Local(ushort lb) => s_Data.LocalMonsters.TryGetValue(lb, out var l) ? l : Array.Empty<string>();
+        static bool Plausible(Rec r, string killer) =>
+            CorpseKillerRule.Plausible(killer, KindOf(r), r.Cell, r.Level, ShieldLevel, Local(r.Lb), s_Data.Monsters);
+        static string SiteKiller(Rec r) => r.DtSite || r.Site == null ? CorpseKillerRule.PK_LINE
+            : r.Site.Killer >= 0 && r.Site.Killer < s_Data.Killers.Count ? s_Data.Killers[r.Site.Killer] : null;
+        static int s_Relabeled, s_Renamed, s_NonDtPicks;
+        const double DT_OPEN_PK = 0.33;
+
+        static Person PersonNamed(string name) => name != null && s_Names != null && s_Names.ByName.TryGetValue(name, out var p) ? p : null;
 
         static Rec NewRecord(double now, bool initial, Site at = null, Position here = null, Person who = null)
         {
@@ -437,8 +502,9 @@ namespace RevivalGuard
                         if (Free(s)) { site = s; dt = true; dtIdx = di; }
                     }
                 }
-                // Ayan Baqur, the Direlands PK town (owner 2026-11-17): a Darktide name goes there half the time
-                if (site == null && person.Darktide && d.Sites.Length > KIND_AYAN && d.Sites[KIND_AYAN].Count > 0 && s_Rng.NextDouble() < 0.5)
+                // Ayan Baqur, the Direlands PK town (owner 2026-11-17): a Darktide name goes there first now and then (0.15:
+                // box shard4: 0.5 with every victim Darktide gave 187 of 900, 0.15 gave 150; 103 when 142 names were Darktide)
+                if (site == null && person.Darktide && d.Sites.Length > KIND_AYAN && d.Sites[KIND_AYAN].Count > 0 && s_Rng.NextDouble() < 0.15)
                     for (int tries = 0; tries < 8 && site == null; tries++)
                     {
                         int si = PickIdx(d.Cum[KIND_AYAN]); var s = si >= 0 ? d.Sites[KIND_AYAN][si] : null;
@@ -473,6 +539,7 @@ namespace RevivalGuard
                 r.Cell = site.Cell; r.X = site.X; r.Y = site.Y; r.Z = site.Z;
                 r.Level = Math.Clamp((int)Math.Round(site.Lv * (0.9 + 0.35 * s_Rng.NextDouble())), 1, 275);
                 r.Tier = site.Tier; r.Killer = d.Killers[site.Killer];
+                r.Level = CorpseKillerRule.SiteLevel(site.Kind, r.Level, ShieldLevel);   // the hub has no creatures: PK-able victims
             }
             r.Killer = KillerFor(r, person, r.Killer);
             double a = s_Rng.NextDouble() * Math.PI * 2;
@@ -519,15 +586,31 @@ namespace RevivalGuard
             return d.Looks[Math.Min(i, d.Looks.Count - 1)];
         }
 
-        /// <summary>Who lies here: a real retail character from the server-only names file (with their own look when we have
-        /// it), else an invented name (Look null: a retail look is picked). Never a name in use or one a character here has.</summary>
-        static Person PickPerson()
+        /// <summary>Who lies here: a real retail character from the server-only names file, a Darktide one first (owner
+        /// 2026-11-17: "it needs real darktide names at all cost"; another real one only when every Darktide name is in use,
+        /// counted), else an invented name (Look null: a retail look is picked). Never a name in use or one a character here has.</summary>
+        static Person PickPerson(bool darktideOnly = false, ISet<string> avoid = null)
         {
-            var people = s_Names?.People;
+            var n = s_Names;
+            if (n != null)
+            {
+                bool Usable(int i)
+                {
+                    var nm = n.People[i].Name;
+                    if (avoid != null && avoid.Contains(nm)) return false;
+                    lock (s_Lock) if (s_NamesInUse.Contains(nm)) return false;
+                    return !LiveName(nm);
+                }
+                int i = CorpseKillerRule.PickVictim(n.DtIdx, darktideOnly ? null : n.OtherIdx, Usable, s_Rng, out bool fellBack);
+                if (i < 0) return null;
+                if (fellBack) s_NonDtPicks++;
+                return n.People[i];
+            }
+            if (darktideOnly) return null;
             var names = s_Data.Names;
             for (int tries = 0; tries < 60; tries++)
             {
-                Person p = people != null ? people[s_Rng.Next(people.Count)] : new Person { Name = names[s_Rng.Next(names.Count)] };
+                var p = new Person { Name = names[s_Rng.Next(names.Count)] };
                 lock (s_Lock) if (s_NamesInUse.Contains(p.Name)) continue;
                 if (LiveName(p.Name)) continue;
                 return p;
@@ -920,7 +1003,8 @@ namespace RevivalGuard
                 var lbs = recs.Select(r => r.Lb).Distinct().Count();
                 return $"Corpse capsules {(On ? "ON" : "off")}{(s_Paused ? " (paused)" : "")}: {recs.Count - real} standing (target {Target}) + {real} real ({recs.Count(r => r.Gone)} real gone); " +
                        $"{string.Join(", ", kinds)}; in {lbs} landblocks; made now {made}, held {held}. Contents rolled {rolled}: {items} items worth {value:N0} " +
-                       $"({(rolled > 0 ? value / rolled : 0):N0} a corpse). Since start: made {s_Made}, replaced {s_Replaced}, rotted {s_Rotted} (emptied {s_Looted}), expired {s_Expired} (none: no timer), kept over the restart {s_RestoredN}, refills this hour {s_Refills.Count}/{RefillPerHour}, landblocks cooling {s_LbCool.Count(kv => kv.Value > Now)}, test clock +{s_Skew / 3600:0.#} h, bad sites {s_BadSites}; " +
+                       $"({(rolled > 0 ? value / rolled : 0):N0} a corpse). Since start: made {s_Made}, replaced {s_Replaced}, rotted {s_Rotted} (emptied {s_Looted}), expired {s_Expired} (none: no timer), kept over the restart {s_RestoredN}, refills this hour {s_Refills.Count}/{RefillPerHour}, landblocks cooling {s_LbCool.Count(kv => kv.Value > Now)}, test clock +{s_Skew / 3600:0.#} h, bad sites {s_BadSites}, killers replaced at restore {s_Relabeled}, killers that could not have killed them there now {recs.Count(r => !Plausible(r, r.Killer))}; " +
+                       $"victims Darktide {recs.Count(r => !r.IsReal && PersonNamed(r.Name)?.Darktide == true)}, other {recs.Count(r => !r.IsReal && PersonNamed(r.Name)?.Darktide != true)} (Darktide pool ran out {s_NonDtPicks} times), renamed to Darktide at restore {s_Renamed}, PK line placeholders {recs.Count(r => r.Killer == CorpseKillerRule.PK_LINE)}; " +
                        $"making a corpse {(s_MakeN > 0 ? s_MakeMs / s_MakeN : 0):0.00} ms avg over {s_MakeN}, {s_MakeMax:0.0} ms max. Names: {NamesLine()}.";
             }
         }

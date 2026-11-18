@@ -41,7 +41,10 @@ namespace RevivalGuard
                 var mi = po.MovementManager?.MotionInterpreter;
                 var q = po.PartArray?.MotionTableManager?.PendingAnimations;
                 pose = $"{(ACE.Entity.Enum.MotionCommand)(mi?.InterpretedState.ForwardCommand ?? 0)}, queue {q?.Count ?? 0}"
-                     + (q != null && q.Count > 0 ? $" ({string.Join(",", q.Select(a => ((ACE.Entity.Enum.MotionCommand)a.Motion).ToString()).Take(4))})" : "");
+                     + (q != null && q.Count > 0 ? $" ({string.Join(",", q.Select(a => ((ACE.Entity.Enum.MotionCommand)a.Motion).ToString()).Take(4))})" : "")
+                     // the table's substate and the head's link count: Falling on the ground and a swing of 5 links is the
+                     // backlog shape (MotionQueueRule.Backlog, 261117)
+                     + (q != null && q.Count > 0 ? $", table {(ACE.Entity.Enum.MotionCommand)(po.PartArray?.MotionTableManager?.State?.Substate ?? 0)}, head links {q.First.Value.NumAnims}" : "");
             }
             catch { }
             // THE TICK GATES (261024-0003): a body whose queue never drains on walkable ground is not being advanced at all.

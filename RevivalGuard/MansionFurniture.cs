@@ -716,7 +716,7 @@ namespace RevivalGuard
                     if (!StandPiece(item))
                         return "Only armor, clothing, cloaks, a weapon and a shield go on the armor stand.";
                     foreach (var o in d.Items)
-                        if (!InHand(o) && ((o.ValidLocations ?? EquipMask.None) & loc) != 0)
+                        if (!InHand(o) && SameBodyPart(o, item))
                             return $"The figure already wears {o.Name} there. Take it off first.";
                     break;
                 case SHELF:
@@ -1081,6 +1081,16 @@ namespace RevivalGuard
             return (EquipMask.MeleeWeapon, Placement.RightHandCombat, ParentLocation.RightHand);
         }
 
+        /// <summary>Two pieces that cannot be worn together. ACE's rule (Creature.GetEquippedItems): armor and clothing clash
+        /// by coverage (ClothingPriority), not by slot bits: a shirt and pants share AbdomenWear and boots and pants
+        /// LowerLegWear, yet a character wears them together (ticket 261118-0012).</summary>
+        static bool SameBodyPart(WorldObject a, WorldObject b)
+        {
+            if (a is Clothing && b is Clothing && a.ClothingPriority != null && b.ClothingPriority != null)
+                return (a.ClothingPriority.Value & b.ClothingPriority.Value) != 0;
+            return ((a.ValidLocations ?? EquipMask.None) & (b.ValidLocations ?? EquipMask.None)) != 0;
+        }
+
         /// <summary>Would this worn item go on an armor stand (WhyNot's STAND rule, without the one-per-slot check).</summary>
         static bool StandPiece(WorldObject item)
         {
@@ -1186,8 +1196,10 @@ namespace RevivalGuard
                                 if (p.FindObject(real.Guid.Full, Player.SearchLocations.MyInventory, out _, out _, out bool on) == null || on) continue;   // moved or worn since
                                 var why = s_WieldCheck?.Invoke(p, new object[] { real }) is WeenieError we ? we : WeenieError.None;
                                 var wantLoc = HandSlot(real) != null ? HandPose(real).loc : real.ValidLocations;
+                                // ACE's own rule (Creature.WieldedLocationIsAvailable: clothing by coverage), not slot bits: a shirt
+                                // and pants both list AbdomenWear, boots LowerLegWear, yet go on together (ticket 261118-0012)
                                 if (why == WeenieError.None && wantLoc is EquipMask loc && loc != EquipMask.None
-                                    && !p.EquippedObjects.Values.Any(o => ((o.CurrentWieldedLocation ?? EquipMask.None) & loc) != 0))
+                                    && p.WieldedLocationIsAvailable(real, loc))
                                     p.HandleActionGetAndWieldItem(real.Guid.Full, loc);
                                 if (real.WielderId == p.Guid.Full) worn++;
                             }

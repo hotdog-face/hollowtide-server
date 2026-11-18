@@ -40,8 +40,9 @@ namespace RevivalGuard
     ///           awake for them. When the landblock unloads the corpse goes with it; its remaining items are held by the
     ///           record and put back on the next load. Contents are rolled the first time the corpse is made.
     ///   LOOK    "Corpse of Name", the player body with a real retail look (setup, motion table, palettes, texture and part
-    ///           swaps), "Killed by &lt;the creature that spawns there&gt;." Anyone may open and loot it (no victim, so ACE asks no
-    ///           permission); a monster-kind corpse to ACE, so it is never saved and drops nothing when it rots.
+    ///           swaps), "Killed by &lt;the creature that spawns there&gt;." RETAIL-STRICT (owner 2026-11-18 "Make them retail-strict"):
+    ///           nobody may loot it, as on retail only the victim or a PK killer could, and neither is on this server; ACE says
+    ///           "You do not yet have the right to loot the Corpse of X." rg_corpse_capsules_open (default off) opens them to all; a monster-kind corpse to ACE, so it is never saved and drops nothing when it rots.
     ///   LIFE    Owner 2026-11-17: "keep the corpses for as long as retail kept corpses. i think they stayed until someone
     ///           loots them." A generated corpse STAYS until someone loots it: no timer, and it survives restarts (records
     ///           kept in Mods/RevivalGuard/CorpseCapsules/state.json; contents are rolled again after a restart). Retail
@@ -53,6 +54,11 @@ namespace RevivalGuard
     ///           rg_corpse_capsules_refill_per_hour (default 40) server-wide.
     ///   SITES   Owner 2026-11-17: PK battle spots (Arwic, Bandit Castle...), mansion and villa lawns (outdoor yard squares,
     ///           never inside, never at the door), daily-run dungeons (the Eater vaults first), plus some hunting spread.
+    ///   NAMED   Owner 2026-11-18: one place made a dense PK battlefield (the data's "named" list, gen.py NAMED: the lawn of
+    ///           the mansion at 32.9S 59.2E). Filled first to its own count, over the usual landblock cap (its own cap and
+    ///           spacing); its victims come from its two sides in the server-only names file (the allegiance that held it
+    ///           and the PKs it fought, from his retail screenshots), each killed by someone from the other side
+    ///           (CorpseKillerRule). Those names lie only there. Anti-farm as everywhere: cap, cooldown, refill limit.
     ///   REAL    The 11 never expire; looted empty they rot and come back at the next restart.
     ///   NAMES   Owner 2026-11-16: "i want the corpses to show real player names. especially if we can get darktide names and
     ///           tailors." Real names never go in git or this published source: the embedded names are invented, and an
@@ -67,8 +73,8 @@ namespace RevivalGuard
     /// </summary>
     static class CorpseCapsules
     {
-        internal const string P_ON = "rg_corpse_capsules", P_COUNT = "rg_corpse_capsules_count", P_REFILL = "rg_corpse_capsules_refill_per_hour";
-        const int LB_CAP_OUT = 16, LB_CAP_IN = 30;   // generated corpses standing in one landblock at most (dungeons are big)
+        internal const string P_ON = "rg_corpse_capsules", P_COUNT = "rg_corpse_capsules_count", P_REFILL = "rg_corpse_capsules_refill_per_hour",
+            P_OPEN = "rg_corpse_capsules_open";
         const double LB_COOL = 6 * 3600;     // a landblock where a corpse was looted gets no new one for this long
         const double FOREVER = 10.0 * 365 * 24 * 3600;   // TimeToRot: never by time (empty still rots in 15 s, ACE)
         const uint PYREAL = 273;
@@ -98,7 +104,11 @@ namespace RevivalGuard
             public List<string> Names = new List<string>();
             public Dictionary<ushort, string[]> LocalMonsters = new Dictionary<ushort, string[]>();   // CorpseKillerRule
             public HashSet<string> Monsters = new HashSet<string>(StringComparer.Ordinal);
+            public List<NamedSite> Named = new List<NamedSite>();
+            public Dictionary<int, NamedSite> NamedByKind = new Dictionary<int, NamedSite>();
         }
+        /// <summary>A named site (see NAMED): its sites are kind Kind; Fill standing there at once, Cap in one landblock.</summary>
+        sealed class NamedSite { public string Id; public int Kind, Fill, Cap; public float Spacing; }
         /// <summary>The server-only real names file (see NAMES above); null when absent.</summary>
         sealed class Person { public string Name; public Look Look; public bool Darktide; public string[] Killers; }
         sealed class RealNames
@@ -110,12 +120,14 @@ namespace RevivalGuard
             public List<string> DtKillers = new List<string>();   // real Darktide player killers (server-only file)
             public List<int> DtIdx = new List<int>(), OtherIdx = new List<int>();   // People indices: Darktide first (PickVictim)
             public Dictionary<string, Person> ByName = new Dictionary<string, Person>(StringComparer.OrdinalIgnoreCase);
+            // named sites' sides (NAMED): id -> sides of names; those names lie only at their site (Reserved)
+            public Dictionary<string, IList<IList<string>>> Sides = new Dictionary<string, IList<IList<string>>>(StringComparer.Ordinal);
+            public HashSet<string> Reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
         const int DT_MAX = 6;                // Darktide-place corpses standing at once
         const int KIND_PK = 3, KIND_LAWN = 4, KIND_DT = 6, KIND_TN = 7, KIND_HUB = 8, KIND_AYAN = 9;
         // Owner 2026-11-17: "town network was also littered with corpses and facility hub of noob corpses." One busy
-        // indoor space each: a small cap so they read as littered, not cluttered.
-        const int CAP_TN = 25, CAP_HUB = 15;
+        // indoor space each: a small cap so they read as littered, not cluttered (CorpseKillerRule.LandblockCap).
 
         // ------------------------------------------------------------ state
         sealed class Rec
@@ -149,6 +161,7 @@ namespace RevivalGuard
         internal static void Register()
         {
             PkCommon.RegisterBool(P_ON, false, "RevivalGuard CorpseCapsules: a few hundred old player corpses lie across Dereth where people died (needs the owner's yes)");
+            PkCommon.RegisterBool(P_OPEN, false, "RevivalGuard CorpseCapsules: anyone may loot the generated corpses (off: retail-strict, nobody may; owner 2026-11-18)");
             try
             {
                 var l = MonsterAi.Inner(DefaultPropertyManager.DefaultLongProperties);
@@ -169,7 +182,7 @@ namespace RevivalGuard
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ace", "corpse-capsules", "names.json");
 
         static string NamesLine() => s_Names == null ? "names invented (no server names file)"
-            : $"real names from {s_Names.Path}: {s_Names.Real.Count} real corpses, {s_Names.People.Count} people ({s_Names.People.Count(p => p.Look != null)} in their own look, {s_Names.People.Count(p => p.Darktide)} Darktide), {s_Names.DtKillers.Count} Darktide killers, {s_Names.DtSites.Count} Darktide places";
+            : $"real names from {s_Names.Path}: {s_Names.Real.Count} real corpses, {s_Names.People.Count} people ({s_Names.People.Count(p => p.Look != null)} in their own look, {s_Names.People.Count(p => p.Darktide)} Darktide), {s_Names.DtKillers.Count} Darktide killers, {s_Names.DtSites.Count} Darktide places, {s_Names.Sides.Count} named sites' sides ({string.Join(", ", s_Names.Sides.Select(kv => $"{kv.Key} {string.Join("/", kv.Value.Select(x => x.Count))}"))})";
 
         /// <summary>The optional server-only real names file; any problem means the invented names (logged, never fatal).</summary>
         static RealNames LoadNames()
@@ -197,6 +210,16 @@ namespace RevivalGuard
                 if (r.TryGetProperty("dtSites", out var ds))
                     foreach (var x in ds.EnumerateArray())
                         n.DtSites.Add(new Site { Cell = x[0].GetUInt32(), X = (float)x[1].GetDouble(), Y = (float)x[2].GetDouble(), Z = (float)x[3].GetDouble(), Lv = 100, Tier = 6, Kind = KIND_DT, W = 1 });
+                if (r.TryGetProperty("sites", out var st))
+                    foreach (var p in st.EnumerateObject())
+                    {
+                        if (!p.Value.TryGetProperty("sides", out var sd)) continue;
+                        var sides = sd.EnumerateArray().Select(a => (IList<string>)a.EnumerateArray().Select(e => e.GetString())
+                            .Where(e => !string.IsNullOrWhiteSpace(e)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()).ToList();
+                        if (sides.Count(x => x.Count > 0) < 2) continue;     // a battlefield needs two sides
+                        n.Sides[p.Name] = sides;
+                        foreach (var x in sides) foreach (var nm in x) n.Reserved.Add(nm);
+                    }
                 for (int i = 0; i < n.People.Count; i++)
                 {
                     (n.People[i].Darktide ? n.DtIdx : n.OtherIdx).Add(i);
@@ -256,6 +279,17 @@ namespace RevivalGuard
             d.Common = Pool(pools.GetProperty("common")); d.Uncommon = Pool(pools.GetProperty("uncommon")); d.Valuable = Pool(pools.GetProperty("valuable"));
             foreach (var p in pools.GetProperty("byLandblock").EnumerateObject()) d.ByLb[Convert.ToUInt16(p.Name, 16)] = Pool(p.Value);
             foreach (var x in r.GetProperty("names").EnumerateArray()) d.Names.Add(x.GetString());
+            if (r.TryGetProperty("named", out var nd))
+                foreach (var x in nd.EnumerateArray())
+                {
+                    var ns = new NamedSite
+                    {
+                        Id = x.GetProperty("id").GetString(), Kind = x.GetProperty("kind").GetInt32(), Fill = x.GetProperty("fill").GetInt32(),
+                        Cap = x.GetProperty("cap").GetInt32(), Spacing = (float)x.GetProperty("spacing").GetDouble(),
+                    };
+                    if (ns.Kind < CorpseKillerRule.KIND_NAMED || ns.Kind >= d.Sites.Length || d.Sites[ns.Kind].Count == 0) continue;
+                    d.Named.Add(ns); d.NamedByKind[ns.Kind] = ns;
+                }
             return d;
         }
 
@@ -286,6 +320,7 @@ namespace RevivalGuard
             // no expiry (owner 2026-11-17): a generated corpse stays until someone loots it
             if (now > s_NextSave) { s_NextSave = now + 300; Save(); }
             if (s_Paused) return;
+            TopUpNamed(now);
             int want = Target, made = 0;
             while (made < 25 && Generated() < want)
             {
@@ -358,7 +393,23 @@ namespace RevivalGuard
                     // owner 2026-11-17 "real darktide names at all cost": a corpse saved under another name takes a free
                     // Darktide one (place, level and contents stay; a 2017 player's own look goes with that player)
                     var person = PersonNamed(name);
-                    if (s_Names != null && person?.Darktide != true && s_Names.DtIdx.Count > 0)
+                    var named = NamedOf(r); var sides = SidesOf(named);
+                    if (named != null)
+                    {
+                        // a named site keeps its own sides (owner 2026-11-18): a victim on neither side takes a free one,
+                        // and a killer not from the other side is chosen again
+                        if (sides != null && CorpseKillerRule.SideOf(name, sides) < 0)
+                        {
+                            var v = SideVictim(named, sides, saved);
+                            if (v != null)
+                            {
+                                saved.Add(v.Name); name = r.Name = v.Name; person = v; renamed++;
+                                if (r.OwnLook || r.LookIdx < 0) { r.Look = v.Look ?? PickLook(); r.OwnLook = v.Look != null; r.LookIdx = r.OwnLook ? -1 : s_Data.Looks.IndexOf(r.Look); }
+                            }
+                        }
+                        if (sides != null && !CorpseKillerRule.OtherSide(name, r.Killer, sides)) r.Killer = CorpseKillerRule.PK_LINE;   // KillerFor below
+                    }
+                    else if (s_Names != null && (person?.Darktide != true || s_Names.Reserved.Contains(name)) && s_Names.DtIdx.Count > 0)
                     {
                         var dt = PickPerson(darktideOnly: true, avoid: saved);
                         if (dt != null)
@@ -389,7 +440,7 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] CorpseCapsules: state not restored ({e.Message}); a fresh set"); }
         }
 
-        static int Generated() { lock (s_Lock) return s_Recs.Values.Count(r => !r.IsReal); }
+        static int Generated() { lock (s_Lock) return s_Recs.Values.Count(r => !r.IsReal && NamedOf(r) == null); }   // named sites are on top (TopUpNamed)
         static bool Loaded(ushort lb) { try { return LandblockManager.IsLoaded(new LandblockId((uint)lb << 16 | 0xFFFF)); } catch { return true; } }
 
         static void MakeReal()
@@ -442,6 +493,13 @@ namespace RevivalGuard
         static string KillerFor(Rec r, Person person, string fallback)
         {
             bool pkOk = PkOk(r);
+            // a named site (owner 2026-11-18): someone from the other side; without its sides, the PK rules below
+            var sides = SidesOf(NamedOf(r));
+            if (pkOk && sides != null)
+            {
+                var k = CorpseKillerRule.OtherSideKiller(r.Name, sides, n => !LiveName(n), s_Rng);
+                if (k != null) return k;
+            }
             // a Darktide victim on a hunting spot in the open world: the PK it was seen fighting, else a PK a third of the
             // time and the local creature otherwise (with every victim Darktide, "always a PK" would empty the hunting grounds)
             bool dtPk = person?.Darktide == true && (person.Killers?.Length > 0 || s_Rng.NextDouble() < DT_OPEN_PK);
@@ -482,13 +540,77 @@ namespace RevivalGuard
 
         static Person PersonNamed(string name) => name != null && s_Names != null && s_Names.ByName.TryGetValue(name, out var p) ? p : null;
 
-        static Rec NewRecord(double now, bool initial, Site at = null, Position here = null, Person who = null)
+        // ------------------------------------------------------------ named sites (NAMED above)
+        static NamedSite NamedOf(Rec r) => r != null && !r.DtSite && r.Site != null && s_Data.NamedByKind.TryGetValue(r.Site.Kind, out var n) ? n : null;
+        static NamedSite NamedOf(Site s) => s != null && s_Data.NamedByKind.TryGetValue(s.Kind, out var n) ? n : null;
+        static IList<IList<string>> SidesOf(NamedSite n) => n != null && s_Names != null && s_Names.Sides.TryGetValue(n.Id, out var s) ? s : null;
+
+        /// <summary>A free victim from a named site's sides, from the side with fewer lying there now; its own look when the
+        /// names file has one. null: nobody free.</summary>
+        static Person SideVictim(NamedSite n, IList<IList<string>> sides, ISet<string> avoid = null)
+        {
+            var standing = new int[sides.Count];
+            lock (s_Lock)
+                foreach (var o in s_Recs.Values)
+                    if (!o.IsReal && NamedOf(o) == n) { int s = CorpseKillerRule.SideOf(o.Name, sides); if (s >= 0) standing[s]++; }
+            bool FreeName(string nm)
+            {
+                if (avoid != null && avoid.Contains(nm)) return false;
+                lock (s_Lock) if (s_NamesInUse.Contains(nm)) return false;
+                return !LiveName(nm);
+            }
+            var v = CorpseKillerRule.PickSideVictim(sides, standing, FreeName, s_Rng);
+            return v == null ? null : PersonNamed(v) ?? new Person { Name = v, Darktide = true };
+        }
+
+        /// <summary>One of a named site's free sites (in an unloaded landblock) and a victim for it.</summary>
+        static (Site site, int idx, Person who) NamedPick(NamedSite n)
+        {
+            var d = s_Data;
+            for (int tries = 0; tries < 12; tries++)
+            {
+                int si = PickIdx(d.Cum[n.Kind]); var s = si >= 0 ? d.Sites[n.Kind][si] : null;
+                if (!Free(s)) continue;
+                var sides = SidesOf(n);
+                var who = sides != null ? SideVictim(n, sides) : null;
+                return (s, si, who ?? PickPerson());      // no sides (no names file) or nobody free: as anywhere
+            }
+            return (null, -1, null);
+        }
+
+        /// <summary>Fill the named sites to their own count, on top of the target (owner 2026-11-18: more there than the
+        /// usual cap). Their first fill since start is like the initial one; after that, top-ups for looted ones share the
+        /// server-wide refill limit (and the looted landblock's cooldown, Free).</summary>
+        static void TopUpNamed(double now)
+        {
+            foreach (var n in s_Data.Named)
+            {
+                for (int made = 0; made < 10; made++)
+                {
+                    int standing; lock (s_Lock) standing = s_Recs.Values.Count(o => !o.IsReal && NamedOf(o) == n);
+                    if (standing >= n.Fill) { s_NamedFilled.Add(n.Id); break; }
+                    bool initial = !s_NamedFilled.Contains(n.Id);
+                    if (!initial)
+                    {
+                        while (s_Refills.Count > 0 && s_Refills.Peek() < now - 3600) s_Refills.Dequeue();
+                        if (s_Refills.Count >= RefillPerHour) return;
+                    }
+                    var (site, idx, who) = NamedPick(n);
+                    if (site == null || who == null) break;
+                    if (NewRecord(now, initial, at: site, atIdx: idx, who: who) == null) break;
+                    if (!initial) s_Refills.Enqueue(now);
+                }
+            }
+        }
+        static readonly HashSet<string> s_NamedFilled = new HashSet<string>(StringComparer.Ordinal);
+
+        static Rec NewRecord(double now, bool initial, Site at = null, Position here = null, Person who = null, int atIdx = -1)
         {
             var d = s_Data;
             var person = who ?? PickPerson();
             if (person == null) return null;
             var name = person.Name;
-            Site site = at; bool dt = false; int dtIdx = -1, siteIdx = -1;
+            Site site = at; bool dt = false; int dtIdx = -1, siteIdx = at != null ? atIdx : -1;
             if (site == null && here == null)
             {
                 // a Darktide name goes first to where Darktide player corpses lay (the PK places), a few at once
@@ -598,6 +720,7 @@ namespace RevivalGuard
                 {
                     var nm = n.People[i].Name;
                     if (avoid != null && avoid.Contains(nm)) return false;
+                    if (n.Reserved.Contains(nm)) return false;        // a named site's side: lies only there
                     lock (s_Lock) if (s_NamesInUse.Contains(nm)) return false;
                     return !LiveName(nm);
                 }
@@ -630,9 +753,11 @@ namespace RevivalGuard
             {
                 if (s_LbCool.TryGetValue(lb, out var until) && Now < until) return false;     // looted here lately: not a farm
                 if (!s_ByLb.TryGetValue(lb, out var l)) return true;
-                int cap = s.Kind == KIND_TN ? CAP_TN : s.Kind == KIND_HUB ? CAP_HUB : (s.Cell & 0xFFFF) >= 0x100 ? LB_CAP_IN : LB_CAP_OUT;
+                var named = NamedOf(s);     // a named site: its own landblock cap and spacing (a dense battlefield)
+                int cap = CorpseKillerRule.LandblockCap(s.Kind, (s.Cell & 0xFFFF) >= 0x100, named?.Cap ?? 0);
                 if (l.Count(o => !o.IsReal) >= cap) return false;
-                return !l.Any(o => (o.X - s.X) * (o.X - s.X) + (o.Y - s.Y) * (o.Y - s.Y) + (o.Z - s.Z) * (o.Z - s.Z) < SPACING * SPACING);
+                float sp = named?.Spacing ?? SPACING;
+                return !l.Any(o => (o.X - s.X) * (o.X - s.X) + (o.Y - s.Y) * (o.Y - s.Y) + (o.Z - s.Z) * (o.Z - s.Z) < sp * sp);
             }
         }
 
@@ -658,6 +783,16 @@ namespace RevivalGuard
                 todo = l.Where(r => r.Corpse == null && !r.Gone).ToList();
             }
             foreach (var r in todo) Make(lb, r);
+        }
+
+        /// <summary>Owner 2026-11-18 "Make them retail-strict": a generated corpse may be looted by nobody unless
+        /// rg_corpse_capsules_open is on. Read live, so the switch needs no restart.</summary>
+        internal static bool Refuses(Corpse c)
+        {
+            if (c == null) return false;
+            bool ours; lock (s_Lock) ours = s_ByGuid.ContainsKey(c.Guid.Full);
+            if (!ours) return false;
+            try { return !PropertyManager.GetBool(P_OPEN, false).Item; } catch { return true; }
         }
 
         static void Make(AceLandblock lb, Rec r)
@@ -713,7 +848,7 @@ namespace RevivalGuard
                 return new Position(r.Cell, new Vector3(r.X, r.Y, r.Z), rot);
             }
             var cell = (r.Cell & 0xFFFF0000) | (uint)((int)(r.X / 24) * 8 + (int)(r.Y / 24) + 1);
-            bool gridProven = r.Site != null && (r.Site.Kind == KIND_PK || r.Site.Kind == KIND_LAWN || r.Site.Kind == KIND_AYAN);   // gen.py: 4 m clear of any building
+            bool gridProven = r.Site != null && (r.Site.Kind == KIND_PK || r.Site.Kind == KIND_LAWN || r.Site.Kind == KIND_AYAN || NamedOf(r) != null);   // gen.py: 4 m clear of any building
             if (LScape.get_landcell(cell) is SortCell sc && sc.has_building() && !r.IsReal && !gridProven) return null;
             float z = r.IsReal ? r.Z : lb.PhysicsLandblock.GetZ(new Vector3(r.X, r.Y, 0));
             return new Position(cell, new Vector3(r.X, r.Y, z + 0.02f), rot);
@@ -738,8 +873,13 @@ namespace RevivalGuard
                 foreach (var w in r.RealItems) { var it = Fixed(new Item { Wcid = w, Min = 1, Max = 1 }); if (it != null) r.Held.Add(it); }
                 return;
             }
-            r.Held.AddRange(Contents(r.Level, r.Tier, r.Lb, r.Site?.Kind == KIND_HUB));
+            var got = Contents(r.Level, r.Tier, r.Lb, r.Site?.Kind == KIND_HUB);
+            DarktideFeel.SignAll(got, r.Name);   // rg_signed_loot: his gear as the tinkers of his day left it
+            r.Held.AddRange(got);
         }
+
+        /// <summary>@darktidefeel roll: one magic loot item of a tier, as a corpse rolls it (needs the loaded data).</summary>
+        internal static WorldObject LootForTest(int tier) => s_Data == null ? null : Loot(tier, TreasureItemCategory.MagicItem);
 
         /// <param name="noob">Facility Hub newbies: commons only (kits, potions, newbie gear), small caps, no valuable roll.</param>
         internal static List<WorldObject> Contents(int level, int tier, ushort lb, bool noob = false)
@@ -869,7 +1009,7 @@ namespace RevivalGuard
             {
                 made = s_Recs.Values.Where(r => r.Corpse != null).Select(r => r.Corpse).ToList();
                 foreach (var r in s_Recs.Values.ToList()) { if (r.Corpse != null) { s_ByGuid.Remove(r.Corpse.Guid.Full); r.Corpse = null; } Forget(r); }
-                s_RealMade = false; s_Made = 0; s_Refills.Clear();   // the next fill is a fresh start, not refills
+                s_RealMade = false; s_Made = 0; s_Refills.Clear(); s_NamedFilled.Clear();   // the next fill is a fresh start, not refills
             }
             foreach (var c in made)
             {
@@ -975,7 +1115,8 @@ namespace RevivalGuard
             return Math.Sqrt((at.PositionX - r.X) * (at.PositionX - r.X) + (at.PositionY - r.Y) * (at.PositionY - r.Y));
         }
 
-        static string KindName(int k) => k switch { 0 => "2017", 1 => "dungeon", 2 => "outdoor", 3 => "pk", 4 => "lawn", 5 => "daily", 7 => "townnet", 8 => "hub", 9 => "ayan", _ => "darktide" };
+        static string KindName(int k) => k switch { 0 => "2017", 1 => "dungeon", 2 => "outdoor", 3 => "pk", 4 => "lawn", 5 => "daily", 7 => "townnet", 8 => "hub", 9 => "ayan",
+            _ when s_Data != null && s_Data.NamedByKind.TryGetValue(k, out var n) => n.Id, _ => "darktide" };
 
         static string Line(Rec r)
         {
@@ -1001,8 +1142,15 @@ namespace RevivalGuard
                     foreach (var it in its) { items++; value += (long)(it.Value ?? 0); }
                 }
                 var lbs = recs.Select(r => r.Lb).Distinct().Count();
-                return $"Corpse capsules {(On ? "ON" : "off")}{(s_Paused ? " (paused)" : "")}: {recs.Count - real} standing (target {Target}) + {real} real ({recs.Count(r => r.Gone)} real gone); " +
-                       $"{string.Join(", ", kinds)}; in {lbs} landblocks; made now {made}, held {held}. Contents rolled {rolled}: {items} items worth {value:N0} " +
+                var named = s_Data.Named.Select(n =>
+                {
+                    var at = recs.Where(r => !r.IsReal && NamedOf(r) == n).ToList(); var sd = SidesOf(n);
+                    if (sd == null) return $"{n.Id} {at.Count}/{n.Fill} (no sides: names file)";
+                    var by = Enumerable.Range(0, sd.Count).Select(i => at.Count(r => CorpseKillerRule.SideOf(r.Name, sd) == i));
+                    return $"{n.Id} {at.Count}/{n.Fill} (sides {string.Join("/", by)}, killed by the other side {at.Count(r => CorpseKillerRule.OtherSide(r.Name, r.Killer, sd))}, most in one landblock {at.GroupBy(r => r.Lb).Select(g => g.Count()).DefaultIfEmpty(0).Max()}, cap {n.Cap})";
+                }).ToList();
+                return $"Corpse capsules {(On ? "ON" : "off")}{(s_Paused ? " (paused)" : "")}: {recs.Count - real} standing (target {Target}, named sites on top) + {real} real ({recs.Count(r => r.Gone)} real gone); " +
+                       $"{string.Join(", ", kinds)}; named: {(named.Count == 0 ? "none" : string.Join("; ", named))}; in {lbs} landblocks; made now {made}, held {held}. Contents rolled {rolled}: {items} items worth {value:N0} " +
                        $"({(rolled > 0 ? value / rolled : 0):N0} a corpse). Since start: made {s_Made}, replaced {s_Replaced}, rotted {s_Rotted} (emptied {s_Looted}), expired {s_Expired} (none: no timer), kept over the restart {s_RestoredN}, refills this hour {s_Refills.Count}/{RefillPerHour}, landblocks cooling {s_LbCool.Count(kv => kv.Value > Now)}, test clock +{s_Skew / 3600:0.#} h, bad sites {s_BadSites}, killers replaced at restore {s_Relabeled}, killers that could not have killed them there now {recs.Count(r => !Plausible(r, r.Killer))}; " +
                        $"victims Darktide {recs.Count(r => !r.IsReal && PersonNamed(r.Name)?.Darktide == true)}, other {recs.Count(r => !r.IsReal && PersonNamed(r.Name)?.Darktide != true)} (Darktide pool ran out {s_NonDtPicks} times), renamed to Darktide at restore {s_Renamed}, PK line placeholders {recs.Count(r => r.Killer == CorpseKillerRule.PK_LINE)}; " +
                        $"making a corpse {(s_MakeN > 0 ? s_MakeMs / s_MakeN : 0):0.00} ms avg over {s_MakeN}, {s_MakeMax:0.0} ms max. Names: {NamesLine()}.";
@@ -1073,6 +1221,19 @@ namespace RevivalGuard
         {
             try { CorpseCapsules.OnUnload(__instance); }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] CorpseCapsules unload: {e.Message}"); }
+        }
+    }
+
+    /// <summary>Retail-strict looting of the generated corpses (owner 2026-11-18): ACE's Corpse.Open asks HasPermission and,
+    /// on false, says "You do not yet have the right to loot the Corpse of X."</summary>
+    [HarmonyPatch(typeof(Corpse), nameof(Corpse.HasPermission))]
+    static class CorpseCapsulesPermission
+    {
+        static bool Prefix(Corpse __instance, ref bool __result)
+        {
+            try { if (CorpseCapsules.Refuses(__instance)) { __result = false; return false; } }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] CorpseCapsules permission: {e.Message}"); }
+            return true;
         }
     }
 

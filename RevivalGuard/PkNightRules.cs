@@ -115,7 +115,7 @@ namespace RevivalGuard
         public static readonly Spot[] SPOTS =
         {
             new Spot { Key = "mitemaze", Name = "the Mite Maze", Where = "41.1N 57.0E", Ns = 41.08, Ew = 57.03,
-                       Near = "the hedge maze north of Arwic", Levels = "any level" },
+                       Near = "the snowy valley north of Arwic, by the Mite Maze portal", Levels = "any level" },
             new Spot { Key = "zombiecastle", Name = "Zombie Castle", Where = "45.2S 39.1E", Ns = -45.2, Ew = 39.1,
                        Near = "the castle ruin in southern Osteth, by the Zombie Castle estates", Levels = "20 and up" },
             new Spot { Key = "colosseum", Name = "the Colosseum", Where = "11.2S 37.5E", Ns = -11.24, Ew = 37.54,

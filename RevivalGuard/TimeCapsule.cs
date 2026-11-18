@@ -105,10 +105,11 @@ namespace RevivalGuard
             }
             // Villas and mansions keep their storage in the basement (another landblock): it fills when the basement loads.
             int inChest = 0; string signer = null;
-            if (chest != null) (inChest, signer) = PlaceChest(chest, stash);
+            var owner = Owner(house, stash);
+            if (chest != null) (inChest, signer) = PlaceChest(chest, stash, owner);
             else house.SetProperty(CHEST_DUE, vacant + 1);
             // Hook pieces normally went up while the house stood empty (window-shoppers saw them); if not, now.
-            int onHooks = hung ? 0 : PlaceHooks(house, chest, stash, ref inChest);
+            int onHooks = hung ? 0 : PlaceHooks(house, chest, stash, ref inChest, owner);
             house.SetProperty(SEEDED_AT, now);
             house.SaveBiotaToDatabase();
             if (inChest + onHooks > 0)
@@ -167,7 +168,7 @@ namespace RevivalGuard
                     long due = root?.GetProperty(CHEST_DUE) ?? 0;
                     if (root == null || due == 0 || (root.HouseOwner ?? 0) == 0 || !s_Filled.TryAdd(root.Guid.Full, 0)) return;
                     var stash = TimeCapsuleRule.Roll(root.Guid.Full, due - 1, (int)root.HouseType);
-                    var (n, signer) = PlaceChest(storage, stash);
+                    var (n, signer) = PlaceChest(storage, stash, Owner(root, stash, store: false));
                     void Clear(House h) { h.RemoveProperty(CHEST_DUE); h.SaveBiotaToDatabase(); s_Filled.TryRemove(h.Guid.Full, out _); }
                     if (root.CurrentLandblock != null) root.EnqueueAction(new ACE.Server.Entity.Actions.ActionEventDelegate(() => Clear(root)));
                     else Clear(root);
@@ -184,7 +185,14 @@ namespace RevivalGuard
         /// constructors, before any landblock or house link exists, so this is the first moment to look.</summary>
         internal static void OnLandblockReady(ACE.Server.Entity.Landblock lb)
         {
-            if (!On || lb == null) return;
+            if (lb == null) return;
+            if (!On)
+            {
+                // Capsules off with the crystal names on: take ours off (rg_house_last_owner), touch nothing else.
+                foreach (var house in lb.Houses.Where(h => h.Guid == h.RootGuid).ToList())
+                    try { DarktideFeel.ClearSign(house.SlumLord, (house.HouseOwner ?? 0) != 0); } catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] TimeCapsule sign 0x{house.Guid.Full:X8}: {e.Message}"); }
+                return;
+            }
             foreach (var house in lb.Houses.ToList())
             {
                 try
@@ -218,13 +226,23 @@ namespace RevivalGuard
                 house.RemoveProperty(HUNG_FOR);
                 Mod.Log.Info($"[RevivalGuard] TimeCapsule: 0x{house.Guid.Full:X8} was hung by an older layout: took down {down} piece(s)");
             }
+            var stash = TimeCapsuleRule.Roll(house.Guid.Full, vacant, (int)house.HouseType);
             if (!TimeCapsuleRule.HangNow(owned: false, alreadyHung: Hung(house, vacant),
                     eligible: TimeCapsuleRule.Eligible((long)Time.GetUnixTime(), vacant, Existing(house), 0, true, out _),
-                    hit: TimeCapsuleRule.Roll(house.Guid.Full, vacant, (int)house.HouseType).Hit)) return;
-            var stash = TimeCapsuleRule.Roll(house.Guid.Full, vacant, (int)house.HouseType);
+                    hit: stash.Hit))
+            {
+                // Already up this vacancy (a restart, a reload): the crystal keeps naming him; else ours comes off.
+                bool up = Hung(house, vacant) && stash.Hit && house.Hooks.Any(h => h.HasItem && (h.Item.GetProperty(CAPSULE_ITEM) ?? false));
+                bool kept = house.GetProperty(DarktideFeel.LAST_OWNER) != null;
+                DarktideFeel.UpdateSign(house, up, up ? Owner(house, stash) : null);
+                if (up && !kept && house.GetProperty(DarktideFeel.LAST_OWNER) != null) house.SaveBiotaToDatabase();   // the note will read it
+                return;
+            }
             int inChest = 0;
-            int n = PlaceHooks(house, Chest(house), stash, ref inChest);
+            var owner = Owner(house, stash);
+            int n = PlaceHooks(house, Chest(house), stash, ref inChest, owner);
             house.SetProperty(HUNG_FOR, Marker(vacant));
+            DarktideFeel.UpdateSign(house, n > 0, owner);
             house.SaveBiotaToDatabase();
             Mod.Log.Info($"[RevivalGuard] TimeCapsule: hung {n} piece(s) on empty 0x{house.Guid.Full:X8} ({house.HouseType}, {stash.Theme.Name}){(inChest > 0 ? $", {inChest} in the chest" : "")}");
         }
@@ -248,7 +266,7 @@ namespace RevivalGuard
         static Storage Chest(House house) =>
             house.Storage.Where(s => s.CurrentLandblock != null).OrderBy(s => s.Inventory.Count).FirstOrDefault();
 
-        static WorldObject Make(TimeCapsuleRule.Pick p, int ageDays)
+        static WorldObject Make(TimeCapsuleRule.Pick p, int ageDays, string owner = null)
         {
             var wo = WorldObjectFactory.CreateNewWorldObject(p.Wcid);
             if (wo == null) { Mod.Log.Warn($"[RevivalGuard] TimeCapsule: no weenie {p.Wcid}"); return null; }
@@ -263,6 +281,7 @@ namespace RevivalGuard
             else if (p.Count > 1 && (wo.MaxStackSize ?? 1) > 1)
                 wo.SetStackSize(Math.Min(p.Count, wo.MaxStackSize ?? 1));
             Age(wo, ageDays);
+            DarktideFeel.SignAll(new[] { wo }, owner);   // rg_signed_loot: makers' names where a player could have left them
             return wo;
         }
 
@@ -276,15 +295,16 @@ namespace RevivalGuard
             wo.SetProperty(CAPSULE_ITEM, true);
         }
 
-        static (int chest, string signer) PlaceChest(Storage chest, TimeCapsuleRule.Stash stash)
+        static (int chest, string signer) PlaceChest(Storage chest, TimeCapsuleRule.Stash stash, string owner = null)
         {
             int inChest = 0;
             string signer = null;
+            owner ??= Owner(null, stash);
             var all = new List<WorldObject>();
-            foreach (var p in stash.Chest) { var wo = Make(p, stash.AgeDays); if (wo != null) all.Add(wo); }
+            foreach (var p in stash.Chest) { var wo = Make(p, stash.AgeDays, owner); if (wo != null) all.Add(wo); }
             if (stash.Note >= 0 && WorldObjectFactory.CreateNewWorldObject(TimeCapsuleRule.NOTE_WCID) is Book note)
             {
-                signer = stash.Signer ?? TimeCapsuleRule.PickName(Names(), stash.NameRoll, n => PlayerManager.FindByName(n) != null);
+                signer = owner;
                 // Written the way a player's page is: an author name and a player-range author id (high in the range,
                 // clear of real characters), never "ignore author".
                 uint authorId = 0x5F000000u | (uint)(stash.NameRoll & 0xFFFFF);
@@ -303,8 +323,9 @@ namespace RevivalGuard
 
         /// <summary>Each hook candidate on the first free hook it fits, within ACE's hook and hook-group limits, through
         /// ACE's own hook path (Hook.OnAddItem: the same state a player's hanging leaves).</summary>
-        static int PlaceHooks(House house, Storage chest, TimeCapsuleRule.Stash stash, ref int inChest)
+        static int PlaceHooks(House house, Storage chest, TimeCapsuleRule.Stash stash, ref int inChest, string owner = null)
         {
+            owner ??= Owner(house, stash);
             int onHooks = 0;
             var free = house.Hooks.Where(h => h.CurrentLandblock != null && !h.HasItem).OrderBy(h => h.Guid.Full).ToList();
             bool limited = PropertyManager.GetBool("house_hook_limit").Item && house.HouseMaxHooksUsable != -1;
@@ -315,7 +336,7 @@ namespace RevivalGuard
             {
                 if (limited && house.HouseCurrentHooksUsable <= 0) break;
                 var hook = free[idx];
-                var wo = Make(p, stash.AgeDays);
+                var wo = Make(p, stash.AgeDays, owner);
                 if (wo == null) continue;
                 var group = wo.HookGroup ?? HookGroupType.Undef;
                 int gmax = house.GetHookGroupMaxCount(group);
@@ -328,7 +349,7 @@ namespace RevivalGuard
             if (stash.Fixed && chest != null)
                 foreach (var p in stash.Hooks.Where(p => !placed.Contains(p.Wcid)))
                 {
-                    var wo = Make(p, stash.AgeDays);
+                    var wo = Make(p, stash.AgeDays, owner);
                     if (wo != null && chest.TryAddToInventory(wo)) { wo.SaveBiotaToDatabase(); inChest++; }
                     else wo?.Destroy();
                 }
@@ -352,6 +373,25 @@ namespace RevivalGuard
                 return $"{name}{extra}{(p.Tier != TimeCapsuleRule.Tier.Common ? " (" + p.Tier + ")" : "")}";
             }
             return $"chest ({stash.Chest.Count}): {string.Join(", ", stash.Chest.Select(N))}; theme hook pieces: {string.Join(", ", stash.Hooks.Select(N))} (plus furniture and clutter to 70-100% of free hooks)";
+        }
+
+        /// <summary>Who lived here: the note's signature, the crystal's name (rg_house_last_owner) and the owner on signed
+        /// items. With the sign on, Darktide people first (the server-only names file), kept on the house for the vacancy so
+        /// the crystal and the note always agree; off, the chat-corpus name the notes always had.</summary>
+        internal static string Owner(House house, TimeCapsuleRule.Stash stash, bool store = true)
+        {
+            if (DarktideFeel.Sign)
+            {
+                var kept = house?.GetProperty(DarktideFeel.LAST_OWNER);
+                if (kept != null) return kept;
+                var name = stash.Signer ?? DarktideFeel.LastOwner(stash.NameRoll);
+                if (name != null)
+                {
+                    if (store && house != null) house.SetProperty(DarktideFeel.LAST_OWNER, name);
+                    return name;
+                }
+            }
+            return stash.Signer ?? TimeCapsuleRule.PickName(Names(), stash.NameRoll, n => PlayerManager.FindByName(n) != null);
         }
 
         // ---- the retail names list (never in git: read from the chat replay corpus on the host) ----
@@ -405,9 +445,10 @@ namespace RevivalGuard
                     long sk = house.GetProperty(VACANT_SINCE) ?? 0;
                     var stash = TimeCapsuleRule.Roll(house.Guid.Full, sk, (int)house.HouseType);
                     int c = 0; string signer = null;
-                    if (chest != null) (c, signer) = PlaceChest(chest, stash);
+                    var owner = Owner(house, stash);
+                    if (chest != null) (c, signer) = PlaceChest(chest, stash, owner);
                     else if ((house.HouseOwner ?? 0) != 0) { house.SetProperty(CHEST_DUE, sk + 1); Say(session, "[Capsule] No chest up here: the basement chest fills when the basement loads (go down)."); }
-                    int h = PlaceHooks(house, chest, stash, ref c);
+                    int h = PlaceHooks(house, chest, stash, ref c, owner);
                     house.SetProperty(SEEDED_AT, now);
                     house.SaveBiotaToDatabase();
                     Mod.Log.Info($"[RevivalGuard] TimeCapsule: {p.Name} force-seeded 0x{house.Guid.Full:X8}: {stash.Theme.Name}, {c}+{h}: {Describe(stash)}");
@@ -420,6 +461,7 @@ namespace RevivalGuard
                     var stash = TimeCapsuleRule.Roll(house.Guid.Full, vk, (int)house.HouseType);
                     int c = 0, h = PlaceHooks(house, Chest(house), stash, ref c);
                     if ((house.HouseOwner ?? 0) == 0) house.SetProperty(HUNG_FOR, Marker(vk));
+                    DarktideFeel.UpdateSign(house, h > 0, Owner(house, stash));
                     house.SaveBiotaToDatabase();
                     Say(session, $"[Capsule] Hung {h} '{stash.Theme.Name}' piece(s) now, hit or not.");
                     return;
@@ -449,6 +491,7 @@ namespace RevivalGuard
                     double days = args.Length > 1 && double.TryParse(args[1], out var d) ? d : TimeCapsuleRule.MIN_VACANT / (double)TimeCapsuleRule.DAY;
                     house.SetProperty(VACANT_SINCE, now - (long)(days * TimeCapsuleRule.DAY));
                     house.RemoveProperty(HUNG_FOR);
+                    house.RemoveProperty(DarktideFeel.LAST_OWNER);
                     house.SaveBiotaToDatabase();
                     Say(session, $"[Capsule] Vacancy now started {days:F1} days ago.");
                     break;
@@ -458,6 +501,7 @@ namespace RevivalGuard
                     if ((house.HouseOwner ?? 0) != 0) { Say(session, "[Capsule] Owned: a vacancy starts when it is released."); return; }
                     house.SetProperty(VACANT_SINCE, now);
                     house.RemoveProperty(HUNG_FOR);
+                    house.RemoveProperty(DarktideFeel.LAST_OWNER);
                     house.SaveBiotaToDatabase();
                     Say(session, "[Capsule] Vacancy restarted now (as if just released).");
                     break;
@@ -480,6 +524,8 @@ namespace RevivalGuard
             Say(session, $"[Capsule] Vacant since: {(vacant > 0 ? $"{(now - vacant) / (double)TimeCapsuleRule.DAY:F2} days ago" : "never owned (no stamp)")}. Last seeded: {(seeded > 0 ? $"{(now - seeded) / 3600.0:F1} h ago" : "never")}.");
             Say(session, $"[Capsule] Storage: {house.Storage.Count} chest(s), {items} item(s); hooks: {house.Hooks.Count}, {hooked} in use; {mine} from a stash.");
             Say(session, $"[Capsule] {(owned ? "Not for sale" : ok ? "A purchase now WOULD find a stash" : "A purchase now would find nothing")} ({why}; account limit not checked here).");
+            bool ours = house.SlumLord?.GetProperty(DarktideFeel.SIGN_SET) ?? false;
+            Say(session, $"[Capsule] Last owner: {Owner(house, stash, store: false)}; crystal '{house.SlumLord?.Name}'{(ours ? " (named by rg_house_last_owner)" : "")}.");
             if (house.GetProperty(CHEST_DUE) != null) Say(session, "[Capsule] Basement chest: due, fills when the basement loads.");
             Say(session, $"[Capsule] Hook pieces for this vacancy: {(Hung(house, vacant) ? "up (or cleared)" : "not up")}. They go up when an empty, eligible HIT house's hooks load; @capsule hang forces them.");
             Say(session, $"[Capsule] This vacancy's roll: {(stash.Hit ? "HIT, a purchase finds a stash" : $"MISS, a purchase finds the house empty")} ({(stash.Fixed ? "a hand-authored house always hits" : TimeCapsuleRule.HitPct((int)house.HouseType) + "% for a " + house.HouseType)}). @capsule seed forces one either way.");
@@ -528,6 +574,7 @@ namespace RevivalGuard
                 if (__instance == null || (__instance.HouseOwner ?? 0) != 0 || __instance.GetProperty(TimeCapsule.VACANT_SINCE) != null) return;
                 __instance.SetProperty(TimeCapsule.VACANT_SINCE, (long)Time.GetUnixTime());
                 __instance.RemoveProperty(TimeCapsule.HUNG_FOR);
+                __instance.RemoveProperty(DarktideFeel.LAST_OWNER);
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] TimeCapsule release: {e.Message}"); }
         }
@@ -542,7 +589,7 @@ namespace RevivalGuard
         {
             try
             {
-                if (!TimeCapsule.On) return;
+                if (!TimeCapsule.On && !DarktideFeel.Sign) return;
                 var lb = __instance;
                 lb.EnqueueAction(new ACE.Server.Entity.Actions.ActionEventDelegate(() => TimeCapsule.OnLandblockReady(lb)));
             }

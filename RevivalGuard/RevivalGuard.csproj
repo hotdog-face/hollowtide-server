@@ -36,5 +36,7 @@
     <EmbeddedResource Include="DeathPlaces.json" LogicalName="RevivalGuard.DeathPlaces.json" />
     <!-- Corpse capsules: real 2017 player corpses, retail looks, proven-floor sites, item pools, invented names (tools/corpse-capsules/gen.py). -->
     <EmbeddedResource Include="CorpseCapsules.json" LogicalName="RevivalGuard.CorpseCapsules.json" />
+    <!-- On this day: dated real AC history for the world line (OnThisDay), paraphrased from the AC wiki (CC-BY-SA), source_url per entry. -->
+    <EmbeddedResource Include="OnThisDay.json" LogicalName="RevivalGuard.OnThisDay.json" />
   </ItemGroup>
 </Project>

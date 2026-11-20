@@ -74,11 +74,13 @@ namespace RevivalGuard
             Try(nameof(PerfStat), PerfStat.Register);
             Try(nameof(AccountCreationCap), AccountCreationCap.Register);
             Try(nameof(RetailWelcome), RetailWelcome.Register);
+            Try(nameof(NewcomerWelcome), NewcomerWelcome.Register);   // a brand-new player's first character welcomed on General + Discord (rg_newcomer_welcome, off)
             Try(nameof(WhatsNew), WhatsNew.Register);            // last logout to our client for its what's-new card (rg_whats_new, on)
             Try(nameof(DnDefaultOn), DnDefaultOn.Register);      // every player character on the Dereth Network by default, silently (owner 2026-11-11)
             Try(nameof(LoginTokens), LoginTokens.Register);
             Try(nameof(PasswordRecovery), PasswordRecovery.Register);
             Try(nameof(LfgBoard), LfgBoard.Register);
+            Try(nameof(Recruiting), Recruiting.Register);      // /recruit (alias /recruiting): player allegiances that welcome new players, offered at level 10 (rg_recruit, off by default)
             Try(nameof(Leaderboards), Leaderboards.Register);      // /top: level, XP, luminance, kills, PK, quests (rg_top; Discord post rg_top_discord, on)
             Try(nameof(FeatureBoard), FeatureBoard.Register);
             Try(nameof(ItemLock), ItemLock.Register);

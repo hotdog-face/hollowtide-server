@@ -41,7 +41,7 @@ namespace RevivalGuard
             if (acct == null) return "no account";
             if (acct.AccessLevel > 0) return "staff";
             string a = acct.AccountName ?? "";
-            if (Mercenaries.IsReservedName(a) || BorgSwitch.IsBorgName(p.Name)) return "merc/borg";
+            if (Mercenaries.IsReservedName(a)) return "merc/borg";   // the Borg are on these accounts; a name alone is not one
             foreach (var f in FLEET_PREFIXES)
                 if (a.StartsWith(f, StringComparison.OrdinalIgnoreCase)) return "dev fleet";
             return null;

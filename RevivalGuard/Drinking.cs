@@ -135,7 +135,13 @@ namespace RevivalGuard
         {
             if (p == null || p.IsDead || !On) return;
             var st = Get(p);
-            if (wcid == DrinkingRule.HANGOVER_CURE) { Cure(p, st); return; }
+            if (DrinkingRule.IsCure(wcid))
+            {
+                // the diner's coffee only while its switch is on (RevivalGuard Diner, rg_diner_coffee)
+                if (wcid == DrinkingRule.DINER_COFFEE && !PropertyManager.GetBool(Diner.P_COFFEE, true).Item) return;
+                Cure(p, st, wcid == DrinkingRule.DINER_COFFEE ? DrinkingRule.COFFEE_CURE_LINE : DrinkingRule.CURE_LINE);
+                return;
+            }
             if (!DrinkingRule.IsAlcohol(wcid) || st.Out) return;
             double before = Count(st);
             st.Stage = Math.Min(st.Stage, DrinkingRule.Stage(before));   // worn off since: its line may come again
@@ -409,8 +415,9 @@ namespace RevivalGuard
             Clear(p, st);
         }
 
-        /// <summary>Ulgrim's Hangover Cure (retail 23924, it restores health): ours, it also sobers you and lifts the hangover.</summary>
-        static void Cure(Player p, St st)
+        /// <summary>Ulgrim's Hangover Cure (retail 23924, it restores health): ours, it also sobers you and lifts the hangover.
+        /// The Pancake House's Diner Coffee does the same (DrinkingRule.IsCure).</summary>
+        static void Cure(Player p, St st, string line)
         {
             if (st.Out) return;
             bool had = Count(st) > 0.01 || st.Hungover || p.EnchantmentManager.GetEnchantment(DrinkingRule.HANGOVER_SPELL) != null
@@ -419,7 +426,7 @@ namespace RevivalGuard
             SetPicture(st, 0, 0);
             Sober(p);
             Lift(p, st, null);
-            if (had) PkCommon.Say(p, DrinkingRule.CURE_LINE);
+            if (had) PkCommon.Say(p, line);
         }
 
         static void Sober(Player p)
@@ -672,7 +679,7 @@ namespace RevivalGuard
             {
                 if (player == null || player.IsDead) return;
                 uint w = __instance.WeenieClassId;
-                if ((DrinkingRule.IsAlcohol(w) || w == DrinkingRule.HANGOVER_CURE)
+                if ((DrinkingRule.IsAlcohol(w) || DrinkingRule.IsCure(w))
                     && player.FindObject(__instance.Guid.Full, Player.SearchLocations.MyInventory) != null) __state = w;
             }
             catch { }

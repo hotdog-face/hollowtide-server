@@ -106,6 +106,9 @@ namespace RevivalGuard
         public sealed class Spot
         {
             public string Key, Name, Where, Near, Levels;
+            /// <summary>How to walk there, said in the hour-before and start lines (owner 2026-11-18, after the Borg walk test:
+            /// Arwic has no north gate). Null: no directions line.</summary>
+            public string Way;
             public double Ns, Ew;
             public override string ToString() => $"{Name} ({Where})";
         }
@@ -115,7 +118,8 @@ namespace RevivalGuard
         public static readonly Spot[] SPOTS =
         {
             new Spot { Key = "mitemaze", Name = "the Mite Maze", Where = "41.1N 57.0E", Ns = 41.08, Ew = 57.03,
-                       Near = "the snowy valley north of Arwic, by the Mite Maze portal", Levels = "any level" },
+                       Near = "the snowy valley north of Arwic, by the Mite Maze portal", Levels = "any level",
+                       Way = "From Arwic, leave by the west gate and head north." },
             new Spot { Key = "zombiecastle", Name = "Zombie Castle", Where = "45.2S 39.1E", Ns = -45.2, Ew = 39.1,
                        Near = "the castle ruin in southern Osteth, by the Zombie Castle estates", Levels = "20 and up" },
             new Spot { Key = "colosseum", Name = "the Colosseum", Where = "11.2S 37.5E", Ns = -11.24, Ew = 37.54,
@@ -251,13 +255,15 @@ namespace RevivalGuard
             $"PK Night is tomorrow, {WHEN_WORDS}: hold {spot.Name} ({spot.Where}) for the hour. The allegiance that holds it longest takes the night.";
 
         public static string HourBeforeLine(Spot spot) =>
-            $"PK Night begins in one hour at {spot.Name} ({spot.Where}). Gather your allegiance.";
+            $"PK Night begins in one hour at {spot.Name} ({spot.Where}). Gather your allegiance." + WayTail(spot);
 
         public static string TenMinutesLine(Spot spot) =>
             $"PK Night begins in ten minutes at {spot.Name} ({spot.Where}).";
 
         public static string StartLine(Spot spot, int minutes) =>
-            $"PK Night has begun! Hold {spot.Name} ({spot.Where}). The allegiance that holds it longest in the next {(minutes == 60 ? "hour" : minutes + " minutes")} takes the night.";
+            $"PK Night has begun! Hold {spot.Name} ({spot.Where}). The allegiance that holds it longest in the next {(minutes == 60 ? "hour" : minutes + " minutes")} takes the night." + WayTail(spot);
+
+        static string WayTail(Spot spot) => string.IsNullOrEmpty(spot.Way) ? "" : " " + spot.Way;
 
         public static string StandingsLine(Live live, Spot spot, double now)
         {

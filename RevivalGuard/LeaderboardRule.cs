@@ -24,7 +24,7 @@ namespace RevivalGuard
             public bool Online;
             public double LastLogin;      // unix seconds
             public bool Deleted;          // deleted or pending deletion
-            public long Level, Xp, Lum, Kills, PkKills, PkDeaths, Quests, Raids;
+            public long Level, Xp, Lum, Kills, PkKills, PkDeaths, Quests, Raids, Pancakes;
         }
 
         public sealed class Board
@@ -46,10 +46,15 @@ namespace RevivalGuard
             new Board { Key = "quests", Title = "quest milestones",   Unit = " quest milestones", Aliases = new[] { "quest", "q" },                  Value = e => e.Quests },
             // Holtburg raids held (TownRaid's counter, quest flag RAID_FLAG); not in the daily Discord post without the owner's yes
             new Board { Key = "raids",  Title = "Holtburg raids defended", Unit = " raids defended", Aliases = new[] { "raid", "defense", "defence", "holtburg" }, Value = e => e.Raids, InDiscord = false },
+            // the Pancake House's Pancake Challenge: a character's best minute (Diner's counter, quest flag PANCAKE_FLAG); not in the Discord post
+            new Board { Key = "pancakes", Title = "pancakes eaten in a minute", Unit = " pancakes", Aliases = new[] { "pancake", "contest", "diner" }, Value = e => e.Pancakes, InDiscord = false },
         };
 
         /// <summary>TownRaid's per-character counter of raids held (a quest flag; "rg_" flags are never quest milestones).</summary>
         public const string RAID_FLAG = "rg_townraid_defended";
+
+        /// <summary>The Pancake House diner's per-character best in the Pancake Challenge (DinerRule.BEST_FLAG).</summary>
+        public const string PANCAKE_FLAG = "rg_diner_pancakes";
 
         public static Board Find(string word)
         {
@@ -66,9 +71,6 @@ namespace RevivalGuard
             { "devbot", "harness", "loadbot", "playtest", "locfix", "fleetbot", "probe", "smoke", "soak", "newcomer", "kt" };
         public static readonly string[] OWNER_ACCOUNTS = { "viewer", "an admin account" };
 
-        public static bool IsBorgName(string name) =>
-            name != null && name.TrimEnd().EndsWith(" of Borg", StringComparison.OrdinalIgnoreCase);
-
         /// <summary>Why this character is not listed, or null when it is. For staff logs only: never shown to players.</summary>
         public static string Excluded(Entry e, double now, int activeDays, ISet<uint> hidden, ISet<string> extraNames)
         {
@@ -81,8 +83,8 @@ namespace RevivalGuard
             if (TEST_ACCOUNT_PREFIXES.Any(p => acct.StartsWith(p, StringComparison.OrdinalIgnoreCase))) return "test account";
             // the hcmerc prefix is reserved (no player can make one), so every such account is the shard's: its "... of Borg"
             // characters are listed as players, the Hollow Company (and anything else on it) never
-            bool shardAccount = e.MercAccount || acct.StartsWith("hcmerc", StringComparison.OrdinalIgnoreCase);
-            if (shardAccount && !IsBorgName(e.Name)) return "mercenary";
+            bool shardAccount = e.MercAccount || BorgRule.IsShardAccountName(acct);
+            if (shardAccount && !BorgRule.IsBorg(shardAccount, e.Name)) return "mercenary";
             if (extraNames != null && (extraNames.Contains(acct) || extraNames.Contains(e.Name))) return "excluded by list";
             if (hidden != null && hidden.Contains(e.Id)) return "hidden";
             if (!e.Online && (now - e.LastLogin) > activeDays * 86400.0) return "inactive";

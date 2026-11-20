@@ -390,6 +390,12 @@ namespace RevivalGuard
         static void EnsureSpawned(WorldBoss.Spec s, double now)
         {
             if (WorldBoss.FindAlive(s) != null) return;
+            if (s.Wcid == WorldBoss.BAEL && LightbringerScene.BaelOnStage)
+            {
+                // never two Bael'Zharons: the Lightbringer week's Cragstone scene has him (only an admin's forced window can meet one)
+                if (!s_SpawnTry.TryGetValue(s.Key, out var held) || now - held >= 60) { s_SpawnTry[s.Key] = now; Mod.Log.Info("[RevivalGuard] WorldBossSchedule: Bael'Zharon waits; the Cragstone scene has him"); }
+                return;
+            }
             if (s_SpawnTry.TryGetValue(s.Key, out var last) && now - last < SPAWN_RETRY) return;
             s_SpawnTry[s.Key] = now;
             if (WorldBoss.LoadedLair(s) == null)
@@ -475,6 +481,7 @@ namespace RevivalGuard
                 {
                     var key = g.ToString("X8");
                     Add(key, Roll(s.Kill), $"your share of {s.Name}'s hoard");
+                    if (s.Doll != 0 && s_Rng.NextDouble() < s.DollChance) Add(key, s.Doll, $"a keepsake of {s.Name}");
                     if (!s_State.Weekly.TryGetValue(key, out var w)) s_State.Weekly[key] = w = new Dictionary<string, string>();
                     if (!w.TryGetValue(s.Key, out var had) || had != week)
                     {
@@ -607,7 +614,7 @@ namespace RevivalGuard
         // ------------------------------------------------------------------ the mod channel
         internal static void Hello(Session session)
         {
-            if (!On || session == null) return;
+            if (session == null || !On && !LightbringerScene.OnMap) return;
             ModChannel.Send(session, "worldboss", Payload(Now()));
         }
 
@@ -620,7 +627,7 @@ namespace RevivalGuard
             PushAll();
         }
 
-        static void PushAll()
+        internal static void PushAll()
         {
             var payload = Payload(Now());
             foreach (var p in PlayerManager.GetAllOnline())
@@ -659,10 +666,12 @@ namespace RevivalGuard
 
         static string Payload(double now)
         {
-            var list = new List<Wire>();
+            var list = new List<object>();
             if (On)
                 lock (s_Lock)
                     foreach (var s in WorldBoss.Bosses.Values) { Describe(s, now, out var w); if (w != null) list.Add(w); }
+            var scene = LightbringerScene.Describe(now);   // the Lightbringer week's Cragstone scene, drawn like a world boss
+            if (scene != null) list.Add(scene);
             return JsonSerializer.Serialize(new { now = (long)now, bosses = list }, WIRE);
         }
 

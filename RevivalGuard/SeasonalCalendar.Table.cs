@@ -76,6 +76,24 @@ namespace RevivalGuard
             },
             new Festival
             {
+                // OURS, not a retail stopgap (owner 2026-10-28, docs/REVIVAL-PLAN-2026-10-28.md section 4): retail's own
+                // Dec 2000 "Bael'Zharon's Defeat" data (the first-act Chosen of Asheron 8764, the artifacts, the
+                // Sepulcher of the Hopeslayer), run for one week a year. LightbringerEvent gates the Chosen's and the
+                // Herald creatures' generators (datafix 2026-10-28-lightbringer.sql). Overlaps Frostfell's first
+                // days; the rows are a union, so both run.
+                Key = "lightbringer", Name = "the Lightbringer's Week",
+                StartMonth = 12, StartDay = 1, EndMonth = 12, EndDay = 7,
+                On  = new[] { "LightbringerEvent" },
+                Announce = "The Chosen of Asheron have returned to Dereth. They seek Isparians brave enough to "
+                         + "face the Hopeslayer's shadow once more.",
+                Hint = "Find a Chosen of Asheron near Cragstone, Zaikhal or Hebian-to, and hunt the Herald's beasts on the Direlands summit.",
+                Evidence = "ours: the Dec 2000 Bael'Zharon's Defeat event data (8764, 8777-8782, 8822), Dec 1 to Dec 7",
+                // Pending keeps it off the players' calendar (export_calendar.py) until the client release on or after
+                // Nov 27 (owner 2026-11-01); the server runs it once 2026-10-28-lightbringer.sql is applied.
+                Pending = true,
+            },
+            new Festival
+            {
                 Key = "frostfell", Name = "Frostfell",
                 StartMonth = 12, StartDay = 4, EndMonth = 1, EndDay = 1,
                 On  = new[] { "assaultonfrosthavenevent", "GiftGopherEvent", "hiddenpresentsevent",

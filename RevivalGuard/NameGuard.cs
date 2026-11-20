@@ -29,6 +29,8 @@ namespace RevivalGuard
     /// The protected names are Mods/RevivalGuard/protected-names.json (a JSON array of strings) on the server only, so no
     /// name is in the source; with no file, nothing is protected and a warning is logged. DiscordBridge uses <see cref="IsLookalike"/> too: only the Discord server's owner is shown in
     /// game under a protected name.
+    ///
+    /// The same hook refuses a player's new name ending " of Borg" (BorgRule.RefuseName; the shard's own accounts exempt).
     /// </summary>
     [HarmonyPatch(typeof(CharacterHandler), "CharacterCreateEx")]
     static class NameGuard
@@ -116,10 +118,13 @@ namespace RevivalGuard
                 var info = new ACE.Entity.CharacterCreateInfo();
                 info.Unpack(message.Payload);
                 stream.Position = pos;                 // ACE's own Unpack reads it again from here
-                if (!IsLookalike(info.Name)) return true;
+                // the Borg suffix is the shard's own (BorgRule): its accounts may use it, a player may not (M5 test 2026-11-19)
+                string why = BorgRule.RefuseName(info.Name, BorgRule.IsShardAccountName(session.Account), staff: false)
+                             ?? (IsLookalike(info.Name) ? "too close to a protected name" : null);
+                if (why == null) return true;
                 session.Network.EnqueueSend(new GameMessageCharacterCreateResponse(
                     CharacterGenerationVerificationResponse.NameBanned, ObjectGuid.Invalid, string.Empty));
-                Mod.Log.Info($"[RevivalGuard] NameGuard: refused '{info.Name}' for account '{session.Account}' (too close to a protected name)");
+                Mod.Log.Info($"[RevivalGuard] NameGuard: refused '{info.Name}' for account '{session.Account}' ({why})");
                 return false;
             }
             catch (Exception e)

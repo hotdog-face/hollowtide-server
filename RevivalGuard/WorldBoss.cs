@@ -75,6 +75,7 @@ namespace RevivalGuard
             public string Stir;                // the warning's first sentence
             public string Escaped;             // the broadcast when his window closes unbeaten
             public WorldBossSchedule.Tier[] Kill, Weekly;   // a roll from Kill for every hand; Weekly once a week each
+            public uint Doll; public double DollChance;     // a lore pack doll, its own roll for every hand (revival plan section 2)
             // seasonal bosses (docs/WORLD-BOSS-SYSTEM.md section 8): null Festival = all year
             public string Festival;            // SeasonalCalendar key; he rises only while IsFestivalActive(Festival)
             public string FestivalName;        // what @worldboss calls it ("Frostfell")
@@ -99,6 +100,7 @@ namespace RevivalGuard
                 Stir = "The sky darkens over the Direlands. Bael'Zharon, the Hopeslayer, stirs somewhere in the wilds.",
                 Escaped = "Bael'Zharon fades back into the Shadow, unbeaten.",
                 Kill = WorldBossSchedule.BAEL_KILL, Weekly = WorldBossSchedule.BAEL_WEEKLY,
+                Doll = 29917, DollChance = 0.10,   // Pack Bael'Zharon (owner 2026-10-28: world boss drops at 10%)
             },
             // SEASONAL BOSSES (owner-approved 2026-10-21, seasonal improvement #4): one per festival, rising
             // only while SeasonalCalendar has that festival on. World data: tools/gpubox-ace/gen_seasonal_world_bosses.py.

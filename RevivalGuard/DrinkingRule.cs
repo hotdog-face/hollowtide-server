@@ -167,6 +167,9 @@ namespace RevivalGuard
         /// <summary>One line of a list for any pick (wraps; negatives too).</summary>
         public static string Pick(string[] lines, int pick) => lines[(pick % lines.Length + lines.Length) % lines.Length];
         public const uint HANGOVER_CURE = 23924;   // Ulgrim's Hangover Cure (retail): ours, it also clears ours
+        public const uint DINER_COFFEE = 909705;   // the Pancake House's Diner Coffee (ours, owner 2026-11-17): clears it the same way
+        /// <summary>Ulgrim's cure or the diner's coffee: sobers you and lifts the hangover.</summary>
+        public static bool IsCure(uint wcid) => wcid == HANGOVER_CURE || wcid == DINER_COFFEE;
 
         /// <summary>Every drinkable alcohol on the world (ace_world, weenie type Food, surveyed 2026-11-16), by class id,
         /// with its weight in drinks. The three with their own Intoxication spell weigh what the spell says. The client's
@@ -291,6 +294,7 @@ namespace RevivalGuard
 
         public const string HANGOVER_LINE = "Your head is splitting. You have a hangover.";   // woken early: only the short one
         public const string CURE_LINE = "Ulgrim's cure works. Your head clears and the world holds still.";
+        public const string COFFEE_CURE_LINE = "The coffee is strong enough to stand a spoon in. Your head clears and the world holds still.";
 
         public static string WakeLine(int pick) => WAKE_LINES[(pick % WAKE_LINES.Length + WAKE_LINES.Length) % WAKE_LINES.Length];
 

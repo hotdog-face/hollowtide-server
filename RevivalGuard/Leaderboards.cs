@@ -165,7 +165,7 @@ namespace RevivalGuard
                     var board = R.Find(word);
                     if (board == null || !cache.Boards.TryGetValue(board.Key, out var ranked))
                     {
-                        Say(session, "Boards: level, xp, lum, kills, pk, quests, raids. /top hide leaves the boards, /top show comes back.");
+                        Say(session, "Boards: level, xp, lum, kills, pk, quests, raids, pancakes. /top hide leaves the boards, /top show comes back.");
                         return;
                     }
                     lines = R.BoardLines(board, ranked, me, note, age, cache.Days, cache.PkSince);
@@ -238,6 +238,7 @@ namespace RevivalGuard
                 var chars = new Dictionary<uint, (bool gone, double last)>();
                 var quests = new Dictionary<uint, long>();
                 var raids = new Dictionary<uint, long>();
+                var pancakes = new Dictionary<uint, long>();
                 using (var ctx = new ShardDbContext())
                 {
                     foreach (var c in ctx.Character.AsNoTracking().Select(c => new { c.Id, c.IsDeleted, c.DeleteTime, c.LastLoginTimestamp }).ToList())
@@ -251,6 +252,7 @@ namespace RevivalGuard
                         if (active.Contains(q.CharacterId) && R.IsQuestMilestone(q.QuestName, q.NumTimesCompleted))
                             quests[q.CharacterId] = (quests.TryGetValue(q.CharacterId, out var n) ? n : 0) + 1;
                         if (q.QuestName == R.RAID_FLAG) raids[q.CharacterId] = q.NumTimesCompleted;
+                        if (q.QuestName == R.PANCAKE_FLAG) pancakes[q.CharacterId] = q.NumTimesCompleted;
                     }
                 }
 
@@ -285,6 +287,7 @@ namespace RevivalGuard
                         e.Quests = quests.TryGetValue(id, out var qn) ? qn : 0;
                         // online characters: the live count (the database row lags until the next save)
                         e.Raids = ip is Player op ? op.QuestManager.GetCurrentSolves(R.RAID_FLAG) : raids.TryGetValue(id, out var rn) ? rn : 0;
+                        e.Pancakes = ip is Player op2 ? op2.QuestManager.GetCurrentSolves(R.PANCAKE_FLAG) : pancakes.TryGetValue(id, out var pn) ? pn : 0;
                         listed.Add(e);
                     }
                     catch (Exception ex) { Mod.Log.Warn($"[RevivalGuard] Leaderboards: skipped 0x{ip?.Guid.Full:X8}: {ex.Message}"); }

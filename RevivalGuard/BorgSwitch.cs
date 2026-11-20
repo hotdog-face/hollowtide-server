@@ -30,13 +30,14 @@ namespace RevivalGuard
 
         public static bool On => !System.IO.File.Exists(OffFile);
 
-        /// <summary>ONLY "... of Borg" COUNTS (Hollowtide session 2026-11-08): the Hollow Company's mercs (Brannoc and Sefa
-        /// the Mercenary) are on the same allowlisted accounts, and stay untouched by the Borg rules (/pop counts them out, @borg off leaves them)
-        /// until they are renamed "of Borg".</summary>
-        public static bool IsBorgName(string name) =>
-            name != null && name.TrimEnd().EndsWith(" of Borg", StringComparison.OrdinalIgnoreCase);
+        /// <summary>THE ONE BORG CHECK (BorgRule): an allowlisted shard account AND a name ending " of Borg". The Hollow
+        /// Company's mercs share those accounts and stay out of the Borg rules (not "of Borg"); a player's "X of Borg" is
+        /// never one (M5 test 2026-11-19).</summary>
+        public static bool IsBorg(Player p) => p != null && BorgRule.IsBorg(Mercenaries.IsMerc(p), p.Name);
 
-        public static bool IsBorg(Player p) => p != null && Mercenaries.IsMerc(p) && IsBorgName(p.Name);
+        /// <summary>By account name, for a character that may be offline.</summary>
+        public static bool IsBorgAccount(string accountName, string characterName) =>
+            BorgRule.IsBorg(Mercenaries.IsMercAccount(accountName), characterName);
 
         static void Set(bool on)
         {
@@ -110,7 +111,7 @@ namespace RevivalGuard
                 var acct = ACE.Database.DatabaseManager.Authentication.GetAccountByName(account);
                 if (acct == null) return false;
                 var chars = ACE.Database.DatabaseManager.Shard.BaseDatabase.GetCharacters(acct.AccountId, false);
-                if (chars == null || !chars.Any(c => IsBorgName(c.Name))) return false;
+                if (chars == null || !chars.Any(c => BorgRule.IsBorg(true, c.Name))) return false;   // account checked above
             }
             catch (Exception e) { Mod.Log.Warn("[RevivalGuard] Borg login check: " + e.Message); return false; }
             Mod.Log.Info($"[RevivalGuard] Borg: login of {account} refused (the Borg switch is off)");

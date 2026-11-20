@@ -45,6 +45,8 @@ namespace RevivalGuard
             ExpansionMotions.Register();
             NetherRift.Register();
             ShopsFor.Register();   // the supply run's "which shop sells it" (on, our client only)
+            CommandManager.TryAddCommand(AskRecalls, "recalls", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
+                "Our client asks for its lifestone and portal ties again (answered on the mod channel).", "");
         }
 
         static void Hello(Session session, params string[] parameters)
@@ -81,15 +83,60 @@ namespace RevivalGuard
         /// <summary>"recalls": the character's lifestone as map coordinates (F7 261023-0031: a character that never
         /// used /ls was routed 3 km on foot, its lifestone 10 m from the portal). ACE sends the client no recall
         /// destinations; a new character's Sanctuary is where it was made. Outdoor lifestones only (the route data's
-        /// surface places).</summary>
-        static void SendRecalls(Session session)
+        /// surface places). Also both portal ties, t1/t2 (F7 261120-0003: the client's guessed secondary tie went stale;
+        /// ACE never sends LinkedPortalOne/TwoDID): null for none, else {"w":portal wcid,"d":[ns,ew,"lb hex if indoors"]},
+        /// the portal's Destination as a tie recall lands. "@recalls" asks again (the client, after a new tie).</summary>
+        internal static void SendRecalls(Session session)
         {
-            var sp = session?.Player?.Sanctuary;
-            if (sp == null || (sp.Cell & 0xFFFF) >= 0x100) return;
-            uint lb = sp.LandblockId.Raw;
-            float ew = (((lb >> 24) & 0xFF) * 192f + sp.PositionX) / 240f - 101.95f;
-            float ns = (((lb >> 16) & 0xFF) * 192f + sp.PositionY) / 240f - 101.95f;
-            Send(session, "recalls", string.Format(System.Globalization.CultureInfo.InvariantCulture, "{{\"ls\":[{0:0.0},{1:0.0}]}}", ns, ew));
+            var p = session?.Player;
+            if (p == null) return;
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var sb = new StringBuilder("{");
+            var sp = p.Sanctuary;
+            if (sp != null && (sp.Cell & 0xFFFF) < 0x100)
+            {
+                MapXY(sp.LandblockId.Raw, sp.PositionX, sp.PositionY, out float ns, out float ew);
+                sb.Append(string.Format(inv, "\"ls\":[{0:0.0},{1:0.0}],", ns, ew));
+            }
+            sb.Append("\"t1\":").Append(Tie(p.LinkedPortalOneDID)).Append(",\"t2\":").Append(Tie(p.LinkedPortalTwoDID)).Append('}');
+            Send(session, "recalls", sb.ToString());
+        }
+
+        static void MapXY(uint lb, float x, float y, out float ns, out float ew)
+        {
+            ew = (((lb >> 24) & 0xFF) * 192f + x) / 240f - 101.95f;
+            ns = (((lb >> 16) & 0xFF) * 192f + y) / 240f - 101.95f;
+        }
+
+        /// <summary>One tie as "recalls" says it; "null" when none or its portal is gone.</summary>
+        static string Tie(uint? wcid)
+        {
+            try
+            {
+                if (wcid == null || wcid.Value == 0) return "null";
+                var w = ACE.Database.DatabaseManager.World.GetCachedWeenie(wcid.Value);
+                var d = w == null ? null : ACE.Entity.Models.WeenieExtensions.GetPosition(w, ACE.Entity.Enum.Properties.PositionType.Destination);
+                if (d == null) return "{\"w\":" + wcid.Value + "}";
+                uint cell = d.Cell;
+                MapXY(cell, d.PositionX, d.PositionY, out float ns, out float ew);
+                string hub = (cell & 0xFFFF) >= 0x100 ? (cell >> 16).ToString("x4") : "";
+                return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{{\"w\":{0},\"d\":[{1:0.0},{2:0.0},\"{3}\"]}}", wcid.Value, ns, ew, hub);
+            }
+            catch (System.Exception e) { Mod.Log.Warn($"[RevivalGuard] recalls tie {wcid}: {e.Message}"); return "null"; }
+        }
+
+        static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, System.DateTime> s_RecallsAsked = new();
+
+        /// <summary>"@recalls": our client asks for "recalls" again (a tie just changed). Our client only; one per 2 s.</summary>
+        static void AskRecalls(Session session, params string[] parameters)
+        {
+            var p = session?.Player;
+            if (p == null || !Capable(session)) return;
+            var now = System.DateTime.UtcNow;
+            if (s_RecallsAsked.TryGetValue(p.Guid.Full, out var last) && now - last < System.TimeSpan.FromSeconds(2)) return;
+            s_RecallsAsked[p.Guid.Full] = now;
+            if (s_RecallsAsked.Count > 2000) s_RecallsAsked.Clear();
+            SendRecalls(session);
         }
 
         /// <summary>The client version this connection announced ("" for a client older than 0.1.68, or one that has not

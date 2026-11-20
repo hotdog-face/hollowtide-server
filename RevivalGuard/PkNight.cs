@@ -31,6 +31,7 @@ namespace RevivalGuard
     ///                                     counts it on the leaderboard; without it the round is a rehearsal)
     ///   @pknight stop                     staff: end the running round now
     ///   @pknight say                      staff: every line players are told, to you only
+    ///   @pknight gate                     staff: the event portals now (PkNightGate.cs)
     ///   @pknight reset                    staff: forget every round (test shards)
     ///
     /// The board: PkBoard sends "night" JSON with the rest of the PK board, which our client draws on the Social
@@ -80,7 +81,7 @@ namespace RevivalGuard
         {
             Load();
             CommandManager.TryAddCommand(Command, "pknight", AccessLevel.Player, CommandHandlerFlag.None,
-                "PK Night: hold the spot. What is next, or the standings now.", "[start [minutes] [spot] [record] | stop | say | reset]");
+                "PK Night: hold the spot. What is next, or the standings now.", "[start [minutes] [spot] [record] | stop | say | gate | reset]");
             Mod.Log.Info($"[RevivalGuard] PK Night: {(On ? "ON" : "off")} ({P_ON}); {SPOTS.Length} spots, first run {WhenWords(StartUtcOf(FIRST_SUNDAY))}"
                 + (s_State.Live != null ? $"; a round was running at shutdown ({s_State.Live.Key}), resumed" : ""));
         }
@@ -95,7 +96,7 @@ namespace RevivalGuard
                 var now = ACE.Common.Time.GetUnixTime();
                 if (now < s_Next) return;
                 s_Next = now + TICK;
-                try { if (On) Step(now); }
+                try { if (On) Step(now); else if (s_GateKey != null) CloseGate("PK Night switched off"); }
                 catch (Exception e) { TickGuard.Report("PkNight", e); }
             }
         }
@@ -105,6 +106,8 @@ namespace RevivalGuard
             var utc = DateTimeOffset.FromUnixTimeSeconds((long)now).UtcDateTime;
             Live live;
             lock (s_Lock) live = s_State.Live;
+            try { GateStep(now, utc, live); }
+            catch (Exception e) { TickGuard.Report("PkNight.Gate", e); }
             if (live == null)
             {
                 var next = Next(utc);
@@ -169,8 +172,20 @@ namespace RevivalGuard
             if (s_Centre != null && s_CentreKey == spot.Key) return s_Centre;
             try
             {
-                var pos = new ACE.Entity.Position(new Vector2((float)spot.Ew, (float)spot.Ns));
-                pos.AdjustMapCoords();
+                ACE.Entity.Position pos;
+                if (spot.HasGate)
+                {
+                    // the exact map point (CellOfMap), the one the corpse sites, the landing and the quiet ground use; ACE's
+                    // map constructor lands 12 m south-west of it (box 2026-11-20: 84.72N 58.42E gave C8E9 88.8, 64.8)
+                    var (cell, x, y) = CellOfMap(spot.Ns, spot.Ew);
+                    pos = new ACE.Entity.Position(cell, x, y, 0f, 0f, 0f, 0f, 1f);
+                    pos.PositionZ = pos.GetTerrainZ();
+                }
+                else
+                {
+                    pos = new ACE.Entity.Position(new Vector2((float)spot.Ew, (float)spot.Ns));
+                    pos.AdjustMapCoords();
+                }
                 s_Centre = pos; s_CentreKey = spot.Key;
                 Mod.Log.Info($"[RevivalGuard] PkNight: {spot.Name} centre 0x{pos.Cell:X8} ({pos.PositionX:0.0}, {pos.PositionY:0.0}, {pos.PositionZ:0.0})");
                 return pos;
@@ -350,6 +365,17 @@ namespace RevivalGuard
         /// <summary>The Town Crier's line about last week's night (null until a round has been recorded).</summary>
         internal static string CrierLine() { lock (s_Lock) return On ? s_State.CrierLine : null; }
 
+        /// <summary>The Town Crier's answer to "when is PK Night": the night running now, or the next one with its way.</summary>
+        internal static string CrierNightLine()
+        {
+            var line = FestivalLine();
+            if (line == null) return null;
+            var now = ACE.Common.Time.GetUnixTime();
+            Live live; lock (s_Lock) live = s_State.Live;
+            var spot = live != null ? SpotNamed(live.SpotKey) : Next(DateTimeOffset.FromUnixTimeSeconds((long)now).UtcDateTime)?.Spot;
+            return "Hear ye! " + line + (spot != null && !string.IsNullOrEmpty(spot.Way) ? " " + spot.Way : "");
+        }
+
         /// <summary>One line for @festival's "what is next" (SeasonalCalendar).</summary>
         internal static string FestivalLine()
         {
@@ -379,9 +405,10 @@ namespace RevivalGuard
             if (!On) { Out(session, "PK Night is not held on this world."); return; }
             var now = ACE.Common.Time.GetUnixTime();
             var utc = DateTimeOffset.FromUnixTimeSeconds((long)now).UtcDateTime;
-            if (verb == "start" || verb == "stop" || verb == "say" || verb == "reset")
+            if (verb == "start" || verb == "stop" || verb == "say" || verb == "reset" || verb == "gate")
             {
                 if (!Staff(session)) { Out(session, "Only staff can do that."); return; }
+                if (verb == "gate") { Out(session, GateStatus()); return; }
                 if (verb == "say") { foreach (var l in AllLines()) Out(session, "  " + l); return; }
                 if (verb == "reset")
                 {
@@ -409,7 +436,8 @@ namespace RevivalGuard
                 spot ??= (Next(utc) ?? new Scheduled { Spot = SPOTS[0] }).Spot;
                 var forced = new Live { Key = $"forced-{(long)now}", SpotKey = spot.Key, StartedAt = now, EndsAt = now + minutes * 60, Forced = true, Record = record };
                 Open(forced, spot, now);
-                Out(session, $"PK Night: a {minutes} minute round at {spot.Name} ({spot.Where}){(record ? ", recorded on the leaderboard" : ", a rehearsal, not recorded")}. Centre: {Mansions.Where(s_Centre)}.");
+                Out(session, $"PK Night: a {minutes} minute round at {spot.Name} ({spot.Where}){(record ? ", recorded on the leaderboard" : ", a rehearsal, not recorded")}. Centre: {Mansions.Where(s_Centre)}."
+                    + (spot.HasGate ? " Its portals open on the next tick (@pknight gate)." : ""));
                 return;
             }
             // any player: the text form of the board (a retail client, a bot, the console)

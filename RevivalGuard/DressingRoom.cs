@@ -354,7 +354,7 @@ namespace RevivalGuard
         }
 
         /// <summary>The setup ACE looks up in a ClothingTable for this body (Creature.CalculateObjDesc's switch).</summary>
-        static uint TableSetup(uint s) => (SetupConst)s switch
+        internal static uint TableSetup(uint s) => (SetupConst)s switch
         {
             SetupConst.UmbraenMaleCrownGen or SetupConst.UmbraenMaleNoCrown or SetupConst.UmbraenMaleVoid => (uint)SetupConst.UmbraenMaleCrown,
             SetupConst.UmbraenFemaleNoCrown or SetupConst.UmbraenFemaleVoid => (uint)SetupConst.UmbraenFemaleCrown,

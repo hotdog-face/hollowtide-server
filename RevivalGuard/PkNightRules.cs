@@ -110,16 +110,27 @@ namespace RevivalGuard
             /// Arwic has no north gate). Null: no directions line.</summary>
             public string Way;
             public double Ns, Ew;
+            /// <summary>An event portal for the night (owner 2026-11-20, the Dark Isle: retail reached it only by a flagging
+            /// quest): where it lands players (map coordinates; 0 = no event portal), where the way-home portal stands at the
+            /// spot, and the metres around the centre and the landing in which creature generators pause for the window.</summary>
+            public double LandNs, LandEw, HomeNs, HomeEw, ClearMetres;
+            public bool HasGate => LandNs != 0 || LandEw != 0;
             public override string ToString() => $"{Name} ({Where})";
         }
 
         /// <summary>The rotation, in order from the first run (week 0 = the first). Every one is outdoors and far
-        /// from Holtburg (42.1N 33.6E), the arrival town (owner: never near the Holtburg arrival area).</summary>
+        /// from Holtburg (42.1N 33.6E), the arrival town (owner: never near the Holtburg arrival area). Owner 2026-11-20
+        /// ("Yes, this Sunday"): the Dark Isle takes week 0 and the Mite Maze moves to the end, so weeks 1 to 6 keep their
+        /// dates and the Mite Maze still falls on week 7 (Jan 10); only the second time round (week 8 on) shifts.</summary>
         public static readonly Spot[] SPOTS =
         {
-            new Spot { Key = "mitemaze", Name = "the Mite Maze", Where = "41.1N 57.0E", Ns = 41.08, Ew = 57.03,
-                       Near = "the snowy valley north of Arwic, by the Mite Maze portal", Levels = "any level",
-                       Way = "From Arwic, leave by the west gate and head north." },
+            // the owner's 2017 Darktide footage "PVP at 150 Island": the open sand of the south beach by the lifestone
+            // (84.6N 58.6E), landblock C8E9 (atlas: walkable sand at sea level, shallows to the north). Retail reached it
+            // only by the Dark Isle Flagging quest or the far east of Vissidal, so PK Night opens a portal from Holtburg.
+            new Spot { Key = "darkisle", Name = "the Dark Isle", Where = "84.7N 58.4E", Ns = 84.72, Ew = 58.42,
+                       Near = "the sand of the Dark Isle's south beach by its lifestone, north of Vissidal", Levels = "any level",
+                       Way = "The way in is a portal in Holtburg's lower town, open from an hour before the start, and a portal home waits on the beach.",
+                       LandNs = 84.5667, LandEw = 58.25, HomeNs = 84.5833, HomeEw = 58.1667, ClearMetres = 300 },
             new Spot { Key = "zombiecastle", Name = "Zombie Castle", Where = "45.2S 39.1E", Ns = -45.2, Ew = 39.1,
                        Near = "the castle ruin in southern Osteth, by the Zombie Castle estates", Levels = "20 and up" },
             new Spot { Key = "colosseum", Name = "the Colosseum", Where = "11.2S 37.5E", Ns = -11.24, Ew = 37.54,
@@ -132,7 +143,64 @@ namespace RevivalGuard
                        Near = "the citadel valley in the north-east, a portal lands at its foot", Levels = "40 and up" },
             new Spot { Key = "tumerokfort", Name = "the Tumerok Fort", Where = "50.7S 81.8W", Ns = -50.7, Ew = -81.8,
                        Near = "the fort in the south-western Direlands", Levels = "50 and up" },
+            new Spot { Key = "mitemaze", Name = "the Mite Maze", Where = "41.1N 57.0E", Ns = 41.08, Ew = 57.03,
+                       Near = "the snowy valley north of Arwic, by the Mite Maze portal", Levels = "any level",
+                       Way = "From Arwic, leave by the west gate and head north." },
         };
+
+        // ---------------------------------------------------------------- the event portals (a spot with HasGate)
+
+        /// <summary>The Holtburg end: the portal stands on the open grass of the lower town west of the well (A9B4 76, 168),
+        /// about 155 m from the lifestone square where newcomers and the dead arrive (owner: never near the Holtburg arrival
+        /// area); not by the cow pen east of the sign (box test 2026-11-20: a portal there stood inside the fence), nor on the
+        /// bank down to the shore at 80, 176. The way-home portal lands players 13 m south-east of it, on the road.</summary>
+        public const double HOLTBURG_GATE_NS = 42.7, HOLTBURG_GATE_EW = 33.5167, HOLTBURG_LAND_NS = 42.6708, HOLTBURG_LAND_EW = 33.5583;
+        public const int GATE_LEAD_MINUTES = 60;      // the portals open an hour before the start and close at the end
+
+        /// <summary>The spot whose portals should stand now (and whose creatures are paused), or null. A running round:
+        /// until its end (a staff round opens them at its start). No round running: the next scheduled one from an hour
+        /// before its start, unless that hour's round was already played (ended early by staff).</summary>
+        public static Spot GateSpot(Live live, Scheduled next, bool nextPlayed, DateTime utcNow)
+        {
+            if (live != null)
+            {
+                var s = SpotNamed(live.SpotKey);
+                double now = (utcNow - DateTime.UnixEpoch).TotalSeconds;
+                return s != null && s.HasGate && now < live.EndsAt ? s : null;
+            }
+            if (next == null || !next.Spot.HasGate || nextPlayed) return null;
+            return utcNow >= next.StartUtc.AddMinutes(-GATE_LEAD_MINUTES) && utcNow < next.EndUtc ? next.Spot : null;
+        }
+
+        /// <summary>Map coordinates to an outdoor cell and the landblock-local metres (ACE: 240 m a map unit, 192 m a
+        /// landblock, 24 m a cell, -102 at the origin).</summary>
+        public static (uint cell, float x, float y) CellOfMap(double ns, double ew)
+        {
+            double gx = (ew + 102) * 240, gy = (ns + 102) * 240;
+            int bx = (int)Math.Floor(gx / 192), by = (int)Math.Floor(gy / 192);
+            double x = gx - bx * 192, y = gy - by * 192;
+            uint cell = ((uint)bx << 24) | ((uint)by << 16) | (uint)((int)(x / 24) * 8 + (int)(y / 24) + 1);
+            return (cell, (float)x, (float)y);
+        }
+
+        /// <summary>Global metres (ACE ToGlobal) of a map point.</summary>
+        public static (double x, double y) GlobalOfMap(double ns, double ew) => ((ew + 102) * 240, (ns + 102) * 240);
+
+        /// <summary>A global point inside the spot's paused zone: within ClearMetres of the centre or of the landing.</summary>
+        public static bool InClearZone(Spot s, double gx, double gy, double metres)
+        {
+            if (s == null || metres <= 0) return false;
+            var c = GlobalOfMap(s.Ns, s.Ew); var l = GlobalOfMap(s.LandNs, s.LandEw);
+            return (gx - c.x) * (gx - c.x) + (gy - c.y) * (gy - c.y) <= metres * metres
+                || (gx - l.x) * (gx - l.x) + (gy - l.y) * (gy - l.y) <= metres * metres;
+        }
+
+        public const string GATE_NAME = "Dark Isle Portal", HOME_NAME = "Holtburg Portal";
+        public static string GateName(Spot s) => s.Key == "darkisle" ? GATE_NAME : $"{Cap(s.Name.Replace("the ", ""))} Portal";
+        static string Cap(string t) => string.IsNullOrEmpty(t) ? t : char.ToUpperInvariant(t[0]) + t.Substring(1);
+
+        public static string GateOpenLine(Spot spot) =>
+            $"A portal to {spot.Name} has opened in Holtburg's lower town for PK Night. It closes when the night is over.";
 
         public static Spot SpotNamed(string keyOrNumber)
         {
@@ -252,7 +320,7 @@ namespace RevivalGuard
         }
 
         public static string DayBeforeLine(Spot spot) =>
-            $"PK Night is tomorrow, {WHEN_WORDS}: hold {spot.Name} ({spot.Where}) for the hour. The allegiance that holds it longest takes the night.";
+            $"PK Night is tomorrow, {WHEN_WORDS}: hold {spot.Name} ({spot.Where}) for the hour. The allegiance that holds it longest takes the night." + GateTail(spot);
 
         public static string HourBeforeLine(Spot spot) =>
             $"PK Night begins in one hour at {spot.Name} ({spot.Where}). Gather your allegiance." + WayTail(spot);
@@ -264,6 +332,8 @@ namespace RevivalGuard
             $"PK Night has begun! Hold {spot.Name} ({spot.Where}). The allegiance that holds it longest in the next {(minutes == 60 ? "hour" : minutes + " minutes")} takes the night." + WayTail(spot);
 
         static string WayTail(Spot spot) => string.IsNullOrEmpty(spot.Way) ? "" : " " + spot.Way;
+        /// <summary>The way, in the day-before and login lines too, only for a spot reached by the event portal.</summary>
+        static string GateTail(Spot spot) => spot.HasGate ? WayTail(spot) : "";
 
         public static string StandingsLine(Live live, Spot spot, double now)
         {
@@ -297,7 +367,7 @@ namespace RevivalGuard
             $"PK Night is on now: hold {spot.Name} ({spot.Where}). {Clock(secondsLeft)} left.";
 
         public static string LoginSoonLine(Scheduled s) =>
-            $"PK Night is {WhenWords(s.StartUtc)}: hold {s.Spot.Name} ({s.Spot.Where}) for the hour. The allegiance that holds it longest takes the night.";
+            $"PK Night is {WhenWords(s.StartUtc)}: hold {s.Spot.Name} ({s.Spot.Where}) for the hour. The allegiance that holds it longest takes the night." + GateTail(s.Spot);
 
         public static string DiscordStartLine(Spot spot) =>
             $"**PK Night** has begun on Hollowtide: hold {spot.Name} ({spot.Where}) for the hour. The allegiance that holds it longest takes the night.";
@@ -333,6 +403,8 @@ namespace RevivalGuard
             yield return LoginSoonLine(next);
             yield return DiscordStartLine(spot);
             yield return DiscordEndLine(live, spot);
+            yield return GateOpenLine(spot);
+            yield return LoginSoonLine(new Scheduled { Week = 0, StartUtc = StartUtcOf(FIRST_SUNDAY), Spot = spot });
         }
     }
 }

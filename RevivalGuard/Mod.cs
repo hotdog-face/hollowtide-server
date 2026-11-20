@@ -84,6 +84,8 @@ namespace RevivalGuard
             Try(nameof(Leaderboards), Leaderboards.Register);      // /top: level, XP, luminance, kills, PK, quests (rg_top; Discord post rg_top_discord, on)
             Try(nameof(FeatureBoard), FeatureBoard.Register);
             Try(nameof(ItemLock), ItemLock.Register);
+            Try(nameof(TinkerLock), TinkerLock.Register);       // a recipe that locks the item to its applier asks first (owner 2026-11-20)
+            Try(nameof(UnlockWield), UnlockWield.Register);     // @unlockwield: staff undo a binding recipe's wield lock (owner 2026-11-20)
             Try(nameof(AutoStack), AutoStack.Register);
             Try(nameof(TreeStatsUpload), TreeStatsUpload.Register);   // characters on treestats.net (off without treestats.json)
             Try(nameof(RagdollCorpse), RagdollCorpse.Register);

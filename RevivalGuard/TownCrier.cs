@@ -167,6 +167,10 @@ namespace RevivalGuard
                 if (s_LastAnswer.TryGetValue(p.Guid.Full, out var last) && now - last < ANSWER_GAP_S) return;
                 s_LastAnswer[p.Guid.Full] = now;
             }
+            // PK Night (owner 2026-11-20): the crier names this week's spot and the way, from PkNight's own words
+            var night = System.Text.RegularExpressions.Regex.IsMatch(q, @"\b(pk ?night|pvp night|pk event|hold the spot|dark isle)\b",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? PkNight.CrierNightLine() : null;
+            if (night != null) { Tell(p, npc, night); Log(p.Name, q, new List<string> { night }); return; }
             var brain = Brain();
             if (brain == null) { Tell(p, npc, "Hear ye! Give me a moment to gather my wits, then ask again."); return; }
             var lines = brain.Answer(q, AskerOf(p, npc));

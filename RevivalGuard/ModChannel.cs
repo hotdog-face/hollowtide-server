@@ -78,6 +78,7 @@ namespace RevivalGuard
             Drinking.Hello(session);                // a character that relogs while drunk keeps its sway
             SendRecalls(session);                   // the lifestone, for the tracker's recall routes
             WhatsNew.Hello(session);                // last logout, for the client's what's-new card
+            AwayMessage.Push(session);              // the away message's state, for both Assistants' boxes (Feature Requests #33)
         }
 
         /// <summary>"recalls": the character's lifestone as map coordinates (F7 261023-0031: a character that never

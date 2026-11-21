@@ -13,6 +13,7 @@
     "warningSeconds": 60,
     "idleTimeoutMinutes": 10,
     "maxMinutes": 25,
+    "fightGraceSeconds": 120,
     "emptyTownMinutes": 3,
     "heldShare": 0.75,
     "stuckOutsideSeconds": 60,
@@ -72,12 +73,172 @@
     "titleAfter": 25,
     "stripItems": [30486]
   },
+  "themes": [
+    { "festival": "fowlplay", "group": "chickens", "weight": 2, "share": 0.4,
+      "tiers": [
+        { "tier": 1, "wave": [35499] },
+        { "tier": 2, "wave": [911200], "adds": [35499], "group": "turkeys" }
+      ] },
+    { "festival": "festivalseason", "group": "the walking dead", "share": 0.4,
+      "tiers": [
+        { "tier": 1, "wave": [16] },
+        { "tier": 2, "wave": [950, 32203, 8672], "adds": [16, 950] },
+        { "tier": 3, "wave": [34102, 39511, 4217], "adds": [8672, 8673] },
+        { "tier": 4, "wave": [73181, 73180, 73179], "adds": [4217, 24320] }
+      ] },
+    { "festival": "frostfell", "group": "snowmen", "share": 0.4,
+      "tiers": [
+        { "tier": 1, "wave": [5766, 70000], "adds": [70000] },
+        { "tier": 2, "wave": [28665, 28658], "adds": [70000] },
+        { "tier": 3, "wave": [14518, 14517, 14875], "adds": [28665, 28658] },
+        { "tier": 4, "wave": [32483, 28838], "adds": [28837] }
+      ] },
+    { "festival": "spring", "group": "spring's creatures", "share": 0.35,
+      "tiers": [
+        { "tier": 1, "wave": [26684, 26687, 26683, 26673] },
+        { "tier": 2, "wave": [26678, 26690, 26692, 26677], "adds": [26687, 26683] },
+        { "tier": 3, "wave": [32930] },
+        { "tier": 4, "wave": [32931, 32929], "adds": [32930] }
+      ] }
+ ,
+    { "festival": "meetinghalls", "group": "Viamontian soldiers", "share": 0.4,
+      "tiers": [
+        {"tier": 1, "wave": [29418, 29419, 29420, 29421]},
+        {"tier": 2, "wave": [29363, 29362], "adds": [29418, 29419, 29420]},
+        {"tier": 3, "wave": [28651, 28657, 29300, 32768], "adds": [29363, 29362]},
+        {"tier": 4, "wave": [28653, 28654, 29301, 28652], "adds": [28651, 28657, 29300]}
+      ] },
+    { "festival": "carlo", "group": "Viamontian soldiers", "share": 0.4,
+      "tiers": [
+        {"tier": 1, "wave": [29418, 29419, 29420, 29421]},
+        {"tier": 2, "wave": [29363, 29362], "adds": [29418, 29419, 29420]},
+        {"tier": 3, "wave": [28651, 28657, 29300, 32768], "adds": [29363, 29362]},
+        {"tier": 4, "wave": [28653, 28654, 29301, 28652], "adds": [28651, 28657, 29300]}
+      ] },
+    { "festival": "burunraids", "group": "Burun", "share": 0.4,
+      "tiers": [
+        {"tier": 2, "wave": [26018, 26012]},
+        {"tier": 3, "wave": [26013, 26016, 26015, 26019], "adds": [26018, 26012]},
+        {"tier": 4, "wave": [26014, 27982, 27984, 26017], "adds": [26013, 26016, 26015]}
+      ] },
+    { "festival": "virindiayan", "group": "Virindi", "share": 0.4,
+      "tiers": [
+        {"tier": 2, "wave": [238, 23, 237, 5497]},
+        {"tier": 3, "wave": [23490, 7340, 9264, 22914], "adds": [238, 23, 237]},
+        {"tier": 4, "wave": [23569, 88188], "adds": [23490, 7340, 9264]}
+      ] },
+    { "festival": "martineattacks", "group": "renegade Virindi", "share": 0.4,
+      "tiers": [
+        {"tier": 2, "wave": [238, 23, 237]},
+        {"tier": 3, "wave": [11622, 23490, 7340, 9264], "adds": [238, 23, 237]},
+        {"tier": 4, "wave": [88188, 23569], "adds": [11622, 23490, 7340]}
+      ] },
+    { "festival": "heroraids", "group": "K'nath and Apostates", "share": 0.4,
+      "tiers": [
+        {"tier": 1, "wave": [1536, 2569, 2570]},
+        {"tier": 2, "wave": [2571, 2572, 2573], "adds": [1536, 2569, 2570]},
+        {"tier": 3, "wave": [29312, 29314, 29315, 29308], "adds": [2571, 2572, 2573]},
+        {"tier": 4, "wave": [43083, 43222, 43223], "adds": [29312, 29314, 29315]}
+      ] },
+    { "festival": "viridianbaishi", "group": "gromnies", "share": 0.4,
+      "tiers": [
+        {"tier": 1, "wave": [17, 203, 1611]},
+        {"tier": 2, "wave": [1612, 1614, 1616, 1615], "adds": [17, 203, 1611]},
+        {"tier": 3, "wave": [11527, 11526, 25596, 25599], "adds": [1612, 1614, 1616]},
+        {"tier": 4, "wave": [27710, 27711], "adds": [11527, 11526, 25596]}
+      ] },
+    { "festival": "mhoire", "group": "the restless dead", "share": 0.4,
+      "tiers": [
+        {"tier": 2, "wave": [1762, 8673]},
+        {"tier": 3, "wave": [7334, 7178, 7121], "adds": [1762, 8673]},
+        {"tier": 4, "wave": [24315, 25804, 25805], "adds": [7334, 7178, 7121]}
+      ] },
+    { "festival": "burnja", "group": "Burnja's drudges", "share": 0.4,
+      "tiers": [
+        {"tier": 1, "wave": [192, 7, 193, 940]},
+        {"tier": 2, "wave": [1608, 1609, 1632], "adds": [192, 7, 193]},
+        {"tier": 3, "wave": [1610, 7090, 7089, 24279], "adds": [1608, 1609, 1632]},
+        {"tier": 4, "wave": [7091, 10776, 24281, 23480], "adds": [1610, 7090, 7089]}
+      ] },
+    { "festival": "burritual", "group": "Falatacot", "share": 0.4,
+      "tiers": [
+        {"tier": 4, "wave": [25346, 25347, 25348, 25345]}
+      ] },
+    { "festival": "tthuunritual", "group": "Falatacot", "share": 0.4,
+      "tiers": [
+        {"tier": 4, "wave": [25346, 25347, 25348, 25345]}
+      ] },
+    { "festival": "prodigal", "group": "Aerbax's creatures", "share": 0.4,
+      "tiers": [
+        {"tier": 4, "wave": [27286, 35983, 35559, 35987]}
+      ] },
+    { "festival": "gauntlet", "group": "shadows", "share": 0.4,
+      "tiers": [
+        {"tier": 1, "wave": [6534, 6535, 1756]},
+        {"tier": 2, "wave": [1756, 1758, 28556, 1989], "adds": [6534, 6535, 1756]},
+        {"tier": 3, "wave": [1757, 4253, 4254, 22910], "adds": [1756, 1758, 28556]},
+        {"tier": 4, "wave": [23089, 23090, 23562], "adds": [1757, 4253, 4254]}
+      ] },
+    { "festival": "dranith", "group": "Martine's creations", "share": 0.4,
+      "tiers": [
+        {"tier": 2, "wave": [14426, 15299, 15300]},
+        {"tier": 3, "wave": [8269, 8270, 10787, 28039], "adds": [14426, 15299, 15300]},
+        {"tier": 4, "wave": [23555, 11542, 36597], "adds": [8269, 8270, 10787]}
+      ] },
+    { "festival": "greatwork", "group": "the Gelidite dead", "share": 0.4,
+      "tiers": [
+        {"tier": 3, "wave": [4986, 4984]}
+      ] },
+    { "festival": "tthuun", "group": "Moarsmen and Sclavus", "share": 0.4,
+      "tiers": [
+        {"tier": 1, "wave": [27860, 2583]},
+        {"tier": 2, "wave": [27859, 2584, 2585, 27854], "adds": [27860, 2583]},
+        {"tier": 3, "wave": [27858, 2586, 27853, 7110], "adds": [27859, 2584, 2585]},
+        {"tier": 4, "wave": [39145, 31912], "adds": [27858, 2586, 27853]}
+      ] },
+    { "festival": "shardherald", "group": "Anadil's dead", "share": 0.4,
+      "tiers": [
+        {"tier": 1, "wave": [1756]},
+        {"tier": 2, "wave": [1756, 1758], "adds": [1756]},
+        {"tier": 3, "wave": [619, 1757, 4217, 24320], "adds": [1756, 1758]},
+        {"tier": 4, "wave": [25809], "adds": [619, 1757, 4217]}
+      ] },
+    { "festival": "lightbringer", "group": "the Herald's beasts", "share": 0.4,
+      "tiers": [
+        {"tier": 3, "wave": [7184, 7340]},
+        {"tier": 4, "wave": [7983, 7982], "adds": [7184, 7340]}
+      ] }
+  ],
   "lines": {
     "warn.drudge.south": ["Drudges on the south road, up from the Hideout! To arms!", "Drudges coming up the south road! Clear the square!"],
     "warn.drudge.west": ["Drudges out of the western woods! To arms, Holtburg!", "Drudges in the west fields! Look sharp!"],
     "warn.mosswart.north": ["Mosswarts up from the lake shore! Guard the lower lanes!", "Mosswarts on the north bank! To arms!"],
     "warn.bandit.east": ["Bandits on the east road! Bar your doors and take up your swords!", "Riders on the east road, and not friendly ones! To arms!"],
     "area.warn": ["Raid on Holtburg! {Group} are coming from {side}. They reach the town in about a minute."],
+    "warn.theme": ["{Group} on {side}! To arms, Holtburg!", "{Group} coming up {side}! Clear the square!"],
+    "area.theme": ["This is no ordinary raid. {Theme} have come for Holtburg."],
+    "theme.fowlplay": ["Farmer Ar'Oyd's feast has stirred up every bird for miles, and they are in a fury.", "Feathers everywhere! The birds of the county have had enough of the harvest table."],
+    "theme.festivalseason": ["The harvest moon has stirred the graves.", "Something has woken the dead, and they want the living."],
+    "theme.frostfell": ["The cold has come down on Holtburg, and it has brought its own.", "Snowmen? Penguins? The winter has sent its own against the town!"],
+    "theme.spring": ["The creatures of the fields are frightened and snapping. Mind your step.", "Spring has the wild things running wild."],
+    "theme.meetinghalls": ["The Viamontian strike forces have come out of the Meeting Halls."],
+    "theme.carlo": ["Whatever Carlo fled is following him."],
+    "theme.burunraids": ["The Burun have come up out of the swamps."],
+    "theme.virindiayan": ["Virindi drift in, watching. They are not here to talk."],
+    "theme.martineattacks": ["Renegade Virindi hunt the town. Martine's hand is in this."],
+    "theme.heroraids": ["There will be Hero Tokens in this fight."],
+    "theme.viridianbaishi": ["They swarm out of the thorns of the Viridian Rise!"],
+    "theme.mhoire": ["The dead of House Mhoire walk far from their graves."],
+    "theme.burnja": ["Captain Burnja's drudges, torches lit!"],
+    "theme.burritual": ["The Bur portal has drawn the Falatacot out."],
+    "theme.tthuunritual": ["The ritual of T'thuun has drawn the Falatacot out."],
+    "theme.prodigal": ["Aerbax's twisted children have found the town."],
+    "theme.gauntlet": ["Shadows slip in from every side!"],
+    "theme.dranith": ["Martine's hollow creations shamble in."],
+    "theme.greatwork": ["The Gelidite dead of Frore come, and the air goes cold."],
+    "theme.tthuun": ["T'thuun's Marauders, up from the deep places!"],
+    "theme.shardherald": ["Anadil's dead walk out of the shadow of Ithaenc!"],
+    "theme.lightbringer": ["The Hopeslayer's shadow is long."],
     "area.big": ["This is a war band, not a raiding party. Something bigger walks behind them."],
     "area.arrive": ["The {group} reach the edge of Holtburg!"],
     "leader": ["{leader} comes in with the last of them!", "{leader} leads the last wave in!"],

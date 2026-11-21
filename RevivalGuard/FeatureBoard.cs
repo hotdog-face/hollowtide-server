@@ -19,8 +19,9 @@ namespace RevivalGuard
     /// list"). Ours. The rules are FeatureBoardRules (pure, tested in NetTest); this is the ACE side.
     ///
     ///     @features                         the board (our client: the mod channel "features"; retail: chat lines)
-    ///     @features vote &lt;id&gt; on|off [n]     one vote per ACCOUNT; n is the client's counter, so a quick
-    ///                                       on/off/on is never refused by ChatGuard as a repeated line
+    ///     @features vote &lt;id&gt; up|down|off [n]  one vote per ACCOUNT, up or down (Feature Requests #34; "on" is
+    ///                                       up, as clients before #34 send it); n is the client's counter, so
+    ///                                       a quick up/off/up is never refused by ChatGuard as a repeated line
     ///     @features add &lt;base64url&gt;         a new request from our client: UTF-8 "title\ntext"
     ///     @features suggest &lt;title&gt; | &lt;text&gt;  the same, typed (a retail client)
     ///   staff (Sentinel and up), from the window's staff buttons:
@@ -54,7 +55,7 @@ namespace RevivalGuard
         internal static void Register()
         {
             CommandManager.TryAddCommand(Handle, "features", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
-                "The feature request board: vote for what you want added.", "[vote <id> on|off | suggest <title> | <text>]");
+                "The feature request board: vote up what you want added, down what you don't.", "[vote <id> up|down|off | suggest <title> | <text>]");
             try { lock (s_Lock) Load(); Mod.Log.Info($"[RevivalGuard] feature board: {s_Store.Items.Count} requests ({FilePath})"); }
             catch (Exception e) { Mod.Log.Error("[RevivalGuard] feature board: " + e.Message); }
         }
@@ -88,8 +89,9 @@ namespace RevivalGuard
                         case "vote":
                         {
                             int id = a.Length > 1 && int.TryParse(a[1].TrimStart('#'), out var v) ? v : 0;
-                            bool on = a.Length < 3 || a[2].ToLowerInvariant() != "off";
-                            var res = FeatureBoardRules.Vote(st, id, account, on, now);
+                            int? dir = FeatureBoardRules.VoteWord(a.Length > 2 ? a[2] : "");
+                            if (dir == null) { say = "Usage: @features vote <number> up|down|off"; break; }
+                            var res = FeatureBoardRules.Vote(st, id, account, dir.Value, now);
                             if (res == FeatureBoardRules.VoteResult.NoSuchRequest) say = "That request is no longer on the list.";
                             else if (res == FeatureBoardRules.VoteResult.Closed) say = "That request is closed to votes.";
                             changed = res == FeatureBoardRules.VoteResult.Ok;
@@ -150,7 +152,7 @@ namespace RevivalGuard
                             break;
                         }
                         default:
-                            say = "Usage: @features [vote <id> on|off | suggest <title> | <text>]";
+                            say = "Usage: @features [vote <id> up|down|off | suggest <title> | <text>]";
                             break;
                     }
                     if (changed && !Save()) say = "The board could not be saved. Please tell the staff.";
@@ -200,8 +202,8 @@ namespace RevivalGuard
             lock (s_Lock) items = s_Store != null ? FeatureBoardRules.Sorted(s_Store.Items) : new List<FeatureBoardRules.Request>();
             Say(s, $"--- Feature requests: {items.Count} ---");
             foreach (var r in items.Take(15))
-                Say(s, $"#{r.Id} [{FeatureBoardRules.StatusWord(r.Status)}] {FeatureBoardRules.Votes(r)} votes: {r.Title}");
-            Say(s, "@features vote <number> to vote, @features suggest <title> | <text> to add one.");
+                Say(s, $"#{r.Id} [{FeatureBoardRules.StatusWord(r.Status)}] score {FeatureBoardRules.Votes(r)} ({FeatureBoardRules.Ups(r)} up, {FeatureBoardRules.Downs(r)} down): {r.Title}");
+            Say(s, "@features vote <number> up (or down) to vote, @features suggest <title> | <text> to add one.");
         }
 
         static void Say(Session s, string line) =>

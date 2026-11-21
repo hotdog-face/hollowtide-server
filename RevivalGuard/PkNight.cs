@@ -40,7 +40,7 @@ namespace RevivalGuard
     public static partial class PkNight
     {
         internal const string P_ON = "rg_pk_night", P_RADIUS = "pk_night_radius", P_TOKEN = "pk_night_token",
-            P_TITLE = "pk_night_title", P_DISCORD = "pk_night_discord";
+            P_TITLE = "pk_night_title", P_DISCORD = "pk_night_discord", P_BANNER = "pk_night_banner";
         const double TICK = TICK_SECONDS, SAVE_EVERY = 30;
         const double LOGIN_DELAY_S = 8;   // after the login's own lines and Mail (FestivalNotices)
 
@@ -66,7 +66,8 @@ namespace RevivalGuard
             public Live Live { get; set; }
             public List<RoundRec> Rounds { get; set; } = new List<RoundRec>();
             public Dictionary<string, HashSet<string>> Said { get; set; } = new Dictionary<string, HashSet<string>>();
-            public Dictionary<uint, List<string>> Pending { get; set; } = new Dictionary<uint, List<string>>();   // titles owed, by guid
+            public Dictionary<uint, List<string>> Pending { get; set; } = new Dictionary<uint, List<string>>();   // titles (and "item:<wcid>") owed, by guid
+            public HashSet<uint> Banners { get; set; } = new HashSet<uint>();   // sides given a Banner of the Held Ground, ever
             public string CrierLine { get; set; }
         }
 
@@ -247,6 +248,7 @@ namespace RevivalGuard
                 WinnerSide = w?.Side ?? 0, Winner = w?.Name, Held = w?.Held ?? 0, Sides = live.Sides,
             };
             var winners = new List<Player>();
+            uint bannerTo = 0;
             if (w != null)
                 foreach (var g in w.Present)
                 {
@@ -260,17 +262,26 @@ namespace RevivalGuard
                 if (live.Record) s_State.Rounds.Add(rec);
                 if (live.Record) s_State.CrierLine = CrierLine(w?.Name, spot, w?.Held ?? 0, next);
                 if (live.Record && w != null)
+                {
+                    long token = PkCommon.Long(P_TOKEN, 0);
                     foreach (var g in w.Present)
                         if (PlayerManager.GetOnlinePlayer(g) == null)
                         {
-                            if (!s_State.Pending.TryGetValue(g, out var l)) s_State.Pending[g] = l = new List<string>();
-                            l.Add(TitleKey());
+                            Owe(g, TitleKey());
+                            if (token > 0) Owe(g, HeldGroundBannerRule.ItemKey((uint)token));
                         }
+                    if (PkCommon.On(P_BANNER))
+                    {
+                        if (HeldGroundBannerRule.Owed(w.Side, s_State.Banners)) { s_State.Banners.Add(w.Side); bannerTo = w.Side; }
+                        else Mod.Log.Info($"[RevivalGuard] PkNight: {w.Name} already has a Banner of the Held Ground, none given");
+                    }
+                }
                 Save();
             }
             World(EndLine(live, spot, live.Forced ? null : next));
             if (PkCommon.On(P_DISCORD) && !live.Forced) DiscordBridge.Announce(DiscordEndLine(live, spot));
             if (live.Record) foreach (var p in winners) Reward(p);
+            if (bannerTo != 0) GiveBanner(bannerTo, w.Name);
             Mod.Log.Info($"[RevivalGuard] PkNight: round {live.Key} over ({why}): {(w == null ? "no holder" : $"{w.Name} {Clock(w.Held)}")}, "
                 + $"{live.Sides.Count} sides, winners present {winners.Count}{(live.Record ? "" : ", not recorded")}");
         }
@@ -306,16 +317,47 @@ namespace RevivalGuard
                 catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] PkNight: title {t} for {p.Name}: {e.Message}"); }
             }
             long wcid = PkCommon.Long(P_TOKEN, 0);
-            if (wcid > 0)
+            if (wcid > 0 && !Give(p, (uint)wcid)) { lock (s_Lock) { Owe(p.Guid.Full, HeldGroundBannerRule.ItemKey((uint)wcid)); Save(); } }
+        }
+
+        /// <summary>Add a title key or an "item:" key to what a guid is owed at login. Call under s_Lock.</summary>
+        static void Owe(uint guid, string key)
+        {
+            if (!s_State.Pending.TryGetValue(guid, out var l)) s_State.Pending[guid] = l = new List<string>();
+            l.Add(key);
+        }
+
+        /// <summary>One item into the player's pack, with its line. False when it does not exist or did not fit.</summary>
+        static bool Give(Player p, uint wcid)
+        {
+            try
             {
-                try
+                var wo = ACE.Server.Factories.WorldObjectFactory.CreateNewWorldObject(wcid);
+                if (wo == null) { Mod.Log.Warn($"[RevivalGuard] PkNight: item {wcid} for {p.Name} does not exist"); return false; }
+                if (!p.TryCreateInInventoryWithNetworking(wo))
                 {
-                    var wo = ACE.Server.Factories.WorldObjectFactory.CreateNewWorldObject((uint)wcid);
-                    if (wo != null && p.TryCreateInInventoryWithNetworking(wo)) PkCommon.Say(p, $"{wo.Name} is yours for the night.");
-                    else Mod.Log.Warn($"[RevivalGuard] PkNight: token {wcid} for {p.Name} did not fit or does not exist");
+                    wo.Destroy();
+                    Mod.Log.Warn($"[RevivalGuard] PkNight: item {wcid} for {p.Name} did not fit, kept for the next login");
+                    PkCommon.Say(p, $"Your pack is too full for the {wo.Name} you won. It will wait for you at your next login.");
+                    return false;
                 }
-                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] PkNight: token {wcid} for {p.Name}: {e.Message}"); }
+                PkCommon.Say(p, wcid == HeldGroundBannerRule.WCID ? BannerLine : $"{wo.Name} is yours for the night.");
+                Mod.Log.Info($"[RevivalGuard] PkNight: {wo.Name} ({wcid}) given to {p.Name}");
+                return true;
             }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] PkNight: item {wcid} for {p.Name}: {e.Message}"); return false; }
+        }
+
+        const string BannerLine = "The Banner of the Held Ground is yours. Hang it on a floor or yard hook in your house; "
+            + "your allegiance may draw on it once a day.";
+
+        /// <summary>The winning side's banner: to its monarch (or the lone winner) now if online, else at their login.</summary>
+        static void GiveBanner(uint side, string sideName)
+        {
+            var p = PlayerManager.GetOnlinePlayer(side);
+            if (p != null && Give(p, HeldGroundBannerRule.WCID)) return;
+            lock (s_Lock) { Owe(side, HeldGroundBannerRule.ItemKey(HeldGroundBannerRule.WCID)); Save(); }
+            Mod.Log.Info($"[RevivalGuard] PkNight: Banner of the Held Ground for {sideName} ({side:X8}) waits for their login");
         }
 
         /// <summary>Titles owed to winners who had left before the end, and the login line for the night.</summary>
@@ -331,7 +373,24 @@ namespace RevivalGuard
                     lock (s_Lock)
                         if (s_State.Pending.TryGetValue(__instance.Guid.Full, out var l) && l.Count > 0) { owed = l.ToList(); s_State.Pending.Remove(__instance.Guid.Full); Save(); }
                     if (owed != null)
-                        foreach (var key in owed.Distinct())
+                    {
+                        var items = owed.Where(k => HeldGroundBannerRule.TryItem(k, out _)).ToList();
+                        if (items.Count > 0)
+                        {
+                            var p = __instance;
+                            var give = new ACE.Server.Entity.Actions.ActionChain();
+                            give.AddDelaySeconds(LOGIN_DELAY_S);
+                            give.AddAction(p, () =>
+                            {
+                                foreach (var key in items)
+                                    if (HeldGroundBannerRule.TryItem(key, out var wcid) && (p.Session == null || !Give(p, wcid)))
+                                        lock (s_Lock) { Owe(p.Guid.Full, key); Save(); }
+                            });
+                            give.EnqueueChain();
+                        }
+                    }
+                    if (owed != null)
+                        foreach (var key in owed.Where(k => !HeldGroundBannerRule.TryItem(k, out _)).Distinct())
                             if (Enum.TryParse<CharacterTitle>(key, true, out var t))
                             {
                                 try { __instance.AddTitle(t); PkCommon.Say(__instance, $"You have earned the title {TitleWords(key)}."); }

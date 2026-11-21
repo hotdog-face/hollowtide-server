@@ -71,6 +71,7 @@ namespace RevivalGuard
         {
             public int Id;
             public R.Kind Kind; public R.TierDef Def; public int Tier; public R.Side Side; public bool Big, Forced;
+            public R.Theme Theme; public R.ThemeTier ThemeTier;   // the festival's monsters mixed in (null: none on)
             public Phase Phase = Phase.Warning;
             public double WarnAt, SpawnAt, LastHit, EndAt, EmptySince;
             public int Players, Spawned, Killed, Pending;
@@ -86,7 +87,8 @@ namespace RevivalGuard
             public bool Mustered;
             public readonly HashSet<uint> Detached = new HashSet<uint>();
             public readonly Dictionary<uint, (Vector2 at, double since)> Still = new Dictionary<uint, (Vector2, double)>();
-            public string Group => Kind?.Group ?? "raiders";
+            public string ThemeGroup;                          // a themed raid's name in the lines (the tier's, else the theme's)
+            public string Group => Theme != null && Theme.Replace ? ThemeGroup ?? Theme.Group : Kind?.Group ?? "raiders";
         }
 
         sealed class Tag { public int RaidId; public int ProtectBelow; public bool Reserve; }
@@ -121,8 +123,8 @@ namespace RevivalGuard
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] TownRaid: trace switch not registered ({e.Message})"); }
             CommandManager.TryAddCommand(Cmd, "raid", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld,
-                "Holtburg raids: start one now (tier 1-4, kind, side, big), stop the running one, status, reload the data file.",
-                "[start [1-4] [drudge|mosswart|bandit] [south|west|north|east] [big] | stop | status | reload]");
+                "Holtburg raids: start one now (tier 1-4, kind, side, big, a festival's monsters mixed in or none), stop the running one, status, reload the data file.",
+                "[start [1-4] [drudge|mosswart|bandit] [south|west|north|east] [big] [<festival key>|none] | stop | status | reload]");
             SyncSeed();
             Load(true);
             LoadState();
@@ -286,9 +288,13 @@ namespace RevivalGuard
         static Dictionary<string, string> Tokens(Raid r, string leader = null) => new Dictionary<string, string>
         {
             ["group"] = r.Group, ["side"] = r.Side?.Name ?? "", ["leader"] = leader ?? "", ["count"] = "", ["town"] = s_Cfg.Town,
+            ["theme"] = r.Theme?.Group ?? "",
         };
 
         static string L(string key, IDictionary<string, string> tokens = null) => R.Line(s_Cfg, key, s_Rng.NextDouble(), tokens);
+
+        /// <summary>Is a festival on now (its calendar window or a GM's @festival)? A theme's monsters come only then.</summary>
+        static bool FestivalOn(string key) { try { return SeasonalCalendar.IsFestivalActive(key); } catch { return false; } }
 
         static void Post(string text)
         {
@@ -340,11 +346,11 @@ namespace RevivalGuard
             double roll = s_Rng.NextDouble();
             if (Tracing && chance > 0) Mod.Log.Info($"[RevivalGuard] TownRaid: roll {roll:0.000} against {chance:0.000} ({town.Count} in town, {online} online)");
             if (roll >= chance) return;
-            Begin(null, null, null, null, false, now);
+            Begin(null, null, null, null, false, now, null);
         }
 
         /// <summary>A raid begins: the warning now, the raiders a minute later. Null arguments are rolled.</summary>
-        static string Begin(int? tier, string kind, string side, bool? big, bool forced, double now)
+        static string Begin(int? tier, string kind, string side, bool? big, bool forced, double now, string theme)
         {
             if (s_Raid != null) return "a raid is already running";
             var town = InTown();
@@ -353,22 +359,29 @@ namespace RevivalGuard
             if (k == null) return "no kind of raider fits";
             var sd = R.PickSide(s_Cfg, k, s_Rng.NextDouble(), side);
             if (sd == null) return "no such side";
+            // a festival on: its monsters make the raid (or are mixed in); the kind still picks the side and the tier's numbers
+            var (th, tt) = R.PickTheme(s_Cfg, def.Tier, FestivalOn, s_Rng.NextDouble(), theme);
+            if (th != null && th.Replace) def = R.Themed(def, tt);
             bool isBig = R.CanBeBig(def) && (big ?? s_Rng.NextDouble() < k.BigChance);
             var r = new Raid { Id = s_NextId++, Kind = k, Def = def, Tier = def.Tier, Side = sd, Big = isBig, Forced = forced, WarnAt = now, Players = Math.Max(1, town.Count) };
             r.Waves = R.WaveCount(s_Cfg.Waves, isBig);
+            r.Theme = th; r.ThemeTier = th != null && !th.Replace ? tt : null;   // ThemeTier: the mix only
+            r.ThemeGroup = tt?.Group;
             r.LeaderRolled = s_Rng.NextDouble() < s_Cfg.Waves.LeaderChance;
             s_Raid = r;
             s_State.LastStart = now;
             var tok = Tokens(r);
-            Shout(LIFESTONE_GUARD, L($"warn.{k.Key}.{sd.Key}", tok) ?? L($"warn.{k.Key}.south", tok));
+            Shout(LIFESTONE_GUARD, r.Theme != null && r.Theme.Replace ? L("warn.theme", tok)
+                : L($"warn.{k.Key}.{sd.Key}", tok) ?? L($"warn.{k.Key}.south", tok));
             var around = Around();
             Tell(around, L("area.warn", tok));
             if (isBig) Tell(around, L("area.big", tok));
+            if (r.Theme != null) Tell(around, L($"theme.{r.Theme.Festival}", tok) ?? L("area.theme", tok));
             var to = sd.To;
             TownLife.Notice("raid", new Vector2(to[0], to[1]), s_Cfg.Schedule.WarningSeconds + 180 + (r.Waves - 1) * s_Cfg.Waves.NextAfterSeconds);
             Post(L("discord.start", tok));
-            Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} {(forced ? "started by staff" : "rolled")}: {k.Key} tier {r.Tier}{(isBig ? " BIG" : "")} from the {sd.Key}, {r.Waves} waves{(def.Leader != 0 && (isBig || r.LeaderRolled) ? ", leader with the last" : "")}, {town.Count} in town ({string.Join(", ", town.Select(p => $"{p.Name} {p.Level}"))}); raiders in {s_Cfg.Schedule.WarningSeconds:0} s");
-            return $"#{r.Id}: {k.Group} tier {r.Tier}{(isBig ? ", a big wave" : "")} from {sd.Name}; they appear in {s_Cfg.Schedule.WarningSeconds:0} s";
+            Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} {(forced ? "started by staff" : "rolled")}: {k.Key} tier {r.Tier}{(isBig ? " BIG" : "")} from the {sd.Key}, {r.Waves} waves{(def.Leader != 0 && (isBig || r.LeaderRolled) ? ", leader with the last" : "")}{(r.Theme != null ? $", {r.Theme.Festival}: {r.Group}{(r.Theme.Replace ? "" : " mixed in")}" : "")}, {town.Count} in town ({string.Join(", ", town.Select(p => $"{p.Name} {p.Level}"))}); raiders in {s_Cfg.Schedule.WarningSeconds:0} s");
+            return $"#{r.Id}: {r.Group} tier {r.Tier}{(isBig ? ", a big wave" : "")}{(r.Theme != null ? $" ({r.Theme.Festival})" : "")} from {sd.Name}; they appear in {s_Cfg.Schedule.WarningSeconds:0} s";
         }
 
         // ---------------------------------------------------------------- spawning
@@ -386,12 +399,7 @@ namespace RevivalGuard
             int no = r.WaveNo + 1;
             bool first = no == 1;
             var (main, adds, leader, escorts) = R.PlanWave(s_Cfg, def, r.Players, r.Big, no, r.Waves, r.LeaderRolled, r.Spawned);
-            var wcids = new List<(uint wcid, bool add)>();
-            if (leader) wcids.Add((def.Leader, false));
-            var esc = def.Escort.Length > 0 ? def.Escort : def.Wave;
-            for (int i = 0; i < escorts; i++) wcids.Add((esc[s_Rng.Next(esc.Length)], false));
-            for (int i = 0; i < main; i++) wcids.Add((def.Wave[s_Rng.Next(def.Wave.Length)], false));
-            for (int i = 0; i < adds; i++) wcids.Add((def.Adds[s_Rng.Next(def.Adds.Length)], true));
+            var wcids = R.WaveWeenies(def, r.ThemeTier, r.Theme?.Share ?? 0, main, adds, leader, escorts, s_Rng.Next);
             r.WaveNo = no;
             r.Pending++;
             var side = r.Side;
@@ -408,7 +416,7 @@ namespace RevivalGuard
                     var made = new List<Creature>();
                     int madeAdds = 0;
                     r.Wave.Clear();
-                    foreach (var (w, add) in wcids)
+                    foreach (var (w, add, _) in wcids)
                     {
                         // adds scatter wider and come in a little behind and around the group
                         var c = Spawn(w, At(side.From, add ? 6f : 0f), add ? 12f : 8f) as Creature;
@@ -432,6 +440,7 @@ namespace RevivalGuard
                     {
                         var lead = made.FirstOrDefault(c => c.WeenieClassId == def.Leader) ?? made[0];
                         Tell(Around(), L("leader", Tokens(r, lead.Name)));
+                        BossBroadcast.Mark(lead, $"the leader of the {s_Cfg.Town} raid");
                     }
                     Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} wave {no} of {r.Waves}: {made.Count} ({made.Count - madeAdds - (leader ? 1 + escorts : 0)} in the group, {madeAdds} adds{(leader ? $", the leader{(escorts > 0 ? $" and {escorts} escorts" : "")}" : "")}) x [{string.Join(", ", made.GroupBy(c => c.Name).Select(g => $"{g.Count()} {g.Key} ({g.First().WeenieClassId}, level {g.First().Level})"))}] at the {side.Key} ({side.From[0]:0},{side.From[1]:0}) running to ({side.To[0]:0},{side.To[1]:0}); {r.Spawned} in all, {Live(r.All).Count()} standing");
                 }
@@ -511,7 +520,7 @@ namespace RevivalGuard
                 var here = Local(c.Location);
                 if (R.InBox(s_Cfg, here.X, here.Y, 0)) r.Still.Remove(c.Guid.Full);
                 else if (!r.Still.TryGetValue(c.Guid.Full, out var st) || Vector2.Distance(st.at, here) > 1.5f) r.Still[c.Guid.Full] = (here, now);
-                else if (now - st.since >= s_Cfg.Schedule.StuckOutsideSeconds)
+                else if (R.StuckOutside(now - st.since, c.AttackTarget != null || now - r.LastHit < s_Cfg.Schedule.FightGraceSeconds, s_Cfg.Schedule))
                 {
                     r.Still.Remove(c.Guid.Full);
                     var gone = c;
@@ -636,7 +645,7 @@ namespace RevivalGuard
                 chain.EnqueueChain();
             }
             if (r.Mustered) HoltburgGuards.Muster(r.Side.Muster, null);
-            s_State.History.Add($"{DateTime.UtcNow:yyyy-MM-dd HH:mm}Z #{r.Id} {r.Kind.Key} t{r.Tier}{(r.Big ? " big" : "")} {r.Side.Key}: {outcome}, waves {string.Join(" ", r.WaveLog)} of {r.Waves}, {r.Killed}/{r.Spawned} killed, {defenders} rewarded{(r.Forced ? " (staff)" : "")}");
+            s_State.History.Add($"{DateTime.UtcNow:yyyy-MM-dd HH:mm}Z #{r.Id} {r.Kind.Key} t{r.Tier}{(r.Big ? " big" : "")}{(r.Theme != null ? $" +{r.Theme.Festival}" : "")} {r.Side.Key}: {outcome}, waves {string.Join(" ", r.WaveLog)} of {r.Waves}, {r.Killed}/{r.Spawned} killed, {defenders} rewarded{(r.Forced ? " (staff)" : "")}");
             SaveState();
             Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} ends {outcome}{(why != null ? $" ({why})" : "")}: {r.WaveNo} of {r.Waves} waves ({string.Join(" ", r.WaveLog)}), {r.Killed} of {r.Spawned} raiders killed in {(r.SpawnAt > 0 ? now - r.SpawnAt : 0):0} s, {r.Damage.Count} player(s) did damage, {defenders} rewarded");
         }
@@ -812,16 +821,17 @@ namespace RevivalGuard
             {
                 case "start":
                 {
-                    int? tier = null; string kind = null, side = null; bool? big = null;
+                    int? tier = null; string kind = null, side = null, theme = null; bool? big = null;
                     foreach (var a in args.Skip(1).Select(x => x.ToLowerInvariant()))
                     {
                         if (int.TryParse(a, out var t)) tier = Math.Clamp(t, 1, s_Cfg.TierFloors.Length);
                         else if (a == "big") big = true;
                         else if (s_Cfg.KindBy(a) != null) kind = a;
                         else if (s_Cfg.SideBy(a) != null) side = a;
-                        else { Reply($"what is '{a}'? Kinds: {string.Join(", ", s_Cfg.Kinds.Select(k => k.Key))}; sides: {string.Join(", ", s_Cfg.Sides.Select(x => x.Key))}"); return; }
+                        else if (a == "none" || s_Cfg.Themes.Any(t => string.Equals(t.Festival, a, StringComparison.OrdinalIgnoreCase))) theme = a;
+                        else { Reply($"what is '{a}'? Kinds: {string.Join(", ", s_Cfg.Kinds.Select(k => k.Key))}; sides: {string.Join(", ", s_Cfg.Sides.Select(x => x.Key))}; themes: {string.Join(", ", s_Cfg.Themes.Select(t => t.Festival))}, none"); return; }
                     }
-                    Reply(Begin(tier, kind, side, big ?? false, true, now));
+                    Reply(Begin(tier, kind, side, big ?? false, true, now, theme));
                     return;
                 }
                 case "stop":
@@ -842,7 +852,7 @@ namespace RevivalGuard
                         + (gapLeft > 0 ? $"next roll in {gapLeft / 60:0} min" : "rolling each minute")
                         + (R.QuietForRestart(DateTime.UtcNow, sch) ? "; quiet for the restart" : ""));
                     if (r != null)
-                        Reply($"#{r.Id} {r.Kind.Key} tier {r.Tier}{(r.Big ? " big" : "")} from the {r.Side.Key}: {r.Phase}, wave {r.WaveNo} of {r.Waves} ({string.Join(" ", r.WaveLog)}), {Live(r.All).Count()} alive, {r.Killed} of {r.Spawned} killed, "
+                        Reply($"#{r.Id} {r.Kind.Key} tier {r.Tier}{(r.Big ? " big" : "")}{(r.Theme != null ? $" + {r.Theme.Festival}: {r.Group}" : "")} from the {r.Side.Key}: {r.Phase}, wave {r.WaveNo} of {r.Waves} ({string.Join(" ", r.WaveLog)}), {Live(r.All).Count()} alive, {r.Killed} of {r.Spawned} killed, "
                             + $"{r.Damage.Count} defender(s), last hit {(r.SpawnAt > 0 ? now - r.LastHit : 0):0} s ago, reserves {Live(r.Reserves).Count()}");
                     foreach (var h in s_State.History.Skip(Math.Max(0, s_State.History.Count - 5))) Reply(h);
                     return;

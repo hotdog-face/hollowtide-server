@@ -604,6 +604,16 @@ namespace RevivalGuard
             if (!(WorldObjectFactory.CreateNewWorldObject(wcid) is Creature c)) { Mod.Log.Warn($"[RevivalGuard] Diner: regular {wcid} is not in the world database (datafix not applied?)"); return; }
             c.Location = seat.Pos();
             if (!c.EnterWorld()) { Mod.Log.Warn($"[RevivalGuard] Diner: {c.Name} could not sit at {seat.X:0.0},{seat.Y:0.0}"); return; }
+            // feet at the bench's front edge: ACE's placement slides them clear of the bench (a static; ethereal does not
+            // help) and they sit on air, so put them back on the seat and force the position to the clients
+            float dx = c.Location.PositionX - seat.X, dy = c.Location.PositionY - seat.Y;
+            if (dx * dx + dy * dy > 0.0025f && c.PhysicsObj != null)
+            {
+                c.PhysicsObj.set_current_pos(new ACE.Server.Physics.Common.Position(seat.Pos()));
+                c.SyncLocation();
+                c.SendUpdatePosition(true);
+                if (Tracing) Mod.Log.Info($"[RevivalGuard] Diner: {c.Name} slid {Math.Sqrt(dx * dx + dy * dy):0.00} m by placement; back on the bench");
+            }
             lock (s_Lock) s_Regulars[wcid] = c;
             var chain = new ActionChain();
             chain.AddDelaySeconds(1.5);

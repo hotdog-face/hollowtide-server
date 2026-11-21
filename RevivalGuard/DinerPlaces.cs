@@ -57,9 +57,9 @@ namespace RevivalGuard
             new P(0x005F0230, 45.5f, -102.75f, 1.4300000000000002f),
         };
         public static readonly System.Collections.Generic.Dictionary<uint, P> Seats = new() {
-            [909713] = new P(0x005F01FE, 28.75f, -92.25f, 0.005f, 180f),
-            [909714] = new P(0x005F0200, 28.75f, -97.25f, 0.005f, 180f),
-            [909715] = new P(0x005F0202, 25.0f, -111.3f, 0.005f, 270f),
+            [909713] = new P(0x005F01FE, 27.5f, -90.97f, 0.005f, 270f),
+            [909714] = new P(0x005F0200, 27.5f, -95.97f, 0.005f, 270f),
+            [909715] = new P(0x005F0202, 26.28f, -112.8f, 0.005f, 180f),
         };
         public static readonly (string Name, P[] Path)[] Rounds = {
             ("central-north", new[] { new P(0x005F01FE, 30.6f, -90.0f, 0.005f), new P(0x005F01FE, 30.2f, -87.25f, 0.005f) }),

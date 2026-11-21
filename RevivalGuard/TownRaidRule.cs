@@ -28,6 +28,7 @@ namespace RevivalGuard
             public BigDef Big { get; set; } = new BigDef();
             public WaveDef Waves { get; set; } = new WaveDef();
             public RewardDef Rewards { get; set; } = new RewardDef();
+            public List<Theme> Themes { get; set; } = new List<Theme>();
             public Dictionary<string, string[]> Lines { get; set; } = new Dictionary<string, string[]>();
 
             public Side SideBy(string key) => Sides.FirstOrDefault(s => string.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase));
@@ -47,6 +48,9 @@ namespace RevivalGuard
             public double WarningSeconds { get; set; } = 60;
             public double IdleTimeoutMinutes { get; set; } = 10;
             public double MaxMinutes { get; set; } = 25;
+            // never mid-fight (owner 2026-11-21: big raids must not vanish while people fight them): past MaxMinutes, or
+            // with the town empty, a raid withdraws only once no raider has been hit for this long
+            public double FightGraceSeconds { get; set; } = 120;
             public double EmptyTownMinutes { get; set; } = 3;
             public double HeldShare { get; set; } = 0.75;
             public double StuckOutsideSeconds { get; set; } = 60;
@@ -91,6 +95,32 @@ namespace RevivalGuard
             public uint Treasure { get; set; }                 // a retail death treasure (TreasureDeath) id: the reward roll's table
             public int ProtectBelow { get; set; }              // raiders never pick a player under this level who has not hit them
             public uint[] Adds { get; set; } = Array.Empty<uint>();  // the weaker pack that runs in with each wave (same family)
+        }
+
+        /// <summary>A festival's monsters make the raid while that festival runs (owner 2026-11-20: "add spawns of turkeys
+        /// and similar themed monsters to the raids for every event"; then "for now turkeys should be what raids are made
+        /// of. and christams is snowmans"). Retail weenies only, unchanged; a tier the theme has nothing for gets the
+        /// ordinary raid. Replace (the default): the whole raid is the theme's (Themed); else Share of each group mixed in.</summary>
+        public sealed class Theme
+        {
+            public string Festival { get; set; }               // SeasonalCalendar key ("fowlplay")
+            public string Group { get; set; }                  // "turkeys", for the lines and the log
+            public double Weight { get; set; } = 1;            // when two festivals with themes overlap
+            public double Share { get; set; } = 0.4;
+            public bool Replace { get; set; } = true;
+            public List<ThemeTier> Tiers { get; set; } = new List<ThemeTier>();
+            public ThemeTier TierAt(int tier) => Tiers.FirstOrDefault(t => t.Tier == tier);
+        }
+
+        public sealed class ThemeTier
+        {
+            public int Tier { get; set; }
+            public uint[] Wave { get; set; } = Array.Empty<uint>();
+            public uint[] Adds { get; set; } = Array.Empty<uint>();   // empty: the adds come from Wave
+            public uint Leader { get; set; }                           // 0: no leader (and no big war band) for this theme
+            public string Group { get; set; }                          // this tier's name in the lines, else the theme's
+            public uint[] Escort { get; set; } = Array.Empty<uint>();
+            public uint[] AddsOrWave => Adds != null && Adds.Length > 0 ? Adds : Wave;
         }
 
         /// <summary>A raid comes in waves (owner 2026-11-16: "need more smaller adds in addition to the group that comes
@@ -158,6 +188,14 @@ namespace RevivalGuard
                 foreach (var t in k.Tiers) if (t.Wave.Length == 0) p.Add($"kind {k.Key} tier {t.Tier}: empty wave");
             }
             if (!c.Kinds.Any(k => k.TierAt(1) != null)) p.Add("no kind at tier 1");
+            foreach (var t in c.Themes ?? new List<Theme>())
+            {
+                if (string.IsNullOrWhiteSpace(t.Festival) || string.IsNullOrWhiteSpace(t.Group)) p.Add("theme: festival and group");
+                if (t.Share <= 0 || t.Share >= 1) p.Add($"theme {t.Festival}: share between 0 and 1");
+                foreach (var tt in t.Tiers) if (tt.Wave == null || tt.Wave.Length == 0) p.Add($"theme {t.Festival} tier {tt.Tier}: empty wave");
+                foreach (var tt in t.Tiers) if (tt.Leader == 0 && tt.Escort != null && tt.Escort.Length > 0) p.Add($"theme {t.Festival} tier {tt.Tier}: escorts without a leader");
+                if (c.Themes.Count(x => string.Equals(x.Festival, t.Festival, StringComparison.OrdinalIgnoreCase)) > 1) p.Add($"theme {t.Festival}: twice");
+            }
             if (c.Waves == null || c.Waves.Count < 1 || c.Waves.BigCount < 1 || c.Waves.MaxAlive < 1 || c.Waves.MaxTotal < 1) p.Add("waves: counts and caps must be 1 or more");
             return p;
         }
@@ -258,6 +296,60 @@ namespace RevivalGuard
             return (main, adds, leader, escorts);
         }
 
+        /// <summary>The festival theme for a raid at this tier: weighted among the themes whose festival is on and that have
+        /// something for the tier; null when none. Staff may force one by festival key (on or not); "none" forces none.</summary>
+        public static (Theme theme, ThemeTier tier) PickTheme(Config c, int tier, Func<string, bool> festivalOn, double r, string force = null)
+        {
+            if (c.Themes == null || c.Themes.Count == 0 || string.Equals(force, "none", StringComparison.OrdinalIgnoreCase)) return (null, null);
+            var options = c.Themes
+                .Where(t => force != null ? string.Equals(t.Festival, force, StringComparison.OrdinalIgnoreCase) : festivalOn != null && festivalOn(t.Festival))
+                .Select(t => (t, tt: t.TierAt(tier)))
+                .Where(o => o.tt != null && o.tt.Wave != null && o.tt.Wave.Length > 0)
+                .ToList();
+            if (options.Count == 0) return (null, null);
+            double total = options.Sum(o => Math.Max(0, o.t.Weight));
+            if (total <= 0) return options[0];
+            double x = r * total;
+            foreach (var o in options) { x -= Math.Max(0, o.t.Weight); if (x < 0) return o; }
+            return options[options.Count - 1];
+        }
+
+        /// <summary>A raid made of the theme's monsters: the tier's sizes, treasure and newcomer guard, the theme's weenies
+        /// (its leader or none).</summary>
+        public static TierDef Themed(TierDef def, ThemeTier tt) => new TierDef
+        {
+            Tier = def.Tier, Base = def.Base, PerPlayer = def.PerPlayer, Max = def.Max, Treasure = def.Treasure,
+            ProtectBelow = def.ProtectBelow, Wave = tt.Wave, Adds = tt.AddsOrWave, Leader = tt.Leader,
+            Escort = tt.Escort ?? Array.Empty<uint>(),
+        };
+
+        /// <summary>How many of n become the theme's: the share rounded, at least one of any group, never all of a group
+        /// of two or more (the raid's own kind still leads it).</summary>
+        public static int ThemedCount(int n, double share)
+        {
+            if (n <= 0 || share <= 0) return 0;
+            int k = (int)Math.Round(n * share, MidpointRounding.AwayFromZero);
+            return Math.Max(1, Math.Min(k, n >= 2 ? n - 1 : 1));
+        }
+
+        /// <summary>A wave's weenies: the leader and escorts as the kind's; ThemedCount of the main group and of the adds
+        /// from the theme. pick(n) is a random index below n.</summary>
+        public static List<(uint wcid, bool add, bool themed)> WaveWeenies(TierDef def, ThemeTier theme, double share,
+            int main, int adds, bool leader, int escorts, Func<int, int> pick)
+        {
+            var list = new List<(uint, bool, bool)>();
+            if (leader) list.Add((def.Leader, false, false));
+            var esc = def.Escort.Length > 0 ? def.Escort : def.Wave;
+            for (int i = 0; i < escorts; i++) list.Add((esc[pick(esc.Length)], false, false));
+            int tm = theme == null ? 0 : ThemedCount(main, share), ta = theme == null ? 0 : ThemedCount(adds, share);
+            for (int i = 0; i < main; i++)
+                list.Add(i < tm ? (theme.Wave[pick(theme.Wave.Length)], false, true) : (def.Wave[pick(def.Wave.Length)], false, false));
+            var tpool = theme?.AddsOrWave;
+            for (int i = 0; i < adds; i++)
+                list.Add(i < ta ? (tpool[pick(tpool.Length)], true, true) : (def.Adds[pick(def.Adds.Length)], true, false));
+            return list;
+        }
+
         /// <summary>The next wave comes once NextAtShare of the last one is down, or NextAfterSeconds after it if a raider
         /// was hit since it came (an idle town is not piled on); never sooner than MinGapSeconds, never when it would put
         /// more than MaxAlive on the field (unless none stand).</summary>
@@ -314,11 +406,20 @@ namespace RevivalGuard
             if (spawned == 0) return Outcome.Running;
             if (alive == 0 && !moreToCome) return killed >= HeldAt(spawned, s) ? Outcome.Held : Outcome.Faded;
             if (alive == 0) return Outcome.Running;
-            if (sinceSpawn >= s.MaxMinutes * 60) return Outcome.Withdrew;
             if (sinceLastHit >= s.IdleTimeoutMinutes * 60) return Outcome.Withdrew;
-            if (emptyFor >= s.EmptyTownMinutes * 60) return Outcome.Withdrew;
+            bool fighting = sinceLastHit < s.FightGraceSeconds;
+            if (!fighting && sinceSpawn >= s.MaxMinutes * 60) return Outcome.Withdrew;
+            if (!fighting && emptyFor >= s.EmptyTownMinutes * 60) return Outcome.Withdrew;
             return Outcome.Running;
         }
+
+        /// <summary>AdminSpawn's cleanup: a creature the admin made stays until killed, or until nobody has been within
+        /// AdminSpawnNearMetres of it for an hour.</summary>
+        public const float AdminSpawnNearMetres = 100f;
+        public static bool AdminSpawnStale(double secondsSinceSomeoneNear) => secondsSinceSomeoneNear >= 3600;
+
+        /// <summary>A raider standing outside town is stuck only when it is not fighting (one in a fight stands still).</summary>
+        public static bool StuckOutside(double stillFor, bool fighting, ScheduleDef s) => !fighting && stillFor >= s.StuckOutsideSeconds;
 
         /// <summary>Kills that hold the town once no raider is left: HeldShare of those spawned (a raider stuck outside
         /// town is taken away, box 2026-11-16: 11 of 12 killed read as faded).</summary>

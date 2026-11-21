@@ -39,6 +39,7 @@ namespace RevivalGuard
             (P_IGNORE_IP, false, "PK expansion: count kills between characters on one connection address (a test aid; leave false)"),
             (PkNight.P_ON, false, "PK Night: every Sunday 7 PM Pacific, hold the spot for an hour (RevivalGuard PkNight; docs/proposals/pk-night.md)"),
             (PkNight.P_DISCORD, false, "PK Night: post the start and the result to Discord (DiscordBridge.Announce)"),
+            (PkNight.P_BANNER, false, "PK Night: the winning allegiance's monarch gets a Banner of the Held Ground (908120), once per allegiance ever (HeldGroundBanner)"),
         };
         static readonly (string key, long def, string desc)[] s_Longs =
         {

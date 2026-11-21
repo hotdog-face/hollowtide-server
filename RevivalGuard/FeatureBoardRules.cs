@@ -9,7 +9,9 @@ namespace RevivalGuard
     /// THE FEATURE REQUEST BOARD'S RULES, pure C# (no ACE types) so NetTest runs them (tools/nettest/FeatureBoard.cs).
     /// Owner 2026-10-22: "a feature request list button ... players write feature requests, the ones with the most
     /// upvotes rise ... pre-populate the list." The store, one vote per account, the daily posting limit, the order
-    /// players see, the staff verbs and the wire forms both ways. FeatureBoard.cs is the ACE side (commands, file, push).
+    /// players see, the staff verbs and the wire forms both ways.
+    /// Down votes (Feature Requests #34, owner ticket 261121-0008 "should have a vote down button"): an account votes
+    /// up, down or neither on each request; the order and the number players see is the net score (up minus down). FeatureBoard.cs is the ACE side (commands, file, push).
     /// </summary>
     public static class FeatureBoardRules
     {
@@ -33,7 +35,11 @@ namespace RevivalGuard
             public string AuthorName { get; set; } = "";
             /// <summary>Votes carried in from the seed list (players who asked before the board existed) or a merge.</summary>
             public int BaseVotes { get; set; }
+            /// <summary>The accounts voting it UP. The name predates down votes: a board.json from before #34 has only
+            /// this list, and its votes stay up votes.</summary>
             public List<uint> Voters { get; set; } = new List<uint>();
+            /// <summary>The accounts voting it down (#34). Missing in older files (empty). An account is never in both.</summary>
+            public List<uint> Downers { get; set; } = new List<uint>();
             /// <summary>Where it came from: a report id for a seeded request, empty for one posted on the board.</summary>
             public string Source { get; set; } = "";
         }
@@ -46,14 +52,21 @@ namespace RevivalGuard
             public Dictionary<string, List<long>> Posts { get; set; } = new Dictionary<string, List<long>>();
         }
 
-        public static int Votes(Request r) => Math.Max(0, r.BaseVotes) + (r.Voters?.Count ?? 0);
+        /// <summary>Up votes: the carried ones plus the accounts voting it up.</summary>
+        public static int Ups(Request r) => Math.Max(0, r.BaseVotes) + (r.Voters?.Count ?? 0);
+        public static int Downs(Request r) => r.Downers?.Count ?? 0;
+        /// <summary>The score players see and the board sorts by: up minus down (can go below zero).</summary>
+        public static int Votes(Request r) => Ups(r) - Downs(r);
+        /// <summary>This account's vote: 1 up, -1 down, 0 none.</summary>
+        public static int VoteOf(Request r, uint account) =>
+            r.Voters?.Contains(account) == true ? 1 : r.Downers?.Contains(account) == true ? -1 : 0;
 
         /// <summary>Open and Planned share the top (votes decide), then Done, then Declined.</summary>
         public static int Group(string status) => status == "done" ? 1 : status == "declined" ? 2 : 0;
 
         public static bool IsStatus(string s) => Array.IndexOf(STATUSES, s) >= 0;
 
-        /// <summary>The order players see: group, then most votes, then the older request first (it waited longer), then id.</summary>
+        /// <summary>The order players see: group, then best net score, then the older request first (it waited longer), then id.</summary>
         public static List<Request> Sorted(IEnumerable<Request> items) =>
             items.OrderBy(r => Group(r.Status)).ThenByDescending(Votes).ThenBy(r => r.Created).ThenBy(r => r.Id).ToList();
 
@@ -63,16 +76,35 @@ namespace RevivalGuard
 
         public enum VoteResult { Ok, Unchanged, NoSuchRequest, Closed }
 
-        /// <summary>One vote per account: on adds this account once, off takes it away. Done and Declined are closed.</summary>
-        public static VoteResult Vote(Store st, int id, uint account, bool on, long now)
+        /// <summary>One vote per account: dir 1 up, -1 down, 0 neither. Voting one way clears the other way.
+        /// Done and Declined are closed.</summary>
+        public static VoteResult Vote(Store st, int id, uint account, int dir, long now)
         {
             var r = Find(st, id);
             if (r == null) return VoteResult.NoSuchRequest;
             if (Group(r.Status) != 0) return VoteResult.Closed;
-            bool has = r.Voters.Contains(account);
-            if (has == on) return VoteResult.Unchanged;
-            if (on) r.Voters.Add(account); else r.Voters.RemoveAll(v => v == account);
+            r.Voters ??= new List<uint>(); r.Downers ??= new List<uint>();
+            dir = Math.Sign(dir);
+            if (VoteOf(r, account) == dir) return VoteResult.Unchanged;
+            r.Voters.RemoveAll(v => v == account); r.Downers.RemoveAll(v => v == account);
+            if (dir > 0) r.Voters.Add(account); else if (dir < 0) r.Downers.Add(account);
             return VoteResult.Ok;
+        }
+
+        /// <summary>The pre-#34 form: on is an up vote, off takes away whatever this account voted.</summary>
+        public static VoteResult Vote(Store st, int id, uint account, bool on, long now) => Vote(st, id, account, on ? 1 : 0, now);
+
+        /// <summary>The direction word of "@features vote &lt;id&gt; &lt;word&gt;": up/on (and a bare vote) 1, down -1,
+        /// off/none 0, anything else null. "on"/"off" are what clients before #34 send.</summary>
+        public static int? VoteWord(string w)
+        {
+            switch ((w ?? "").ToLowerInvariant())
+            {
+                case "": case "on": case "up": case "+": return 1;
+                case "down": case "dn": case "-": return -1;
+                case "off": case "none": case "clear": return 0;
+                default: return null;
+            }
         }
 
         // ---- posting -------------------------------------------------------------------------------
@@ -153,14 +185,16 @@ namespace RevivalGuard
 
         public static bool Delete(Store st, int id) => st.Items.RemoveAll(r => r.Id == id) > 0;
 
-        /// <summary>Fold one request into another: its voters join (each account still once), its carried votes add,
-        /// and it leaves the list.</summary>
+        /// <summary>Fold one request into another: its voters join (each account still once, and an account that already
+        /// voted on the target keeps that vote), its carried votes add, and it leaves the list.</summary>
         public static bool Merge(Store st, int from, int into, long now)
         {
             if (from == into) return false;
             var a = Find(st, from); var b = Find(st, into);
             if (a == null || b == null) return false;
-            foreach (var v in a.Voters) if (!b.Voters.Contains(v)) b.Voters.Add(v);
+            b.Voters ??= new List<uint>(); b.Downers ??= new List<uint>();
+            foreach (var v in a.Voters ?? new List<uint>()) if (VoteOf(b, v) == 0) b.Voters.Add(v);
+            foreach (var v in a.Downers ?? new List<uint>()) if (VoteOf(b, v) == 0) b.Downers.Add(v);
             b.BaseVotes += Math.Max(0, a.BaseVotes);
             b.Updated = now;
             st.Items.Remove(a);
@@ -267,13 +301,15 @@ namespace RevivalGuard
         }
 
         /// <summary>The board for one viewer, as the mod channel's "features" payload (JSON):
-        /// {"now","staff","left","say","items":[{"id","t","x","s","v","me","mine","at"}]} in display order.
-        /// "me" = this account voted, "mine" = this account wrote it. Authors are never sent.</summary>
+        /// {"now","staff","left","per","down","say","items":[{"id","t","x","s","v","up","dn","me","mine","at"}]} in display
+        /// order. "v" = the net score, "up"/"dn" its two halves, "me" = this account's vote (1 up, -1 down, 0 none; a
+        /// client from before #34 reads only 1 as voted), "mine" = this account wrote it, "down":1 = this server takes
+        /// down votes (a newer client hides its Down button without it). Authors are never sent.</summary>
         public static string Json(Store st, uint viewer, bool staff, long now, string say = null)
         {
             var sb = new StringBuilder("{\"now\":").Append(now).Append(",\"staff\":").Append(staff ? 1 : 0)
                 .Append(",\"left\":").Append(staff ? POSTS_PER_DAY : PostsLeft(st, viewer, now))
-                .Append(",\"per\":").Append(POSTS_PER_DAY);
+                .Append(",\"per\":").Append(POSTS_PER_DAY).Append(",\"down\":1");
             if (!string.IsNullOrEmpty(say)) sb.Append(",\"say\":").Append(Q(say));
             sb.Append(",\"items\":[");
             int n = 0;
@@ -282,7 +318,8 @@ namespace RevivalGuard
                 if (n++ > 0) sb.Append(',');
                 sb.Append("{\"id\":").Append(r.Id).Append(",\"t\":").Append(Q(r.Title)).Append(",\"x\":").Append(Q(r.Text))
                   .Append(",\"s\":").Append(Q(r.Status)).Append(",\"v\":").Append(Votes(r))
-                  .Append(",\"me\":").Append(r.Voters.Contains(viewer) ? 1 : 0)
+                  .Append(",\"up\":").Append(Ups(r)).Append(",\"dn\":").Append(Downs(r))
+                  .Append(",\"me\":").Append(VoteOf(r, viewer))
                   .Append(",\"mine\":").Append(r.Author != 0 && r.Author == viewer ? 1 : 0)
                   .Append(",\"at\":").Append(r.Created).Append('}');
             }

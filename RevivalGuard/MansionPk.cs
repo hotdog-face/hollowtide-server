@@ -21,10 +21,11 @@ namespace RevivalGuard
     /// default 86400 = 24 h; @modifylong changes it) of WALL-CLOCK time, empty or not, looted or not,
     /// across restarts. ACE normally gives a player corpse max(1 h, level x 5 min) of ticking time and
     /// drops an empty one to 15 s (WorldObject.Decay). The corpse carries its expiry (PropertyInt64
-    /// 29112, ours); the Decay prefix keeps TimeToRot at what is left until the last 15 s, then lets
+    /// 29112, ours); PkBattlefield's Decay prefix (the one owner of kept corpses) keeps TimeToRot at what is left until the last 15 s, then lets
     /// ACE rot it the usual way. corpse_spam_limit is still honoured: when ACE cuts the oldest corpse
     /// of a repeat victim to 15 s, that cut stands. The name ("Corpse of X") and the appraisal line
-    /// ("Killed by Y.") are ACE's own, retail's words.
+    /// ("Killed by Y.") are ACE's own, retail's words. With pk_battlefield_corpses on, every mansion
+    /// landblock is a PK battlefield instead (PkBattlefield: no timer, a cap per landblock).
     ///
     /// THE KILL BOARD. Every player killed by a player on those grounds is recorded against the
     /// mansion (mansions.json, last 60) and shown on the Allegiance Hall Board and by /mansion kills;
@@ -61,9 +62,9 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] MansionPk: {DECAY_PROPERTY} not registered with @modifylong ({e.Message}); it is still read"); }
         }
 
-        static long DecaySeconds() => PropertyManager.GetLong(DECAY_PROPERTY, DECAY_DEFAULT).Item;
+        internal static long DecaySeconds() => PropertyManager.GetLong(DECAY_PROPERTY, DECAY_DEFAULT).Item;
 
-        // ------------------------------------------------------------ the corpse, at death
+        // ------------------------------------------------------------ the corpse, at death (its timer: PkBattlefield)
 
         [HarmonyPatch(typeof(Corpse), nameof(Corpse.RecalculateDecayTime))]
         static class AtDeath
@@ -82,15 +83,6 @@ namespace RevivalGuard
             uint root = MansionIndex.MansionRootAt(loc.LandblockId.Landblock);
             if (root == 0) return;
 
-            long secs = DecaySeconds();
-            if (secs > 0)
-            {
-                long until = (long)ACE.Common.Time.GetUnixTime() + secs;
-                corpse.SetProperty(TROPHY_UNTIL, until);
-                corpse.TimeToRot = Math.Max(corpse.TimeToRot ?? 0, secs);
-                Mod.Log.Info($"[RevivalGuard] MansionPk: {corpse.Name} (0x{corpse.Guid.Full:X8}) lies on the grounds of mansion 0x{root:X8}; it lasts {secs} s");
-            }
-
             uint killerGuid = corpse.KillerId ?? 0;
             if (killerGuid == 0 || killerGuid == victim.Guid.Full || !new ObjectGuid(killerGuid).IsPlayer()) return;
             var killer = PlayerManager.FindByGuid(killerGuid);
@@ -108,25 +100,6 @@ namespace RevivalGuard
             string of = rec.KillerAllegiance != null ? $" of {rec.KillerAllegiance}" : "";
             foreach (var m in Mansions.Defenders(owner))
                 Mansions.Say(m, $"{victim.Name} was killed by {killer.Name}{of} on the grounds of your mansion.", ChatMessageType.Allegiance);
-        }
-
-        // ------------------------------------------------------------ the corpse, as it lies there
-
-        [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.Decay))]
-        static class Lasts
-        {
-            static bool Prefix(WorldObject __instance)
-            {
-                if (!(__instance is Corpse c)) return true;
-                var until = c.GetProperty(TROPHY_UNTIL);
-                if (until == null || !c.InventoryLoaded) return true;
-                // corpse_spam_limit (Landblock.AddWorldObjectInternal) or an earlier pass cut it to 15 s: let it go
-                if ((c.TimeToRot ?? 0) <= Corpse.EmptyDecayTime) return true;
-                double left = until.Value - ACE.Common.Time.GetUnixTime();
-                if (left > Corpse.EmptyDecayTime) { c.TimeToRot = left; return false; }
-                c.TimeToRot = Math.Max(0.5, left);
-                return true;
-            }
         }
 
         // ------------------------------------------------------------ the kill board

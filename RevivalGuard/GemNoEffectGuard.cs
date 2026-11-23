@@ -21,6 +21,7 @@ namespace RevivalGuard
         static bool Prefix(Gem __instance, Player player)
         {
             if (__instance == null || player == null) return true;
+            if (__instance.WeenieClassId == PkTrophies.WRIT) return true;   // the Combat Arena Writ: PkTrophies handles it
             bool hasEffect = __instance.SpellDID.HasValue
                              || (__instance.UseCreateContractId ?? 0) > 0
                              || (__instance.UseCreateItem ?? 0) > 0;

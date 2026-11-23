@@ -25,6 +25,11 @@ namespace RevivalGuard
         /// <summary>A Borg: a shard account (the caller says whether the account is one) and the Borg suffix.</summary>
         public static bool IsBorg(bool shardAccount, string characterName) => shardAccount && HasBorgSuffix(characterName);
 
+        /// <summary>The Hollow Company alone: a mercenary account (the caller's allowlist answer) that is not a Borg. In PK
+        /// (the honour check, PK Night's hill) the Borg count as players (owner 2026-11-22, docs/proposals/pk-night-v2.md
+        /// item 5); the sellswords never do.</summary>
+        public static bool IsHollowCompany(bool mercAccount, string characterName) => mercAccount && !IsBorg(true, characterName);
+
         /// <summary>Why a new character's name is refused, or null when it may be made. Staff and the shard's own accounts
         /// are exempt; anyone else may not end a name in " of Borg" (any case). For logs only.</summary>
         public static string RefuseName(string characterName, bool shardAccount, bool staff)

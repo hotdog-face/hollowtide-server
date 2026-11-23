@@ -66,6 +66,14 @@ namespace RevivalGuard
         /// <summary>By account name, for a character that may be offline (the PK ladder's re-judge).</summary>
         public static bool IsMercAccount(string name) => name != null && IsReservedName(name) && Allow().Contains(name);
 
+        /// <summary>A Hollow Company sellsword, not a Borg (BorgRule.IsHollowCompany): what PK leaves out. IsMerc is true for
+        /// both, since the Borg play on the same allowlisted accounts.</summary>
+        public static bool IsHollowCompany(Player p) => p != null && BorgRule.IsHollowCompany(IsMerc(p), p.Name);
+
+        /// <summary>By account and character name, for a character that may be offline (the PK ladder's re-judge).</summary>
+        public static bool IsHollowCompanyAccount(string accountName, string characterName) =>
+            BorgRule.IsHollowCompany(IsMercAccount(accountName), characterName);
+
         public static int RealOnline()
         {
             try { return PlayerManager.GetAllOnline().Count(p => !IsMerc(p)); }

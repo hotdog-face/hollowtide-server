@@ -29,12 +29,17 @@ namespace RevivalGuard
     /// A cast in its turn with the body standing still on walkable ground and the heading fixed for 1.5 s will never
     /// complete the turn (261029-0010, often on a slope): it ends then, with no mana or components spent
     /// (CastTurnStallRule, switch rg_cast_turn_stall). Checked every 0.25 s so the 1.5 s is not rounded up to 3.
+    /// A turn that keeps turning without arriving (3 s+ turning, over 360 degrees in all; a turn to a target is at most
+    /// 180) ends the same way (CastTurnStallRule.SpinNow, switch rg_cast_turn_spin, cast.spin_seconds / cast.spin_degrees).
     /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class CastWatchdog
     {
         const string P_ON = "rg_cast_watchdog";
         const string P_STALL = "rg_cast_turn_stall";
+        const string P_SPIN = "rg_cast_turn_spin";
+        static double SPIN_SECONDS => Tunables.D("cast.spin_seconds", CastTurnStallRule.SpinSeconds);
+        static double SPIN_DEGREES => Tunables.D("cast.spin_degrees", CastTurnStallRule.SpinDegrees);
         static double CAST_STUCK => Tunables.D("cast.stuck_seconds", 10.0);
         static double UNFOOTED => Tunables.D("cast.unfooted_seconds", 2.0);
         // 1 s, was 3 (ticket 261107-0013): Mark the Noble's self heals stalled this way 171 times in one night (gesture 0.3 s,
@@ -47,6 +52,7 @@ namespace RevivalGuard
         sealed class TurnSample
         {
             public int CastNum; public double At, Since = double.NaN; public float Heading; public ACE.Server.Physics.Common.Position Pos;
+            public double SpinSince = double.NaN, Turned;   // CastTurnStallRule.Spin: turning since, degrees turned in all
             // for the 10 s line: why the turn-stall rule did not end this cast (audit 2026-11-09: 7 of 11 full fizzles read
             // "turning True, velocity 0, walkable" and the rule fired once)
             public double Rate, Speed, MaxRate, MaxSpeed; public int Samples, StalledSamples;
@@ -160,11 +166,12 @@ namespace RevivalGuard
             if (s_Turn.Count > 200) s_Turn.Clear();
         }
 
-        /// <summary>The turn-stall early end (CastTurnStallRule): true once it has queued the end of this cast.</summary>
+        /// <summary>The turn-stall and turn-spin early ends (CastTurnStallRule): true once it has queued the end of this cast.</summary>
         static bool TurnStalled(Player p, ACE.Server.Entity.MagicState ms, double now, double age)
         {
             var po = p.PhysicsObj;
-            if (po == null || !PropertyManager.GetBool(P_STALL, true).Item) return false;
+            bool stallOn = PropertyManager.GetBool(P_STALL, true).Item, spinOn = PropertyManager.GetBool(P_SPIN, true).Item;
+            if (po == null || (!stallOn && !spinOn)) return false;
             uint id = p.Guid.Full;
             if (!s_Turn.TryGetValue(id, out var t) || t.CastNum != ms.CastNum) s_Turn[id] = t = new TurnSample { CastNum = ms.CastNum };
             float heading = po.get_heading();
@@ -172,6 +179,7 @@ namespace RevivalGuard
             double moved = t.Pos == null ? 0 : t.Pos.Distance(po.Position);
             double turned = t.Pos == null ? 0 : CastTurnStallRule.HeadingDelta(t.Heading, heading);
             double stalled = CastTurnStallRule.Stalled(ms.IsTurning, ms.PendingTurnRelease, ServerFooting.Walkable(p), moved, turned, dt, ref t.Since, now);
+            CastTurnStallRule.Spin(ms.IsTurning, ms.PendingTurnRelease, turned, dt, ref t.SpinSince, ref t.Turned, now);
             if (dt > 0)
             {
                 t.Rate = turned / dt; t.Speed = moved / dt; t.Samples++;
@@ -180,16 +188,20 @@ namespace RevivalGuard
                 if (!double.IsNaN(t.Since)) t.StalledSamples++;
             }
             t.At = now; t.Heading = heading; t.Pos = new ACE.Server.Physics.Common.Position(po.Position);
-            if (!CastTurnStallRule.FailNow(stalled)) return false;
+            string why;
+            if (stallOn && CastTurnStallRule.FailNow(stalled)) why = $"turn stalled {stalled:F1}s";
+            else if (spinOn && CastTurnStallRule.SpinNow(t.SpinSince, t.Turned, now, SPIN_SECONDS, SPIN_DEGREES))
+                why = $"turn not converging ({t.Turned:F0} deg turned in {now - t.SpinSince:F1}s, rate {t.Rate:F0} deg/s)";
+            else return false;
             s_Turn.Remove(id);
             int castNum = ms.CastNum;
             p.EnqueueAction(new ActionEventDelegate(() =>
             {
                 var m = p.MagicState;
                 if (!m.IsCasting || m.CastNum != castNum || !m.IsTurning) return;
-                Mod.Log.Warn($"[RevivalGuard] cast watchdog: {p.Name} (0x{p.Guid.Full:X8}) cast #{castNum} turn stalled {stalled:F1}s "
+                Mod.Log.Warn($"[RevivalGuard] cast watchdog: {p.Name} (0x{p.Guid.Full:X8}) cast #{castNum} {why} "
                     + $"({age:F1}s into the cast; heading {heading:F0}, velocity {po.Velocity.Length():F2}, {ProbeLine(p, castNum)}, {ServerFooting.Describe(p)}): ended, nothing spent");
-                BusyLedger.Note(p, $"cast watchdog: cast #{castNum} turn stalled {stalled:F1}s, ended at {age:F1}s");
+                BusyLedger.Note(p, $"cast watchdog: cast #{castNum} {why}, ended at {age:F1}s");
                 // FailCast(tryFizzle: false) without its DoCastSpell_Inner: no mana, no components; the fizzle answer so the
                 // client and the assistant see the cast end. OnCastDone first, so the cancelled turn's OnMoveComplete_Magic
                 // finds no cast to carry on.

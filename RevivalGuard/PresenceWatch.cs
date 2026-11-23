@@ -64,6 +64,8 @@ namespace RevivalGuard
         }
 
         static readonly Dictionary<uint, Seen> s_Seen = new Dictionary<uint, Seen>();
+        /// <summary>Unix seconds of each player's last hit dealt or taken (PresenceCombatHook); cleared with s_Seen.</summary>
+        static readonly Dictionary<uint, double> s_Hit = new Dictionary<uint, double>();
         static readonly object s_Lock = new object();
         static double s_NextSample;
 
@@ -111,6 +113,8 @@ namespace RevivalGuard
                 // IS a move.
                 foreach (var gone in s_Seen.Keys.Where(k => !live.Contains(k)).ToList())
                     s_Seen.Remove(gone);
+                foreach (var gone in s_Hit.Keys.Where(k => !live.Contains(k)).ToList())
+                    s_Hit.Remove(gone);
             }
         }
 
@@ -153,11 +157,31 @@ namespace RevivalGuard
         static void Say(Session s, string text) =>
             s?.Network?.EnqueueSend(new GameMessageSystemChat(text, ChatMessageType.Broadcast));
 
-        static string Still(double seconds)
+        static string Still(double seconds) => PresenceStateRule.Span(seconds);
+
+        /// <summary>A hit landed (DamageHistory.Add): both sides, when they are players, are in combat now.</summary>
+        internal static void OnHit(WorldObject victim, WorldObject attacker)
         {
-            if (seconds < 60) return $"{(int)seconds}s";
-            if (seconds < 3600) return $"{(int)(seconds / 60)}m";
-            return $"{seconds / 3600:0.#}h";
+            var now = ACE.Common.Time.GetUnixTime();
+            lock (s_Lock)
+            {
+                if (victim is Player v) s_Hit[v.Guid.Full] = now;
+                if (attacker is Player a) s_Hit[a.Guid.Full] = now;
+            }
+        }
+
+        /// <summary>The activity word (PresenceStateRule): portal space, combat, idle, active; Assistant or away first.</summary>
+        static string State(Player p, double now)
+        {
+            double moved, hit;
+            lock (s_Lock)
+            {
+                moved = s_Seen.TryGetValue(p.Guid.Full, out var s) ? s.MovedAt : now;   // not sampled yet: just logged in
+                hit = s_Hit.TryGetValue(p.Guid.Full, out var h) ? h : 0;
+            }
+            bool assistant = p.GetProperty(AwayMessage.ON) == true && p.GetProperty(AwayMessage.AUTO) == true;
+            bool away = p.GetProperty(AwayMessage.ON) == true || p.IsAfk;
+            return PresenceStateRule.State(now, moved, hit, p.LastSuccessCast_Time, p.Teleporting, assistant, away);
         }
 
         /// <summary>Seconds since this player last moved, or -1 if we have not sampled them yet.</summary>
@@ -172,8 +196,10 @@ namespace RevivalGuard
             var still = StillFor(p, now);
             var where = p.Location == null ? "nowhere"
                 : $"0x{p.Location.Cell:X8} [{p.Location.PositionX:0.#} {p.Location.PositionY:0.#} {p.Location.PositionZ:0.#}]";
+            // "(kind; state)" last: the admin panel (AcAdminWhoRow) reads it for its place and activity words.
+            string kind = p.Location == null ? "outdoors" : PresenceStateRule.Kind(p.Location.Indoors, p.CurrentLandblock?.IsDungeon ?? true);
             return $"{p.Name} (lvl {p.Level}, {p.Account?.AccountName ?? "?"})  {where}  "
-                 + $"still {(still < 0 ? "?" : Still(still))}{(p.Teleporting ? "  TELEPORTING" : "")}";
+                 + $"still {(still < 0 ? "?" : Still(still))}{(p.Teleporting ? "  TELEPORTING" : "")}  ({kind}; {State(p, now)})";
         }
 
         static void Pop(Session session, params string[] parameters)
@@ -220,6 +246,17 @@ namespace RevivalGuard
             foreach (var p in hits.Take(30)) Say(session, Line(p, now));
             Say(session, "Standing still is not the same as stuck -- ask before acting. "
                 + "@who <name> for detail, @teleto <name> to go and look.");
+        }
+    }
+
+    /// <summary>Every hit, melee, missile or spell, goes through DamageHistory.Add (as BaelShadowPullHook): marks combat.</summary>
+    [HarmonyPatch(typeof(ACE.Server.Entity.DamageHistory), nameof(ACE.Server.Entity.DamageHistory.Add))]
+    static class PresenceCombatHook
+    {
+        static void Postfix(ACE.Server.Entity.DamageHistory __instance, WorldObject attacker)
+        {
+            try { PresenceWatch.OnHit(__instance.Creature, attacker); }
+            catch (Exception e) { TickGuard.Report("PresenceCombatHook", e); }
         }
     }
 }

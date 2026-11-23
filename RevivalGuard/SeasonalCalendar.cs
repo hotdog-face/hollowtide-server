@@ -164,7 +164,12 @@ namespace RevivalGuard
 
         /// <summary>A Pending festival (waiting for the owner's yes) counts only once every row it turns on exists in
         /// ace_world: its datafix is the switch, so the mod can ship before the content does.</summary>
-        internal static bool Installed(Festival f) => !f.Pending || f.On.All(EventManager.IsEventAvailable);
+        internal static bool Installed(Festival f) => (!f.Pending || f.On.All(EventManager.IsEventAvailable)) && Switched(f);
+
+        /// <summary>A festival behind a staff switch as well (default off): Bael'Zharon's Rampage, rg_bz_rampage (the admin
+        /// panel's Events page). Off, it is off for the notices, the director and the client's calendar alike.</summary>
+        static bool Switched(Festival f) =>
+            !f.Key.Equals(BaelRampage.FESTIVAL, StringComparison.OrdinalIgnoreCase) || BaelRampage.SwitchOn;
 
         /// <summary>A file beside the dll, next to SeasonalOverrides.json (FestivalNotices keeps its state there).</summary>
         internal static string FileBeside(string name) => Path.Combine(Path.GetDirectoryName(OverridePath()), name);
@@ -348,7 +353,7 @@ namespace RevivalGuard
             // ON beats OFF; a row a festival suppresses is On outside it (SeasonalCalendar.Table.cs Desired)
             var (wantOn, wantOff) = Desired(active);
             // a Pending festival's missing rows are not news every minute (its datafix is not applied yet)
-            foreach (var f in Calendar) if (!Installed(f)) wantOff.ExceptWith(f.On);
+            foreach (var f in Calendar) if (f.Pending && !f.On.All(EventManager.IsEventAvailable)) wantOff.ExceptWith(f.On);
 
             foreach (var name in wantOn) Set(name, true);
             foreach (var name in wantOff) Set(name, false);

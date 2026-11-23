@@ -23,6 +23,16 @@ namespace RevivalGuard
 
         internal static bool IsHeroRaid(string key) => key != null && KEYS.Contains(key);
 
+        /// <summary>A creature from one of the two fights' generators (rows from 2027-03-14-heroraids-1-hebian.sql).</summary>
+        internal static bool IsRaider(Creature c)
+        {
+            var row = c?.Generator?.GeneratorEvent;
+            if (string.IsNullOrEmpty(row)) return false;
+            row = ACE.Server.Managers.EventManager.GetEventName(row);
+            return "DirectorHeroKnath".Equals(row, StringComparison.OrdinalIgnoreCase)
+                || "DirectorHeroApostate".Equals(row, StringComparison.OrdinalIgnoreCase);
+        }
+
         internal static void Won(string key, List<Player> near)
         {
             int given = 0, had = 0;

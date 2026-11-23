@@ -52,8 +52,12 @@ namespace RevivalGuard
         /// <summary>Martine Attacks (retail May to Jun 2002): two director entries (docs/EVENT-TESTS/martine-attacks.md).</summary>
         public const string MARTINE_ATTACKS = "martineattacks";
 
+        /// <summary>Bael'Zharon's Rampage (retail Dec 2000): seven director entries, one town visit each (BaelRampage.cs,
+        /// docs/EVENT-TESTS/bz-rampage.md). Its festival also needs rg_bz_rampage on (SeasonalCalendar.Switched).</summary>
+        public const string BZ_RAMPAGE = "bzrampage";
+
         /// <summary>The revived retired events whose own entries run with rg_event_director off (rg_event_director_retired).</summary>
-        public static readonly string[] RETIRED = { BUR_RITUAL, PRODIGAL, MHOIRE, HERO_RAIDS, BURNJA, BURUN_RAIDS, VIRIDIAN_BAISHI, MARTINE_ATTACKS };
+        public static readonly string[] RETIRED = { BUR_RITUAL, PRODIGAL, MHOIRE, HERO_RAIDS, BURNJA, BURUN_RAIDS, VIRIDIAN_BAISHI, MARTINE_ATTACKS, BZ_RAMPAGE };
 
         /// <summary>
         /// FESTIVALS THAT RUN THEIR OWN EVENTS. Frostfell (above) and T'thuun's Marauders (2026-11-01, docs/EVENT-TESTS/
@@ -88,6 +92,14 @@ namespace RevivalGuard
         /// The director keeps that: a raid may not start within this many seconds of the last raid's start.</summary>
         public const double RAID_APART_S = 14400;
         public const string RAID_REGION = "presentraids";
+
+        /// <summary>Bael'Zharon tours the towns (retail's tour went town to town): no bz- entry within 10 hours of the last
+        /// one's start, about two visits a day (owner 2026-11-21 "Fill it out"), drifting round the clock for every time zone.</summary>
+        public const double BZ_APART_S = 10 * 3600;
+        public const string BZ_REGION = "bzrampage";
+
+        /// <summary>Groups whose entries keep apart (region shared by the group, seconds between starts).</summary>
+        public static readonly (string region, double apart)[] APART = { (RAID_REGION, RAID_APART_S), (BZ_REGION, BZ_APART_S) };
 
         /// <summary>Did any entry of this group start less than `apart` seconds before `now`? (lastStarts: unix seconds,
         /// 0 or missing = never.)</summary>

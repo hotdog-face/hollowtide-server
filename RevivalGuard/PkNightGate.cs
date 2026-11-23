@@ -11,7 +11,7 @@ namespace RevivalGuard
 {
     /// <summary>
     /// PK NIGHT'S EVENT PORTALS AND QUIET GROUND (owner 2026-11-20, "Yes, this Sunday": the Dark Isle). For a spot with
-    /// HasGate (PkNightRules), from an hour before the start to the end of the round (GateSpot):
+    /// HasGate (PkNightRules), from GATE_LEAD_MINUTES (30) before the start to the end of the round (GateSpot):
     ///   * a "Dark Isle Portal" stands in Holtburg's lower town (never the lifestone square where players arrive) and lands
     ///     players on the beach by the spot, no flagging quest asked; a "Holtburg Portal" on the beach takes them back;
     ///   * creature generators within the spot's ClearMetres of the centre or the landing do not generate (a prefix on
@@ -75,7 +75,7 @@ namespace RevivalGuard
         /// <summary>A portal to (re)make: never made, destroyed, or out of the world for a while (a landblock unload took
         /// it). Remade only where its landblock is loaded again (a player there), except the first time, so an empty isle
         /// is not kept awake.</summary>
-        static bool Gone(Portal p, double madeAt, double now, double ns, double ew)
+        static bool Gone(WorldObject p, double madeAt, double now, double ns, double ew)
         {
             if (p == null) return true;
             bool gone = p.IsDestroyed || (p.CurrentLandblock == null && now - madeAt > REMAKE_AFTER_S);

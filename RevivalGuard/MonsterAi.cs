@@ -701,6 +701,7 @@ namespace RevivalGuard
                 st.Mode = Mode.None; st.Fled = false; st.HoldSince = 0; st.PackFor = 0; st.LastTarget = 0;
             }
             if (!wasReturning || c.IsDead) return;
+            if (c.WeenieClassId == EventBoss.WCID) return;   // the event boss keeps his wounds: his fighters die, run and get thrown to Teth (EventBoss.cs)
             var cfg = Config(Timers.RunningTime);
             if (!cfg.Leash || c.Health.Current >= c.Health.MaxValue) return;
             c.SetMaxVitals();

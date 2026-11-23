@@ -7,7 +7,7 @@ namespace RevivalGuard
 {
     /// <summary>
     /// PK NIGHT, THE PURE HALF (no ACE types; tools/nettest compiles this file by path, PkNightCase). The schedule
-    /// (every Sunday 7 PM Pacific for an hour, first run 2026-11-22), the spot rotation, the hold scoring, the tie
+    /// (every Sunday 7 PM Pacific for ROUND_MINUTES, first run 2026-11-22), the spot rotation, the hold scoring, the tie
     /// rule, which announcement is due when, and every line a player reads. PkNight.cs runs it on the world loop.
     /// Design: docs/proposals/pk-night.md; the owner's decisions: docs/proposals/pk-night-decisions.md.
     /// </summary>
@@ -18,7 +18,12 @@ namespace RevivalGuard
         /// <summary>The first run (owner 2026-11-09): Sunday 2026-11-22. Nothing is announced or run before it.</summary>
         public static readonly DateTime FIRST_SUNDAY = new DateTime(2026, 11, 22, 0, 0, 0, DateTimeKind.Unspecified);
         public const int START_HOUR = 19;          // 7 PM Pacific
-        public const int ROUND_MINUTES = 60;
+        /// <summary>The round's length (owner 2026-11-22 after PK Night #1, "too long, could be 30-45 mins"; v2 plan: 40).
+        /// One number to change: the player lines say it through RoundWords().</summary>
+        public const int ROUND_MINUTES = 40;
+        public static string RoundWords(int minutes = ROUND_MINUTES) => minutes == 60 ? "the hour" : $"{minutes} minutes";
+        /// <summary>The moving hill in a sentence (PkNightHillRules), for the notices, the login line and the board.</summary>
+        public static string HillWords() => $"The hill moves every {HILL_MOVE_MINUTES} minutes and torches mark its edge.";
         public const string WHEN_WORDS = "Sunday at 7 PM Pacific";
 
         /// <summary>US daylight saving (since 2007): from the second Sunday of March at 2:00 to the first Sunday of
@@ -106,7 +111,7 @@ namespace RevivalGuard
         public sealed class Spot
         {
             public string Key, Name, Where, Near, Levels;
-            /// <summary>How to walk there, said in the hour-before and start lines (owner 2026-11-18, after the Borg walk test:
+            /// <summary>How to walk there, said in the prep (30 minutes before) and start lines (owner 2026-11-18, after the Borg walk test:
             /// Arwic has no north gate). Null: no directions line.</summary>
             public string Way;
             public double Ns, Ew;
@@ -129,7 +134,7 @@ namespace RevivalGuard
             // only by the Dark Isle Flagging quest or the far east of Vissidal, so PK Night opens a portal from Holtburg.
             new Spot { Key = "darkisle", Name = "the Dark Isle", Where = "84.7N 58.4E", Ns = 84.72, Ew = 58.42,
                        Near = "the sand of the Dark Isle's south beach by its lifestone, north of Vissidal", Levels = "any level",
-                       Way = "The way in is a portal in Holtburg's lower town, open from an hour before the start, and a portal home waits on the beach.",
+                       Way = $"The way in is a portal in Holtburg's lower town, open from {LeadWords()} before the start, and a portal home waits on the beach.",
                        LandNs = 84.5667, LandEw = 58.25, HomeNs = 84.5833, HomeEw = 58.1667, ClearMetres = 300 },
             new Spot { Key = "zombiecastle", Name = "Zombie Castle", Where = "45.2S 39.1E", Ns = -45.2, Ew = 39.1,
                        Near = "the castle ruin in southern Osteth, by the Zombie Castle estates", Levels = "20 and up" },
@@ -155,11 +160,17 @@ namespace RevivalGuard
         /// area); not by the cow pen east of the sign (box test 2026-11-20: a portal there stood inside the fence), nor on the
         /// bank down to the shore at 80, 176. The way-home portal lands players 13 m south-east of it, on the road.</summary>
         public const double HOLTBURG_GATE_NS = 42.7, HOLTBURG_GATE_EW = 33.5167, HOLTBURG_LAND_NS = 42.6708, HOLTBURG_LAND_EW = 33.5583;
-        public const int GATE_LEAD_MINUTES = 60;      // the portals open an hour before the start and close at the end
+        /// <summary>The prep time (owner 2026-11-22: "1 hr for people to prep is a long time. make it 30 mins"): the portals
+        /// open this long before the start (and close at the end), and the prep notice goes out then. One number to change:
+        /// the player lines say it through LeadWords().</summary>
+        public const int GATE_LEAD_MINUTES = 30;
+        /// <summary>A method, not a static field: SPOTS (above, initialised first) uses it.</summary>
+        public static string LeadWords() => GATE_LEAD_MINUTES % 60 == 0
+            ? (GATE_LEAD_MINUTES == 60 ? "one hour" : $"{GATE_LEAD_MINUTES / 60} hours") : $"{GATE_LEAD_MINUTES} minutes";
 
         /// <summary>The spot whose portals should stand now (and whose creatures are paused), or null. A running round:
-        /// until its end (a staff round opens them at its start). No round running: the next scheduled one from an hour
-        /// before its start, unless that hour's round was already played (ended early by staff).</summary>
+        /// until its end (a staff round opens them at its start). No round running: the next scheduled one from
+        /// GATE_LEAD_MINUTES before its start, unless that round was already played (ended early by staff).</summary>
         public static Spot GateSpot(Live live, Scheduled next, bool nextPlayed, DateTime utcNow)
         {
             if (live != null)
@@ -186,13 +197,18 @@ namespace RevivalGuard
         /// <summary>Global metres (ACE ToGlobal) of a map point.</summary>
         public static (double x, double y) GlobalOfMap(double ns, double ew) => ((ew + 102) * 240, (ns + 102) * 240);
 
-        /// <summary>A global point inside the spot's paused zone: within ClearMetres of the centre or of the landing.</summary>
+        /// <summary>A global point inside the spot's paused zone: within ClearMetres of the landing or of a hill point (the centre first).</summary>
         public static bool InClearZone(Spot s, double gx, double gy, double metres)
         {
             if (s == null || metres <= 0) return false;
-            var c = GlobalOfMap(s.Ns, s.Ew); var l = GlobalOfMap(s.LandNs, s.LandEw);
-            return (gx - c.x) * (gx - c.x) + (gy - c.y) * (gy - c.y) <= metres * metres
-                || (gx - l.x) * (gx - l.x) + (gy - l.y) * (gy - l.y) <= metres * metres;
+            var l = GlobalOfMap(s.LandNs, s.LandEw);
+            if ((gx - l.x) * (gx - l.x) + (gy - l.y) * (gy - l.y) <= metres * metres) return true;
+            foreach (var h in HillPoints(s))   // the centre is the first; v2: every point the hill moves to
+            {
+                var c = GlobalOfMap(h.Ns, h.Ew);
+                if ((gx - c.x) * (gx - c.x) + (gy - c.y) * (gy - c.y) <= metres * metres) return true;
+            }
+            return false;
         }
 
         public const string GATE_NAME = "Dark Isle Portal", HOME_NAME = "Holtburg Portal";
@@ -224,6 +240,7 @@ namespace RevivalGuard
             public double Held { get; set; }          // seconds held, uncontested
             public double LastHeldAt { get; set; }    // unix; the tie rule
             public HashSet<uint> Present { get; set; } = new HashSet<uint>();   // who stood there for the side, by guid
+            public uint Leader { get; set; }          // fellowship mode: its leader at the last scoring tick (a side of one: the player)
         }
 
         /// <summary>A round in progress: what the file keeps between ticks and across a restart.</summary>
@@ -243,16 +260,104 @@ namespace RevivalGuard
             public double LeadSaidAt { get; set; }
             public HashSet<string> Said { get; set; } = new HashSet<string>();   // "standings10", "standings20", ...
             public double LastTickAt { get; set; }
+            /// <summary>"fellowship" or "allegiance", fixed when the round opens (pk_night_sides); null in a file saved before
+            /// fellowship mode existed, whose round was scored by allegiance.</summary>
+            public string SideRule { get; set; }
+            /// <summary>Fellowship mode, the anti-hop rule (owner 2026-11-22): each player's first side this round, by guid,
+            /// and the players who changed side since and count for nobody until the end. Saved with the round.</summary>
+            public Dictionary<uint, uint> Locked { get; set; } = new Dictionary<uint, uint>();
+            public HashSet<uint> Benched { get; set; } = new HashSet<uint>();
+            [System.Text.Json.Serialization.JsonIgnore] public bool ByFellowship => SideRule == SIDES_FELLOWSHIP;
         }
 
-        public struct Presence { public uint Side; public string Label; public uint Guid; }
+        /// <summary>A player the tick looked at. Away: online but outside the circle (or unable to hold it), looked at only
+        /// for the anti-hop rule. Regrouping: after a restart mid-round, locked to a fellowship the restart dissolved and
+        /// alone now: counts for nobody but is not benched (they are forming it again).</summary>
+        public struct Presence { public uint Side; public string Label; public uint Guid; public uint Leader; public bool Away; public bool Regrouping; }
+
+        // ---------------------------------------------------------------- the sides (owner 2026-11-22, docs/proposals/pk-night-fellowship.md)
+
+        /// <summary>Server property pk_night_sides: "fellowship" (the default) or "allegiance". Anything but "allegiance",
+        /// an unset value included, is fellowship mode.</summary>
+        public const string SIDES_FELLOWSHIP = "fellowship", SIDES_ALLEGIANCE = "allegiance";
+        public static bool IsFellowshipMode(string value) =>
+            !string.Equals((value ?? "").Trim(), SIDES_ALLEGIANCE, StringComparison.OrdinalIgnoreCase);
+        public static string SidesOf(string value) => IsFellowshipMode(value) ? SIDES_FELLOWSHIP : SIDES_ALLEGIANCE;
+
+        /// <summary>A fellowship's side key, for its lifetime (the Fellowship object: ACE keeps it through a leader change and
+        /// drops it at a disband). Keys sit below player guids (0x50000000 up), so a side of one never meets a fellowship.</summary>
+        public const uint FELLOW_KEY_BASE = 0x20000000, FELLOW_KEY_END = 0x50000000;
+        public static bool IsFellowKey(uint key) => key >= FELLOW_KEY_BASE && key < FELLOW_KEY_END;
+
+        /// <summary>The next fellowship key to hand out: past every key already used (saved rounds and the live one), so a
+        /// restart, which forgets which object had which key, never gives an old key to a new fellowship.</summary>
+        public static uint NextFellowKey(IEnumerable<uint> used, uint counter)
+        {
+            uint k = Math.Max(counter, FELLOW_KEY_BASE);
+            foreach (var u in used) if (IsFellowKey(u) && u >= k) k = u + 1;
+            return k;
+        }
+
+        /// <summary>Every key a round holds (its sides and its locks).</summary>
+        public static IEnumerable<uint> KeysOf(Live live) =>
+            live == null ? Enumerable.Empty<uint>() : live.Sides.Keys.Concat(live.Locked.Values);
+
+        /// <summary>After a restart mid-round: a fellowship formed again takes back the key its members were locked to
+        /// (the most of them; a key issued before this process started, below firstKey, not yet taken back). 0: none.</summary>
+        public static uint AdoptKey(Live live, IEnumerable<uint> members, ICollection<uint> adopted, uint firstKey)
+        {
+            if (live == null || !live.ByFellowship) return 0;
+            return members.Select(m => live.Locked.TryGetValue(m, out var k) ? k : 0)
+                .Where(k => IsFellowKey(k) && k < firstKey && !adopted.Contains(k))
+                .GroupBy(k => k).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).Select(g => g.Key).FirstOrDefault();
+        }
+
+        /// <summary>A player locked to a fellowship a restart dissolved (its key is from before firstKey).</summary>
+        public static bool LockedToGone(Live live, uint guid, uint firstKey) =>
+            live != null && live.ByFellowship && live.Locked.TryGetValue(guid, out var k) && IsFellowKey(k) && k < firstKey;
+
+        /// <summary>The anti-hop rule (fellowship mode only): a player's side is locked to the first side they were counted
+        /// for this round; once they are seen on another (another fellowship, or alone after leaving one) they count for
+        /// nobody until the round ends. Returns who counts in the circle; `benched` gets the players benched just now.</summary>
+        public static List<Presence> Admit(Live live, IEnumerable<Presence> seen, List<uint> benched = null)
+        {
+            var counted = new List<Presence>();
+            foreach (var p in seen)
+            {
+                if (!live.ByFellowship) { if (!p.Away) counted.Add(p); continue; }
+                if (live.Benched.Contains(p.Guid) || p.Regrouping) continue;
+                if (live.Locked.TryGetValue(p.Guid, out var first))
+                {
+                    if (first != p.Side) { live.Benched.Add(p.Guid); benched?.Add(p.Guid); continue; }
+                    if (!p.Away) counted.Add(p);
+                    continue;
+                }
+                if (p.Away) continue;
+                live.Locked[p.Guid] = p.Side;
+                counted.Add(p);
+            }
+            return counted;
+        }
+
+        /// <summary>Who gets the Banner of the Held Ground for this winner, or 0. Allegiance mode: the side (its monarch, or
+        /// the lone winner), once per allegiance ever (`sides`). Fellowship mode: the fellowship's leader at the end
+        /// (leaderNow; else the last one seen holding), once per player ever: not one already given a banner either way.</summary>
+        public static uint BannerTo(bool byFellowship, Standing w, uint leaderNow, ICollection<uint> sides, ICollection<uint> players)
+        {
+            if (w == null) return 0;
+            if (!byFellowship) return w.Side != 0 && !sides.Contains(w.Side) ? w.Side : 0;
+            uint who = leaderNow != 0 ? leaderNow : w.Leader != 0 ? w.Leader : (IsFellowKey(w.Side) ? 0 : w.Side);
+            return who != 0 && !players.Contains(who) && !sides.Contains(who) ? who : 0;
+        }
+
+        static string Word(bool fs) => fs ? "fellowship" : "allegiance";
 
         /// <summary>One scoring tick. `present` is every eligible player killer within the radius. One side alone
         /// holds and earns the tick; two or more sides are a contest and nobody earns it; nobody there, nobody
         /// earns it. Returns the side that took the lead on this tick, or 0.</summary>
-        public static uint Tick(Live live, IEnumerable<Presence> present, double now, double dt)
+        public static uint Tick(Live live, IEnumerable<Presence> present, double now, double dt, List<uint> benched = null)
         {
-            var here = present.ToList();
+            var here = Admit(live, present, benched);
             var sides = here.Select(p => p.Side).Distinct().ToList();
             live.PresentNow = here.Count;
             live.Contested = sides.Count > 1;
@@ -265,6 +370,7 @@ namespace RevivalGuard
                 if (!live.Sides.TryGetValue(side, out var st))
                     live.Sides[side] = st = new Standing { Side = side, Name = here[0].Label };
                 st.Name = here[0].Label;
+                if (here[0].Leader != 0) st.Leader = here[0].Leader;
                 st.Held += dt;
                 st.LastHeldAt = now;
                 foreach (var p in here) st.Present.Add(p.Guid);
@@ -284,21 +390,23 @@ namespace RevivalGuard
 
         // ---------------------------------------------------------------- the announcements
 
-        public enum Notice { DayBefore, HourBefore, TenMinutes, Start, Standings, End }
+        public enum Notice { DayBefore, PrepBefore, TenMinutes, Start, Standings, End }
 
         /// <summary>Which pre-round notice is due now for a scheduled round, given what was already said for it.
         /// Each has a window: a notice the server slept through (down at the moment) is skipped, never said late.</summary>
         public static Notice? DueBefore(Scheduled s, DateTime utcNow, ISet<string> said)
         {
             if (Due(s.StartUtc.AddHours(-24), 20, utcNow) && said.Add("day")) return Notice.DayBefore;
-            if (Due(s.StartUtc.AddHours(-1), 15, utcNow) && said.Add("hour")) return Notice.HourBefore;
+            // (key "prep", was "hour" before 2026-11-22: a pknight.json saved mid-week with "hour" only means this notice
+            // may still go once at its new time, never twice)
+            if (Due(s.StartUtc.AddMinutes(-GATE_LEAD_MINUTES), 15, utcNow) && said.Add("prep")) return Notice.PrepBefore;
             if (Due(s.StartUtc.AddMinutes(-10), 5, utcNow) && said.Add("ten")) return Notice.TenMinutes;
             return null;
         }
 
         static bool Due(DateTime at, int windowMinutes, DateTime now) => now >= at && now < at.AddMinutes(windowMinutes);
 
-        /// <summary>The live standings line goes out every 10 minutes of the hour (10, 20, ... 50), once each.</summary>
+        /// <summary>The live standings line goes out every 10 minutes of the round (10, 20, 30 in 40 minutes), once each.</summary>
         public static bool StandingsDue(Live live, double now)
         {
             double mins = (now - live.StartedAt) / 60.0;
@@ -319,17 +427,31 @@ namespace RevivalGuard
             return $"{m}:{s:00}";
         }
 
-        public static string DayBeforeLine(Spot spot) =>
-            $"PK Night is tomorrow, {WHEN_WORDS}: hold {spot.Name} ({spot.Where}) for the hour. The allegiance that holds it longest takes the night." + GateTail(spot);
+        public static string DayBeforeLine(Spot spot, bool fs = true) =>
+            $"PK Night is tomorrow, {WHEN_WORDS}: hold the hill at {spot.Name} ({spot.Where}) for {RoundWords()}. The {Word(fs)} that holds it longest takes the night. {HillWords()}" + GateTail(spot);
 
-        public static string HourBeforeLine(Spot spot) =>
-            $"PK Night begins in one hour at {spot.Name} ({spot.Where}). Gather your allegiance." + WayTail(spot);
+        public static string PrepBeforeLine(Spot spot, bool fs = true) =>
+            $"PK Night begins in {LeadWords()} at {spot.Name} ({spot.Where}). Gather your {Word(fs)}. {HillWords()}" + WayTail(spot);
 
         public static string TenMinutesLine(Spot spot) =>
             $"PK Night begins in ten minutes at {spot.Name} ({spot.Where}).";
 
-        public static string StartLine(Spot spot, int minutes) =>
-            $"PK Night has begun! Hold {spot.Name} ({spot.Where}). The allegiance that holds it longest in the next {(minutes == 60 ? "hour" : minutes + " minutes")} takes the night." + WayTail(spot);
+        public static string StartLine(Spot spot, int minutes, bool fs = true) =>
+            $"PK Night has begun! Hold the hill at {spot.Name} ({spot.Where}). The {Word(fs)} that holds it longest in the next {(minutes == 60 ? "hour" : minutes + " minutes")} takes the night. {HillWords()}"
+            + (fs ? " " + HopRule : "") + WayTail(spot);
+
+        /// <summary>Fellowship mode's rule about changing sides, said at the start and in the text board (@pknight).</summary>
+        public const string HopRule = "Not in a fellowship, you hold alone; change fellowships and you count for no one until the night is over.";
+
+        /// <summary>To a player benched by the anti-hop rule, once.</summary>
+        public static string BenchedLine(Spot spot) =>
+            $"You changed fellowships during PK Night, so you count for no one at {spot.Name} until the night is over.";
+
+        /// <summary>The @pknight text board's lines that name the side (the rest are in PkNight.cs).</summary>
+        public static string NoneHeldYetLine(bool fs = true) => $"No {Word(fs)} has held it yet.";
+        public static string HowToHoldLine(double radius, bool fs = true) =>
+            $"Stand within {radius:0} metres of the hill with no other {Word(fs)} there to hold it. {HillWords()} Dying there counts as it always does."
+            + (fs ? " " + HopRule : "");
 
         static string WayTail(Spot spot) => string.IsNullOrEmpty(spot.Way) ? "" : " " + spot.Way;
         /// <summary>The way, in the day-before and login lines too, only for a spot reached by the event portal.</summary>
@@ -358,19 +480,19 @@ namespace RevivalGuard
         }
 
         /// <summary>The Town Crier's line for the week (the crier on branch claude/town-crier reads CrierLine()).</summary>
-        public static string CrierLine(string winner, Spot spot, double held, Scheduled next) =>
+        public static string CrierLine(string winner, Spot spot, double held, Scheduled next, bool fs = true) =>
             winner == null
-                ? $"Hear ye! No allegiance held {spot.Name} on PK Night. Next {WHEN_WORDS}: {next?.Spot.Name ?? "a new spot"}."
+                ? $"Hear ye! No {Word(fs)} held {spot.Name} on PK Night. Next {WHEN_WORDS}: {next?.Spot.Name ?? "a new spot"}."
                 : $"Hear ye! {winner} held {spot.Name} for {Clock(held)} and took PK Night. Next {WHEN_WORDS}: {next?.Spot.Name ?? "a new spot"}.";
 
         public static string LoginLiveLine(Spot spot, double secondsLeft) =>
-            $"PK Night is on now: hold {spot.Name} ({spot.Where}). {Clock(secondsLeft)} left.";
+            $"PK Night is on now: hold the hill at {spot.Name} ({spot.Where}). {HillWords()} {Clock(secondsLeft)} left.";
 
-        public static string LoginSoonLine(Scheduled s) =>
-            $"PK Night is {WhenWords(s.StartUtc)}: hold {s.Spot.Name} ({s.Spot.Where}) for the hour. The allegiance that holds it longest takes the night." + GateTail(s.Spot);
+        public static string LoginSoonLine(Scheduled s, bool fs = true) =>
+            $"PK Night is {WhenWords(s.StartUtc)}: hold the hill at {s.Spot.Name} ({s.Spot.Where}) for {RoundWords()}. The {Word(fs)} that holds it longest takes the night. {HillWords()}" + GateTail(s.Spot);
 
-        public static string DiscordStartLine(Spot spot) =>
-            $"**PK Night** has begun on Hollowtide: hold {spot.Name} ({spot.Where}) for the hour. The allegiance that holds it longest takes the night.";
+        public static string DiscordStartLine(Spot spot, bool fs = true) =>
+            $"**PK Night** has begun on Hollowtide: hold the hill at {spot.Name} ({spot.Where}) for {RoundWords()}. The {Word(fs)} that holds it longest takes the night. The hill moves every {HILL_MOVE_MINUTES} minutes.";
 
         public static string DiscordEndLine(Live live, Spot spot)
         {
@@ -380,31 +502,35 @@ namespace RevivalGuard
         }
 
         /// <summary>Every line a player can read, for the style checks (no em dashes, nothing about staff tools).</summary>
-        public static IEnumerable<string> AllLines()
+        public static IEnumerable<string> AllLines(bool fs = true)
         {
             var spot = SPOTS[0];
-            var live = new Live { StartedAt = 0, EndsAt = 3600 };
+            var live = new Live { StartedAt = 0, EndsAt = ROUND_MINUTES * 60 };
             live.Sides[1] = new Standing { Side = 1, Name = "The Borg", Held = 1230, LastHeldAt = 100 };
             live.Sides[2] = new Standing { Side = 2, Name = "Hollow Crown", Held = 600, LastHeldAt = 200 };
             var next = new Scheduled { Week = 1, StartUtc = StartUtcOf(FIRST_SUNDAY.AddDays(7)), Spot = SPOTS[1] };
             next.EndUtc = next.StartUtc.AddMinutes(ROUND_MINUTES);
-            yield return DayBeforeLine(spot);
-            yield return HourBeforeLine(spot);
+            yield return DayBeforeLine(spot, fs);
+            yield return PrepBeforeLine(spot, fs);
             yield return TenMinutesLine(spot);
-            yield return StartLine(spot, 60);
-            yield return StandingsLine(live, spot, 1800);
-            yield return StandingsLine(new Live { StartedAt = 0, EndsAt = 3600 }, spot, 1800);
+            yield return StartLine(spot, ROUND_MINUTES, fs);
+            yield return StandingsLine(live, spot, 1200);
+            yield return StandingsLine(new Live { StartedAt = 0, EndsAt = ROUND_MINUTES * 60 }, spot, 1200);
             yield return LeadLine("The Borg", spot);
             yield return EndLine(live, spot, next);
-            yield return EndLine(new Live { StartedAt = 0, EndsAt = 3600 }, spot, next);
-            yield return CrierLine("The Borg", spot, 1230, next);
-            yield return CrierLine(null, spot, 0, next);
+            yield return EndLine(new Live { StartedAt = 0, EndsAt = ROUND_MINUTES * 60 }, spot, next);
+            yield return CrierLine("The Borg", spot, 1230, next, fs);
+            yield return CrierLine(null, spot, 0, next, fs);
             yield return LoginLiveLine(spot, 1500);
-            yield return LoginSoonLine(next);
-            yield return DiscordStartLine(spot);
+            yield return LoginSoonLine(next, fs);
+            yield return DiscordStartLine(spot, fs);
             yield return DiscordEndLine(live, spot);
             yield return GateOpenLine(spot);
-            yield return LoginSoonLine(new Scheduled { Week = 0, StartUtc = StartUtcOf(FIRST_SUNDAY), Spot = spot });
+            yield return LoginSoonLine(new Scheduled { Week = 0, StartUtc = StartUtcOf(FIRST_SUNDAY), Spot = spot }, fs);
+            yield return NoneHeldYetLine(fs);
+            yield return HowToHoldLine(40, fs);
+            if (fs) yield return BenchedLine(spot);
+            foreach (var l in HillLines()) yield return l;
         }
     }
 }

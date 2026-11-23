@@ -514,6 +514,9 @@ namespace RevivalGuard
             }
         }
 
+        /// <summary>One roll from Bael'Zharon's table, for the event boss (EventBoss.cs), who shares his hoard but not his schedule.</summary>
+        internal static uint RollBael() => Roll(BAEL_KILL);
+
         static uint Roll(Tier[] table)
         {
             int total = table.Sum(t => t.Weight), r;

@@ -81,7 +81,7 @@ namespace RevivalGuard
             {
                 try
                 {
-                    if (!On && !PkBounty.On) return;
+                    if (!On && !PkBounty.On && !PkTrophies.On) return;
                     if (topDamager == null || !topDamager.IsPlayer || !__instance.IsPKDeath(topDamager)) return;
                     var killer = topDamager.TryGetAttacker() as Player;
                     if (killer == null || killer == __instance) return;
@@ -98,6 +98,8 @@ namespace RevivalGuard
                         + $"{j.Verdict}{(j.Why != null ? " (" + j.Why + ")" : "")}, attackers {j.Attackers}, prior {prior}");
                     if (On) Score(killer, __instance, j);
                     if (PkBounty.On) PkBounty.OnKill(killer, __instance, j);
+                    // an arena kill pays no trophy: the queue loses nothing, so friends could farm it (docs/PK-ARENA-QUEUE.md)
+                    if (PkTrophies.On && !PkArena.InMatch(__instance)) PkTrophies.OnKill(killer, __instance, j, prior);
                 }
                 catch (Exception e) { Mod.Log.Error($"[RevivalGuard] PkRenown: death of {__instance?.Name}: {e}"); }
             }
@@ -153,7 +155,7 @@ namespace RevivalGuard
             public bool? IsMerc(uint guid)
             {
                 var p = PlayerManager.FindByGuid(guid);
-                return p == null ? (bool?)null : Mercenaries.IsMercAccount(p.Account?.AccountName);
+                return p == null ? (bool?)null : Mercenaries.IsHollowCompanyAccount(p.Account?.AccountName, p.Name);   // the Borg are players
             }
             public int? LevelNow(uint guid) => PlayerManager.FindByGuid(guid)?.Level;
         }
@@ -295,7 +297,7 @@ namespace RevivalGuard
                 if (session.AccessLevel < AccessLevel.Admin) { PkCommon.Say(p, "Only an admin can end a season."); return; }
                 string name = string.Join(" ", args.Skip(1)).Trim();
                 if (name.Length == 0) { PkCommon.Say(p, "Usage: @pkladder season <name of the new season>"); return; }
-                EndSeason(p, name);
+                EndSeason(p.Name, name, true);
                 return;
             }
             // @pkladder remove <name>: take one character's record off this season's ladder (admin).
@@ -396,15 +398,18 @@ namespace RevivalGuard
             }
         }
 
-        static void EndSeason(Player admin, string next)
+        /// <summary>End the season running and open `next` with a fresh ladder. `titles`: the leader becomes Warlord of
+        /// Dereth and second and third Gladiator Champion (false for an opening reset, PkSeason: a ladder nobody was
+        /// told was a season). `archivedAs` renames the ended season in seasons.json (null keeps its name).</summary>
+        internal static void EndSeason(string actor, string next, bool titles, string archivedAs = null)
         {
             var (rows, _) = Ladder(0);
-            string ended = Season();
+            string ended = archivedAs ?? Season();
             var archive = new SeasonArchive { Season = ended, Ended = PkCommon.Now() };
             for (int i = 0; i < rows.Count && i < 10; i++) archive.Top.Add($"{i + 1}. {rows[i].r.Name}: {rows[i].r.Renown} renown, {PkCommon.N(rows[i].r.Kills, "kill")}");
             var awards = new List<(uint g, string name, CharacterTitle t)>();
-            if (rows.Count > 0) awards.Add((rows[0].g, rows[0].r.Name, CharacterTitle.WarlordofDereth));
-            for (int i = 1; i < Math.Min(3, rows.Count); i++) awards.Add((rows[i].g, rows[i].r.Name, CharacterTitle.GladiatorChampion));
+            if (titles && rows.Count > 0) awards.Add((rows[0].g, rows[0].r.Name, CharacterTitle.WarlordofDereth));
+            for (int i = 1; titles && i < Math.Min(3, rows.Count); i++) awards.Add((rows[i].g, rows[i].r.Name, CharacterTitle.GladiatorChampion));
             lock (s_Lock)
             {
                 var fresh = new State { Season = next, SeasonStarted = PkCommon.Now(), Rules = RULES };
@@ -430,10 +435,11 @@ namespace RevivalGuard
                 catch (Exception e) { Mod.Log.Error($"[RevivalGuard] PkRenown: season archive: {e.Message}"); }
             }
             foreach (var (g, _, t) in awards) { var o = PlayerManager.GetOnlinePlayer(g); if (o != null) Grant(o, t); }
-            PkCommon.World(rows.Count > 0
-                ? $"The PK season {ended} is over. {rows[0].r.Name} ends it as Warlord of Dereth with {rows[0].r.Renown} renown. {next} begins."
-                : $"The PK season {ended} is over. {next} begins.");
-            Mod.Log.Info($"[RevivalGuard] PkRenown: {admin.Name} ended {ended}; {next} begins; top: {string.Join(" | ", archive.Top)}");
+            if (titles)
+                PkCommon.World(rows.Count > 0
+                    ? $"The PK season {ended} is over. {rows[0].r.Name} ends it as Warlord of Dereth with {rows[0].r.Renown} renown. {next} begins."
+                    : $"The PK season {ended} is over. {next} begins.");
+            Mod.Log.Info($"[RevivalGuard] PkRenown: {actor} ended {ended}{(titles ? "" : " (no titles)")}; {next} begins; top: {string.Join(" | ", archive.Top)}");
         }
 
         // ------------------------------------------------------------------ the board's data
@@ -443,7 +449,7 @@ namespace RevivalGuard
             EnsureRejudged();
             var (rows, rank) = Ladder(asker);
             long now = PkCommon.Now();
-            sb.Append(",\"season\":").Append(PkCommon.Q(Season())).Append(",\"ladder\":[");
+            sb.Append(",\"season\":").Append(PkCommon.Q(SeasonLabel())).Append(",\"ladder\":[");
             int n = 0;
             foreach (var (g, r) in rows.Take(LADDER_SHOWN))
             {
@@ -533,7 +539,7 @@ namespace RevivalGuard
             {
                 // An open window asking for its refresh after the features were turned off is told
                 // to close, quietly; anyone else gets the one line.
-                if (refresh) { if (ModChannel.Capable(session)) ModChannel.Send(session, "pkboard", "{\"open\":0,\"on\":{\"renown\":0,\"bounty\":0,\"shrines\":0,\"night\":0}}"); return; }
+                if (refresh) { if (ModChannel.Capable(session)) ModChannel.Send(session, "pkboard", "{\"open\":0,\"on\":{\"renown\":0,\"bounty\":0,\"shrines\":0,\"night\":0,\"arena\":0}}"); return; }
                 PkCommon.Say(p, "The player-killer board is not open on this world.");
                 return;
             }
@@ -543,6 +549,7 @@ namespace RevivalGuard
                 if (PkBounty.On) PkCommon.Say(p, "@bounty lists the bounties.");
                 if (PkShrines.On) PkCommon.Say(p, "@shrines shows who holds the Shadow Shrines.");
                 if (PkNight.On) PkCommon.Say(p, "@pknight shows PK Night: the next spot, or the standings now.");
+                if (PkArena.On) PkCommon.Say(p, "@fight shows the arena queue: @fight join 1v1, 2v2 or ffa.");
                 return;
             }
             Send(session, !refresh, refresh ? null : tab);
@@ -557,11 +564,12 @@ namespace RevivalGuard
             var sb = new StringBuilder("{\"open\":").Append(open ? 1 : 0).Append(",\"now\":").Append(PkCommon.Now());
             if (!string.IsNullOrEmpty(tab)) sb.Append(",\"tab\":").Append(PkCommon.Q(tab));
             sb.Append(",\"on\":{\"renown\":").Append(PkRenown.On ? 1 : 0).Append(",\"bounty\":").Append(PkBounty.On ? 1 : 0)
-              .Append(",\"shrines\":").Append(PkShrines.On ? 1 : 0).Append(",\"night\":").Append(PkNight.On ? 1 : 0).Append('}');
+              .Append(",\"shrines\":").Append(PkShrines.On ? 1 : 0).Append(",\"night\":").Append(PkNight.On ? 1 : 0).Append(",\"arena\":").Append(PkArena.On ? 1 : 0).Append('}');
             if (PkRenown.On) PkRenown.AppendJson(sb, p.Guid.Full);
             if (PkBounty.On) PkBounty.AppendJson(sb, p);
             if (PkShrines.On) PkShrines.AppendJson(sb, p);
             if (PkNight.On) PkNight.AppendJson(sb, p);
+            if (PkArena.On) PkArena.AppendJson(sb, p);
             sb.Append('}');
             ModChannel.Send(session, "pkboard", sb.ToString());
         }

@@ -44,6 +44,7 @@ namespace RevivalGuard
             // than being found by PatchEach. See TicketConsole for why it is commands and not a panel.
             Try(nameof(TicketConsole), TicketConsole.Register);
             Try(nameof(AdminOps), AdminOps.Register);
+            Try(nameof(Decor), Decor.Register);
             Try(nameof(PresenceWatch), PresenceWatch.Register);
             Try(nameof(SeasonalCalendar), SeasonalCalendar.Register);
             Try(nameof(AzimarTheme), AzimarTheme.Register);
@@ -59,11 +60,13 @@ namespace RevivalGuard
             Try(nameof(AuditTrail), AuditTrail.Register);
             Try(nameof(CharacterSnapshot), CharacterSnapshot.Register);
             Try(nameof(Bestow), Bestow.Register);
+            Try(nameof(PkSuit), PkSuit.Register);   // @pksuit [undo]: staff PK-ready suit (owner 2026-11-22)
             Try(nameof(SetHeritage), SetHeritage.Register);
             Try(nameof(QuestLog), QuestLog.Register);
             Try(nameof(ModChannel), ModChannel.Register);
             Try(nameof(Mail), Mail.Register);
             Try(nameof(DeathLog), DeathLog.Register);          // /deaths: your last 10 deaths (owner 2026-11-16)
+            Try(nameof(NewcomerNotes), NewcomerNotes.Register);   // first-gank note under 30, swap-coin notice at 30 (owner 2026-11-21)
             Try(nameof(AwayMessage), AwayMessage.Register);    // /away: an automatic answer to tells (Feature Requests #33)
             Try(nameof(FellowPassword), FellowPassword.Register);   // /fpass <word> | /fjoin <leader> <password> (owner 2026-11-20; rg_fellow_password)
             Try(nameof(Broker), Broker.Register);
@@ -104,13 +107,19 @@ namespace RevivalGuard
             Try(nameof(ExtraDeathLines), ExtraDeathLines.Register);
             Try(nameof(HoltburgGuards), HoltburgGuards.Register);    // Holtburg's Royal Guards talk, patrol and fight monsters in town (rg_holtburg_guards)
             Try(nameof(TickContainment), TickContainment.Register);   // one object's tick exception is contained, not the end of the world (rg_tick_containment, @tickfaults)
+            Try(nameof(ForeverChest), ForeverChest.Register);   // the chest beside the Holtburg grocer keeps what players leave in it (rg_forever_chest)
+            Try(nameof(TargetDummy), TargetDummy.Register);     // retail's Pyreal Target Drudge reports your damage and never dies (rg_target_dummy, off)
             // The PK expansion (docs/PK-EXPANSION.md): every part off until its property is set.
             Try(nameof(PkCommon), PkCommon.RegisterProperties);
             Try(nameof(PkRenown), PkRenown.Register);
+            Try("PkSeason", PkRenown.RegisterSeason);      // a dated season (Darktide Season 1): inert until an admin plans one
+            Try(nameof(PkTrophies), PkTrophies.Register);     // a Darktide Trophy per honourable kill (pk_trophies_enabled, off)
             Try(nameof(PkBounty), PkBounty.Register);
             Try(nameof(PkShrines), PkShrines.Register);
             Try(nameof(PkBoard), PkBoard.Register);
+            Try(nameof(PkArena), PkArena.Register);
             Try(nameof(PkNight), PkNight.Register);           // Sunday 7 PM Pacific, hold the spot (rg_pk_night, off by default)
+            Try(nameof(PkBattlefield), PkBattlefield.Register);   // PK zones keep player corpses, capped (pk_battlefield_corpses, off)
             // Harmony-only guards with a switch read at its default: registered so @modifybool can turn them off on a
             // shard that has never stored the key (ACE answers "Unknown bool property" otherwise; review 2026-11-10).
             Try(nameof(MoveGuard), MoveGuard.Register);         // rg_moveguard_mode 0 off / 1 log (default) / 2 enforce; rg_moveguard_staff
@@ -137,7 +146,7 @@ namespace RevivalGuard
                 + "gear at any level and every rare (PkDeathLoot), and keyrings that open their chests and "
                 + "spend a key per unlock (Keyrings), the audit trail on disk and in game (@audit), and character "
                 + "snapshots with a confirmed restore (@snapshot), and bonded items into an offline "
-                + "character's pack (@bestow), and the looking-for-group board (@lfgboard), and the feature request board (@features), and locked items (@lockitem / @unlockitem), and cell furniture taken out of the world (HiddenCellStatics), and no house purchase waits for dev accounts (DevHousing), and the allegiance hall: bank, hall board, hall portal, lawn corpses, kill board and raid alarm (/mansion), and ragdoll corpses where the body lands (@ragdollcorpse), and the login screen's population count on the login port (PopulationQuery), and combat pets that only pick targets in line of sight (PetLos, pet_los_targets), and dyes that take only on clothing whose art has the colour (DyeArt, dye_by_art), and hovering NPCs reported lower than their physics (HoverDrop, hover_drop), and generator spawns placed in the air dropped to the ground (SpawnGround, rg_spawn_ground), and monsters ACE sends home sent as a teleport (ForceHomeStamp, rg_forcehome_stamp), and town NPCs that keep one face across landblock reloads (NpcFaceStable, rg_npc_face_stable), and Azimar greeting players by name, level, hour and visit, with paced blessings (AzimarVoice, azimar_voice), and every new character starting in Holtburg whatever town the client asked for (HoltburgOnly, rg_holtburg_only), and Holtburg's Royal Guards talking, patrolling and keeping the town (HoltburgGuards, rg_holtburg_guards), and Holtburg's townsfolk going about their day, mostly in silence, under one speech budget (TownLife, rg_town_life), and one object's or player's tick exception contained instead of stopping the server (TickContainment, rg_tick_containment " + (TickContainment.On ? "ON" : "off") + ", @tickfaults)");
+                + "character's pack (@bestow), and the looking-for-group board (@lfgboard), and the feature request board (@features), and locked items (@lockitem / @unlockitem), and cell furniture taken out of the world (HiddenCellStatics), and no house purchase waits for dev accounts (DevHousing), and the allegiance hall: bank, hall board, hall portal, lawn corpses, kill board and raid alarm (/mansion), and ragdoll corpses where the body lands (@ragdollcorpse), and the login screen's population count on the login port (PopulationQuery), and combat pets that only pick targets in line of sight (PetLos, pet_los_targets), and dyes that take only on clothing whose art has the colour (DyeArt, dye_by_art), and hovering NPCs reported lower than their physics (HoverDrop, hover_drop), and generator spawns placed in the air dropped to the ground (SpawnGround, rg_spawn_ground), and monsters ACE sends home sent as a teleport (ForceHomeStamp, rg_forcehome_stamp), and town NPCs that keep one face across landblock reloads (NpcFaceStable, rg_npc_face_stable), and Azimar greeting players by name, level, hour and visit, with paced blessings (AzimarVoice, azimar_voice), and every new character starting in Holtburg whatever town the client asked for (HoltburgOnly, rg_holtburg_only), and Holtburg's Royal Guards talking, patrolling and keeping the town (HoltburgGuards, rg_holtburg_guards), and Holtburg's townsfolk going about their day, mostly in silence, under one speech budget (TownLife, rg_town_life), and the chest beside the Holtburg grocer keeping what players leave in it (ForeverChest, rg_forever_chest " + (ForeverChest.On ? "ON" : "off") + "), and the Pyreal Target Drudge as a damage meter (TargetDummy, rg_target_dummy " + (TargetDummy.On ? "ON" : "off") + "), and one object's or player's tick exception contained instead of stopping the server (TickContainment, rg_tick_containment " + (TickContainment.On ? "ON" : "off") + ", @tickfaults)");
         }
 
         // ---- one failure loses one feature, not the mod (assessment 2026-11: a single PatchAll lost every guard on 2026-09-22) ----

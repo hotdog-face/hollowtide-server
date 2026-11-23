@@ -50,6 +50,9 @@ namespace RevivalGuard
     ///     toward the four titles.
     ///  4. A LUMINANCE HINT (ours): a statue's award is silently nothing to a character who has not
     ///     done Nalicana's Test (MaximumLuminance unset), which reads as broken.
+    ///  5. STATUE NEWS (ours, owner 2026-11-21 "Yes, server-wide"): taking a luminance statue says
+    ///     "X has claimed a Statue of ... in the Combat Arena!" to everyone online. Switch
+    ///     `rg_arena_statue_news`, default ON; one line per player per 5 minutes.
     ///
     /// Switch `rg_combat_arena`, default OFF: with it off every hook returns at once and no event is
     /// touched (ACE's own behaviour, the arena closed). Turning it off after it was on stops every
@@ -59,6 +62,7 @@ namespace RevivalGuard
     {
         public const string P_ON = "rg_combat_arena";
         public const string P_BONUS = "rg_arena_bonus_chance";
+        public const string P_NEWS = "rg_arena_statue_news";
 
         internal const uint MASTER = 40772, ENTRANCE = 44823, MARK = 80101, MMD = 20630;
         const int PAY_PER_MARK = 2;     // MMD notes per Mark, the Master's own rate ("2 MMDs each")
@@ -110,6 +114,7 @@ namespace RevivalGuard
                 var b = MonsterAi.Inner(DefaultPropertyManager.DefaultBooleanProperties);
                 if (!b.ContainsKey(P_ON)) b[P_ON] = new Property<bool>(false, "RevivalGuard CombatArena: open retail's Derethian Combat Arena at Baishi and run its statue schedule");
                 var d = MonsterAi.Inner(DefaultPropertyManager.DefaultDoubleProperties);
+                if (!b.ContainsKey(P_NEWS)) b[P_NEWS] = new Property<bool>(true, "RevivalGuard CombatArena: world line when a player takes a luminance statue (ours)");
                 if (!d.ContainsKey(P_BONUS)) d[P_BONUS] = new Property<double>(0.25, "RevivalGuard CombatArena: chance per night hour that the bonus Statue of Extreme Illumination (834 luminance) stands");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] CombatArena: properties not registered ({e.Message}); read with defaults"); }
@@ -321,6 +326,34 @@ namespace RevivalGuard
             Say(p, line);
         }
 
+        // ------------------------------------------------------------------ statue news
+
+        /// <summary>The statue's own line for a fresh take (ace_world 80103 etc., category 13). "You regain
+        /// control" is the same holder after a lapse nobody used, so it stays quiet.</summary>
+        internal const string TAKE_LINE = "You now have control of this statue.";
+        const double NEWS_COOLDOWN = 300;
+        static readonly Dictionary<uint, double> s_NewsLast = new Dictionary<uint, double>();
+
+        static bool NewsOn => PropertyManager.GetBool(P_NEWS, true).Item;
+
+        internal static void StatueTaken(Player p, WorldObject statue)
+        {
+            if (p == null || statue == null || !LUM_STATUES.Contains(statue.WeenieClassId) || !On || !NewsOn) return;
+            var now = ACE.Common.Time.GetUnixTime();
+            lock (s_NewsLast)
+            {
+                if (s_NewsLast.TryGetValue(p.Guid.Full, out var last) && now - last < NEWS_COOLDOWN)
+                {
+                    Mod.Log.Info($"[RevivalGuard] CombatArena: {p.Name} took {statue.Name}: quiet, cooldown");
+                    return;
+                }
+                s_NewsLast[p.Guid.Full] = now;
+            }
+            var line = $"{p.Name} has claimed a {statue.Name} in the Combat Arena!";
+            PlayerManager.BroadcastToAll(new GameMessageSystemChat(line, ChatMessageType.WorldBroadcast));
+            Mod.Log.Info($"[RevivalGuard] CombatArena: {line} ({statue.WeenieClassId} 0x{statue.Guid.Full:X8})");
+        }
+
         // ------------------------------------------------------------------ @arena
 
         static void Command(Session session, params string[] args)
@@ -443,8 +476,8 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Two emote actions: the entrance's TakeItems of Marks (paid for after), and a
-    /// statue's AwardLuminance (the hint). Every other action passes at the cost of two compares.</summary>
+    /// <summary>Three emote actions: the entrance's TakeItems of Marks (paid for after), and a
+    /// statue's AwardLuminance (the hint) and its "now have control" line (the news). Every other action passes at the cost of two compares.</summary>
     [HarmonyPatch(typeof(EmoteManager), nameof(EmoteManager.ExecuteEmote))]
     static class CombatArenaEmote
     {
@@ -478,6 +511,8 @@ namespace RevivalGuard
             {
                 if (__state > 0) CombatArena.PayStrip(p, __instance.WorldObject, __state - p.GetNumInventoryItemsOfWCID(CombatArena.MARK));
                 else if (emote.Type == (uint)EmoteType.AwardLuminance) CombatArena.LumHint(p, __instance.WorldObject);
+                else if (emote.Type == (uint)EmoteType.DirectBroadcast && emote.Message == CombatArena.TAKE_LINE)
+                    CombatArena.StatueTaken(p, __instance.WorldObject);
             }
             catch (Exception e) { Mod.Log.Error($"[RevivalGuard] CombatArena emote: {e.Message}"); }
         }

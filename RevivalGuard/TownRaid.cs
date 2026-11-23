@@ -756,6 +756,8 @@ namespace RevivalGuard
                 if (corpse.TryRemoveFromInventory(item.Guid, out var gone)) gone?.Destroy();
         }
 
+        internal static bool IsRaider(Creature c) => s_Raiders.TryGetValue(c, out _);
+
         /// <summary>Creature.GetAttackTargets of a raider: players under its tier's protect level who have not hurt it are
         /// not targets.</summary>
         internal static void FilterTargets(Creature c, List<Creature> targets)
@@ -831,6 +833,9 @@ namespace RevivalGuard
                         else if (a == "none" || s_Cfg.Themes.Any(t => string.Equals(t.Festival, a, StringComparison.OrdinalIgnoreCase))) theme = a;
                         else { Reply($"what is '{a}'? Kinds: {string.Join(", ", s_Cfg.Kinds.Select(k => k.Key))}; sides: {string.Join(", ", s_Cfg.Sides.Select(x => x.Key))}; themes: {string.Join(", ", s_Cfg.Themes.Select(t => t.Festival))}, none"); return; }
                     }
+                    // never during a Holtburg director event (Bael'Zharon's visit, the snowmen): one fight in town at a time
+                    var ev = EventDirector.CurrentEvent()?.key;
+                    if (R.PausedForEvent(ev, s_Cfg.Schedule)) { Reply($"not now: {ev} is running in Holtburg (@eventdirector stop ends it)"); return; }
                     Reply(Begin(tier, kind, side, big ?? false, true, now, theme));
                     return;
                 }

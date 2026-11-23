@@ -90,6 +90,21 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] DeathLog: cannot write {f}: {e.Message}"); }
         }
 
+        /// <summary>The place words for where the player stands now ("at 42.1N, 33.6E near Holtburg"), or null.
+        /// Also NewcomerNotes' corpse line.</summary>
+        internal static string WhereOf(Player p)
+        {
+            try
+            {
+                var loc = p.Location;
+                uint cell = loc?.Cell ?? 0;
+                bool dungeon = p.CurrentLandblock?.IsDungeon ?? false;
+                s_Dungeons.TryGetValue((cell >> 16).ToString("X4"), out var dname);
+                return DeathLogRule.Where(cell, loc?.PositionX ?? 0, loc?.PositionY ?? 0, dungeon, dname, s_Towns);
+            }
+            catch (Exception) { return null; }
+        }
+
         internal static void Record(Player p, DamageHistoryInfo last, DamageHistoryInfo top)
         {
             if (p == null || Mercenaries.IsMerc(p)) return;
@@ -108,16 +123,7 @@ namespace RevivalGuard
             }
             catch (Exception) { }
 
-            string where;
-            try
-            {
-                var loc = p.Location;
-                uint cell = loc?.Cell ?? 0;
-                bool dungeon = p.CurrentLandblock?.IsDungeon ?? false;
-                s_Dungeons.TryGetValue((cell >> 16).ToString("X4"), out var dname);
-                where = DeathLogRule.Where(cell, loc?.PositionX ?? 0, loc?.PositionY ?? 0, dungeon, dname, s_Towns);
-            }
-            catch (Exception) { where = null; }
+            string where = WhereOf(p);
 
             var e = new DeathLogRule.Entry
             {

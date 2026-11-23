@@ -459,6 +459,18 @@ namespace RevivalGuard
                 Hint = "Anadil's camp is outside Ithaenc Cathedral (83.3S 93.2E); three silver key pieces open Kelderam's Tomb in the cathedral's basement, and the Shard waits in the catacombs below.",
                 Evidence = "retail live event 2000-11-14 (wiki rev 460139), Nov 18 to 30 per docs/EVENTS-RETIRED.md", Pending = true,
             },
+            new Festival
+            {
+                // Bael'Zharon's Rampage (The Child of Daralet, Dec 2000): wiki rev 443389 and Turbine's video of his client. Sixteen
+                // director visits ("bz-<town>", BaelRampage.cs); BaelZharonRampage is only the Pending switch, and rg_bz_rampage
+                // (off) must be on too (SeasonalCalendar.Switched). Leads into the Lightbringer's Week. The Announce is ours.
+                Key = "bzrampage", Name = "Bael'Zharon's Rampage",
+                StartMonth = 11, StartDay = 24, EndMonth = 11, EndDay = 30,
+                On  = new[] { "BaelZharonRampage" },
+                Announce = "Bael'Zharon, the Hopeslayer, walks among the towns of Dereth. He cannot be harmed, and he curses whoever strikes him.",
+                Hint = "Bael'Zharon visits a town about twice a day; a broadcast says where.",
+                Evidence = "retail live event Dec 2000 (wiki rev 443389, Turbine's video), Nov 24 to 30 per docs/EVENTS-RETIRED.md", Pending = true,
+            },
         };
 
         /// <summary>

@@ -1,4 +1,4 @@
--- LAUNCH SWEEP #2 portal spot-checks (docs/SWEEP-NPC-2026-09-29.md section 4): the six retail portal
+-- LAUNCH SWEEP #2 portal spot-checks (docs/archive/SWEEP-NPC-2026-09-29.md section 4): the six retail portal
 -- destinations the data sweep found under the ground or in no cell (docs/SWEEP-DATA-2026-09-29.md 1.5).
 -- Each was re-checked with ACE's own physics (tools/sweepdata SweepData portals: Landblock.GetZ outdoors,
 -- EnvCell.point_in_cell indoors) and walked with a fleet bot before and after.

@@ -1,4 +1,4 @@
--- Retail focused quest sweep, 2026-09-30 (docs/SWEEP-RETAIL-QUESTS-2026-09-30.md). ACE-data fixes, re-runnable.
+-- Retail focused quest sweep, 2026-09-30 (docs/archive/SWEEP-RETAIL-QUESTS-2026-09-30.md). ACE-data fixes, re-runnable.
 -- Apply: ssh gpubox '~/Dereth-Unity/tools/gpubox-ace/apply-live.sh tools/gpubox-ace/retail-quest-sweep-fixes-2026-09-30.sql'
 
 -- R1. Arcanum Researcher (16892): the Reedshark's Bronze Gear from a Statue (19218) asked InqQuest

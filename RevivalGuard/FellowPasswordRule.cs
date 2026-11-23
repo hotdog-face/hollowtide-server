@@ -14,7 +14,7 @@ namespace RevivalGuard
         public const int MAX_WRONG = 5;
         public static readonly TimeSpan WRONG_WINDOW = TimeSpan.FromMinutes(1);
 
-        public enum Outcome { Ok, Off, Throttled, Self, AlreadyInOther, AlreadyInThis, NotOnline, NoPassword, Wrong, Locked, Full, Olthoi }
+        public enum Outcome { Ok, Off, Throttled, Self, AlreadyInOther, AlreadyInThis, NotOnline, NoPassword, Wrong, Locked, Full, Olthoi, Refused }
 
         /// <summary>What the server knows when someone asks to join.</summary>
         public struct Facts
@@ -23,7 +23,8 @@ namespace RevivalGuard
             public bool JoinerInFellowship, JoinerInLeadersFellowship, JoinerIsLeader, JoinerIsOlthoi;
             public bool LeaderOnline;           // online and not hidden behind Appear Offline (see FellowPassword.Join)
             public string Password;             // the leader's fellowship's password, null for none or not leading
-            public bool LeaderRefused;          // a merc or Borg leads: never joinable (DESIGN-DECISIONS: fellowships never)
+            public bool LeaderRefused;          // a merc or Borg leads or is in it: never joinable (DESIGN-DECISIONS: fellowships never)
+            public bool Open;                   // listed open on the Looking for Group board (LfgBoard): no password asked
             public bool Locked;                 // a quest lock (Fellowship.IsLocked)
             public int Members, Max;
         }
@@ -65,8 +66,12 @@ namespace RevivalGuard
             if (f.JoinerInLeadersFellowship) return Outcome.AlreadyInThis;
             if (f.JoinerInFellowship) return Outcome.AlreadyInOther;
             if (!f.LeaderOnline) return Outcome.NotOnline;
-            if (f.Password == null || f.LeaderRefused) return Outcome.NoPassword;
-            if (!Matches(f.Password, given)) { Wrong(joiner, now); return Outcome.Wrong; }
+            if (f.LeaderRefused) return Outcome.Refused;
+            if (!f.Open)
+            {
+                if (f.Password == null) return Outcome.NoPassword;
+                if (!Matches(f.Password, given)) { Wrong(joiner, now); return Outcome.Wrong; }
+            }
             if (f.JoinerIsOlthoi) return Outcome.Olthoi;
             if (f.Locked) return Outcome.Locked;
             if (f.Members >= f.Max) return Outcome.Full;
@@ -87,6 +92,7 @@ namespace RevivalGuard
             Outcome.Olthoi => "The Olthoi's hunger for destruction is too great to understand a request for fellowship.",
             Outcome.Locked => $"{leader}'s fellowship is locked and takes no new members.",
             Outcome.Full => $"{leader}'s fellowship is full ({max} of {max}).",
+            Outcome.Refused => $"{leader}'s fellowship does not take players.",
             _ => $"You join {leader}'s fellowship.",
         };
 

@@ -47,7 +47,7 @@ namespace RevivalGuard
         }
 
         /// <summary>The password of a fellowship, or null; one set under an earlier leader no longer counts.</summary>
-        static string PasswordOf(Fellowship f)
+        internal static string PasswordOf(Fellowship f)
         {
             if (f == null || !s_Passwords.TryGetValue(f, out var e)) return null;
             if (e.Leader != f.FellowshipLeaderGuid) { s_Passwords.Remove(f); return null; }
@@ -77,7 +77,7 @@ namespace RevivalGuard
             }
         }
 
-        static void SetPassword(Session session, Player p, string rest)
+        internal static void SetPassword(Session session, Player p, string rest)
         {
             var f = p.Fellowship;
             if (f == null) { Say(session, "You are not in a fellowship."); return; }
@@ -112,21 +112,44 @@ namespace RevivalGuard
             if (!FellowPasswordRule.SplitJoin(rest, out string name, out string given)) { Say(session, "Type /fjoin <leader> <password>"); return; }
             var leader = PlayerManager.GetOnlinePlayer(name);
             if (leader == null && !name.StartsWith("+")) leader = PlayerManager.GetOnlinePlayer("+" + name);
+            TryJoin(session, p, leader, name, given, false);
+        }
+
+        /// <summary>A merc or Borg leads or rides in this fellowship (DESIGN-DECISIONS: Borg fellowships never open to
+        /// players; never listed on the Looking for Group board either).</summary>
+        internal static bool HasBot(Fellowship f)
+        {
+            if (f == null) return false;
+            // Borg are merc-account characters (BorgRule.IsBorg), so IsMerc covers both.
+            foreach (var m in f.GetFellowshipMembers().Values)
+                if (m != null && Mercenaries.IsMerc(m)) return true;
+            return Mercenaries.IsMerc(PlayerManager.GetOnlinePlayer(f.FellowshipLeaderGuid));
+        }
+
+        /// <summary>Join <paramref name="leader"/>'s fellowship as if they had recruited <paramref name="p"/> and they had said
+        /// yes: with the password (/fjoin, the board's Password rows), or with none when the leader listed it open on the
+        /// Looking for Group board (<paramref name="open"/>). The same checks either way: not in a fellowship, not full,
+        /// not quest-locked, not Olthoi, no merc or Borg in it. Says the one line; returns the outcome.</summary>
+        internal static FellowPasswordRule.Outcome TryJoin(Session session, Player p, Player leader, string name, string given, bool open)
+        {
+            if (!On && !open) { Say(session, FellowPasswordRule.Line(FellowPasswordRule.Outcome.Off, "", 0)); return FellowPasswordRule.Outcome.Off; }
             var lf = leader?.Fellowship;
             bool leads = lf != null && lf.FellowshipLeaderGuid == leader.Guid.Full;
             string pw = leads ? PasswordOf(lf) : null;
-            // A leader hidden by Appear Offline reads as offline unless they set a password (they asked to be found).
-            bool hidden = leader != null && leader.GetAppearOffline() && pw == null && session.AccessLevel < AccessLevel.Sentinel;
+            // A leader hidden by Appear Offline reads as offline unless they set a password or listed the fellowship
+            // (they asked to be found).
+            bool hidden = leader != null && leader.GetAppearOffline() && pw == null && !open && session.AccessLevel < AccessLevel.Sentinel;
             var facts = new FellowPasswordRule.Facts
             {
                 On = true,
+                Open = open && leads,
                 JoinerIsLeader = leader != null && leader.Guid.Full == p.Guid.Full,
                 JoinerInLeadersFellowship = lf != null && p.Fellowship == lf,
                 JoinerInFellowship = p.Fellowship != null,
                 JoinerIsOlthoi = p.IsOlthoiPlayer,
                 LeaderOnline = leader != null && leader.Session != null && !hidden,
                 Password = pw,
-                LeaderRefused = leader != null && Mercenaries.IsMerc(leader),
+                LeaderRefused = leader != null && (Mercenaries.IsMerc(leader) || (leads && HasBot(lf))),
                 Locked = lf != null && lf.IsLocked,
                 Members = lf?.FellowshipMembers.Count ?? 0,
                 Max = Fellowship.MaxFellows,
@@ -137,13 +160,14 @@ namespace RevivalGuard
             {
                 Say(session, FellowPasswordRule.Line(o, shown, Fellowship.MaxFellows));
                 if (o == FellowPasswordRule.Outcome.Wrong) Mod.Log.Info($"[RevivalGuard] FellowPassword: {p.Name} gave a wrong password for {leader?.Name}'s fellowship");
-                return;
+                return o;
             }
             lf.AddConfirmedMember(leader, p, true);
-            if (p.Fellowship != lf) { Say(session, FellowPasswordRule.Line(FellowPasswordRule.Outcome.Full, shown, Fellowship.MaxFellows)); return; }
+            if (p.Fellowship != lf) { Say(session, FellowPasswordRule.Line(FellowPasswordRule.Outcome.Full, shown, Fellowship.MaxFellows)); return FellowPasswordRule.Outcome.Full; }
             Say(session, FellowPasswordRule.Line(o, shown, Fellowship.MaxFellows));
-            lf.BroadcastToFellow($"{p.Name} joined with the fellowship password.");
-            Mod.Log.Info($"[RevivalGuard] FellowPassword: {p.Name} joined {leader.Name}'s fellowship by password ({lf.FellowshipMembers.Count} members)");
+            lf.BroadcastToFellow(facts.Open ? $"{p.Name} joined from the Looking for Group list." : $"{p.Name} joined with the fellowship password.");
+            Mod.Log.Info($"[RevivalGuard] FellowPassword: {p.Name} joined {leader.Name}'s fellowship {(facts.Open ? "from the LFG list (open)" : "by password")} ({lf.FellowshipMembers.Count} members)");
+            return o;
         }
 
         // A new leader (passed on, or picked when the leader left) clears the password: it was the old leader's.

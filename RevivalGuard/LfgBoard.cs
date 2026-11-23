@@ -24,7 +24,13 @@ namespace RevivalGuard
     ///     @lfgboard                 the board
     ///     @lfgboard post &lt;text&gt;    post or replace yours
     ///     @lfgboard clear           take yours down
-    ///     @lfgboard join &lt;guid&gt;     ask to join the fellowship a leader's post is recruiting for
+    ///     @lfgboard join &lt;guid&gt; [password]   join the fellowship a leader listed (open: at once; password:
+    ///                               with it; request: the leader gets a Yes/No)
+    ///     @lfgboard mode open|password|request [password]   a leader: how others get in (password: sets /fpass too)
+    ///
+    /// A LEADER'S POST IS THE FELLOWSHIP'S LISTING (owner 2026-11-21: "let players join the group from that ui
+    /// panel"): it carries the live size (of 9), level range and where the leader is, the leader's note and the join
+    /// mode (LfgListingRule). A fellowship with a merc or Borg in it is never listed or joinable (DESIGN-DECISIONS).
     ///
     /// NOT "@lfg": retail's /lfg and @lfg already mean "say this on the LFG chat channel", and the
     /// bridge sends them there (Program.cs, case "lfg"), so a command by that name never arrives.
@@ -46,11 +52,31 @@ namespace RevivalGuard
         static readonly object s_Lock = new object();
         static readonly Dictionary<uint, Post> s_Posts = new Dictionary<uint, Post>();
         static readonly Dictionary<uint, long> s_LastPost = new Dictionary<uint, long>();
+        static readonly Dictionary<uint, string> s_Mode = new Dictionary<uint, string>();   // leader -> chosen join mode
+
+        static string ChosenMode(uint leader) { lock (s_Lock) return s_Mode.TryGetValue(leader, out var m) ? m : LfgListingRule.REQUEST; }
+
+        /// <summary>The fellowship <paramref name="p"/> leads, or null.</summary>
+        static Fellowship Led(Player p)
+        {
+            var f = p?.Fellowship;
+            return f != null && f.FellowshipLeaderGuid == p.Guid.Full ? f : null;
+        }
+
+        /// <summary>How others get into the fellowship this leader lists: the chosen mode, password only while one is set.</summary>
+        static string Mode(Player leader)
+        {
+            var f = Led(leader);
+            return LfgListingRule.Effective(ChosenMode(leader.Guid.Full), f != null && FellowPassword.PasswordOf(f) != null);
+        }
+
+        /// <summary>Borg and bots are never on the board (owner rule: Borg fellowships never open to players).</summary>
+        static bool Hidden(Player p) => p == null || Mercenaries.IsMerc(p) || FellowPassword.HasBot(Led(p));
 
         internal static void Register()
         {
             CommandManager.TryAddCommand(Handle, "lfgboard", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
-                "The looking-for-group board.", "[post <text> | clear]");
+                "The looking-for-group board.", "[post <text> | clear | join <id> [password] | mode open|password|request [password]]");
         }
 
         static void Handle(Session session, params string[] parameters)
@@ -60,9 +86,17 @@ namespace RevivalGuard
             string verb = parameters != null && parameters.Length > 0 ? parameters[0].ToLowerInvariant() : "";
             long now = (long)ACE.Common.Time.GetUnixTime();
 
+            if (verb == "mode")
+            {
+                SetMode(session, p, parameters.Skip(1).ToArray());
+                return;
+            }
             if (verb == "post")
             {
+                if (Mercenaries.IsMerc(p)) { Say(session, "Mercenaries and Borg do not use the board."); return; }
                 string text = Clean(string.Join(" ", parameters.Skip(1)));
+                // a leader may list the fellowship with no note: the list button alone
+                if (text.Length == 0 && Led(p) != null) text = "Looking for more.";
                 if (text.Length == 0) { Say(session, "Usage: @lfgboard post <what you are looking for>"); return; }
                 lock (s_Lock)
                 {
@@ -72,6 +106,7 @@ namespace RevivalGuard
                     s_Posts[p.Guid.Full] = Describe(p, text, now);
                 }
                 if (!ModChannel.Capable(session)) Say(session, "Posted to the looking-for-group board. @lfgboard to read it, @lfgboard clear to take it down.");
+                else if (Led(p) != null) Say(session, LfgListingRule.ModeLine(Mode(p), true));
                 Push();
                 return;
             }
@@ -87,7 +122,8 @@ namespace RevivalGuard
                 string a = parameters.Length > 1 ? parameters[1] : "";
                 if (a.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) uint.TryParse(a.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out g);
                 else uint.TryParse(a, out g);
-                RequestJoin(session, p, g, now);
+                string given = parameters.Length > 2 ? string.Join(" ", parameters.Skip(2)).Trim() : null;
+                Join(session, p, g, given, now);
                 return;
             }
             if (verb == "clear")
@@ -105,8 +141,13 @@ namespace RevivalGuard
             if (list.Count == 0) { Say(session, "The looking-for-group board is empty. @lfgboard post <text> to add to it."); return; }
             Say(session, $"--- Looking for group: {list.Count} ---");
             foreach (var x in list.Take(30))
-                Say(session, $"{x.Name} ({(LiveFellows(x.Guid) > 0 ? $"fellowship of {LiveFellows(x.Guid)}, " : "")}level {x.Level}{(x.Where != null ? ", " + x.Where : "")}, "
+            {
+                var lp = PlayerManager.GetOnlinePlayer(x.Guid);
+                int fel = LiveFellows(x.Guid);
+                string how = fel > 0 && lp != null ? $"fellowship of {fel}/{Fellowship.MaxFellows}, levels {Levels(lp)}, {ModeWords(Mode(lp))}" : $"level {x.Level}";
+                Say(session, $"{x.Name} ({how}{(x.Where != null ? ", " + x.Where : "")}, "
                     + $"{Math.Max(0, (now - x.At) / 60)} min ago): {x.Text}");
+            }
         }
 
         // ---- join requests ------------------------------------------------------------------------
@@ -115,6 +156,72 @@ namespace RevivalGuard
         const int JOIN_STALE = 90;   // an unanswered request stops blocking the asker after this
         static readonly Dictionary<uint, (uint leader, long at)> s_Asking = new Dictionary<uint, (uint, long)>();
         static readonly Dictionary<(uint, uint), long> s_NoRepeatUntil = new Dictionary<(uint, uint), long>();
+
+        static string ModeWords(string mode) => mode == LfgListingRule.OPEN ? "open, join with @lfgboard join <id>"
+            : mode == LfgListingRule.PASSWORD ? "password" : "on request";
+
+        static string Levels(Player leader)
+        {
+            var f = Led(leader);
+            var r = LfgListingRule.Range(f == null ? new[] { leader.Level ?? 1 }
+                : f.GetFellowshipMembers().Values.Where(m => m != null).Select(m => m.Level ?? 1));
+            return r.lo == r.hi ? r.lo.ToString() : $"{r.lo}-{r.hi}";
+        }
+
+        /// <summary>@lfgboard mode open|password|request [password]: a leader picks how others get in. Password with a
+        /// word sets the fellowship password as /fpass does (shown to the fellowship); password with none keeps the one set.</summary>
+        static void SetMode(Session session, Player p, string[] args)
+        {
+            var f = Led(p);
+            if (f == null) { Say(session, "Only a fellowship's leader picks how others join it."); return; }
+            if (Mercenaries.IsMerc(p)) { Say(session, "Mercenaries and Borg do not use the board."); return; }
+            string mode = LfgListingRule.Parse(args.Length > 0 ? args[0] : "");
+            if (mode == null) { Say(session, "Usage: @lfgboard mode open | password <word> | request"); return; }
+            if (mode == LfgListingRule.PASSWORD)
+            {
+                string word = args.Length > 1 ? string.Join(" ", args.Skip(1)).Trim() : "";
+                if (word.Length > 0)
+                {
+                    if (FellowPasswordRule.Clean(word) == null)
+                    { Say(session, $"A fellowship password is one word of up to {FellowPasswordRule.MAX_LEN} letters, digits or symbols."); SendMe(session, p); return; }
+                    FellowPassword.SetPassword(session, p, word);
+                }
+                if (FellowPassword.PasswordOf(f) == null) { Say(session, "Type a password for your fellowship first."); SendMe(session, p); return; }
+            }
+            bool listed;
+            lock (s_Lock) { s_Mode[p.Guid.Full] = mode; listed = s_Posts.ContainsKey(p.Guid.Full); }
+            Say(session, LfgListingRule.ModeLine(mode, listed));
+            SendMe(session, p);
+            if (listed) Push();
+        }
+
+        /// <summary>The leader's own settings to our client ("lfgme"): the chosen mode and whether a password is set
+        /// (never the password itself).</summary>
+        static void SendMe(Session s, Player p)
+        {
+            if (s == null || !ModChannel.Capable(s)) return;
+            var f = Led(p);
+            ModChannel.Send(s, "lfgme", "{\"m\":\"" + ChosenMode(p.Guid.Full) + "\",\"pw\":" + (f != null && FellowPassword.PasswordOf(f) != null ? "true" : "false") + "}");
+        }
+
+        /// <summary>Join from the board: by the listing's mode. Open and password go through FellowPassword.TryJoin
+        /// (retail recruit's checks: not in a fellowship, not full, not quest-locked, no Olthoi, no merc or Borg in it);
+        /// request asks the leader.</summary>
+        static void Join(Session session, Player asker, uint leaderGuid, string given, long now)
+        {
+            Post post;
+            lock (s_Lock) s_Posts.TryGetValue(leaderGuid, out post);
+            var leader = leaderGuid != 0 ? PlayerManager.GetOnlinePlayer(leaderGuid) : null;
+            if (post == null || leader == null || Hidden(leader)) { Tell(session, leaderGuid, "gone", "That listing is gone."); Push(); return; }
+            if (Led(leader) == null) { RequestJoin(session, asker, leaderGuid, now); return; }   // its line says they don't lead one
+            string mode = Mode(leader);
+            if (mode == LfgListingRule.REQUEST) { RequestJoin(session, asker, leaderGuid, now); return; }
+            if (mode == LfgListingRule.PASSWORD && string.IsNullOrEmpty(given))
+            { Tell(session, leaderGuid, "needpw", $"Type {leader.Name}'s fellowship password."); return; }
+            var o = FellowPassword.TryJoin(session, asker, leader, leader.Name, given, mode == LfgListingRule.OPEN);
+            Tell(session, leaderGuid, o == FellowPasswordRule.Outcome.Ok ? "accepted" : o == FellowPasswordRule.Outcome.Wrong ? "wrong" : "none", null);
+            if (o == FellowPasswordRule.Outcome.Ok) Push();
+        }
 
         static void RequestJoin(Session session, Player asker, uint leaderGuid, long now)
         {
@@ -126,6 +233,11 @@ namespace RevivalGuard
             var f = leader.Fellowship;
             if (f == null || f.FellowshipLeaderGuid != leader.Guid.Full)
             { Tell(session, leaderGuid, "none", $"{leader.Name} isn't leading a fellowship. Send them a tell."); return; }
+            if (FellowPassword.HasBot(f)) { Tell(session, leaderGuid, "none", FellowPasswordRule.Line(FellowPasswordRule.Outcome.Refused, leader.Name, 0)); return; }
+            if (asker.IsOlthoiPlayer) { Tell(session, leaderGuid, "none", FellowPasswordRule.Line(FellowPasswordRule.Outcome.Olthoi, leader.Name, 0)); return; }
+            if (f.IsLocked) { Tell(session, leaderGuid, "none", FellowPasswordRule.Line(FellowPasswordRule.Outcome.Locked, leader.Name, 0)); return; }
+            if (f.FellowshipMembers.Count >= Fellowship.MaxFellows)
+            { Tell(session, leaderGuid, "none", FellowPasswordRule.Line(FellowPasswordRule.Outcome.Full, leader.Name, Fellowship.MaxFellows)); return; }
             lock (s_Lock)
             {
                 if (s_Asking.TryGetValue(asker.Guid.Full, out var waiting) && now - waiting.at < JOIN_STALE)
@@ -169,11 +281,11 @@ namespace RevivalGuard
         }
 
         /// <summary>A join request's state to the asker: over the channel for our client (which shows
-        /// it on the Join button), and as a chat line for everyone.</summary>
+        /// it on the Join button), and as a chat line for everyone (none when the join already said its own).</summary>
         static void Tell(Session s, uint leaderGuid, string state, string line)
         {
             if (s == null) return;
-            Say(s, line);
+            if (line != null) Say(s, line);
             if (ModChannel.Capable(s)) ModChannel.Send(s, "lfgjoin", "{\"g\":" + leaderGuid + ",\"state\":\"" + state + "\"}");
         }
 
@@ -197,20 +309,41 @@ namespace RevivalGuard
                 foreach (var g in s_Posts.Where(kv => now - kv.Value.At > POST_MINUTES * 60 || PlayerManager.GetOnlinePlayer(kv.Key) == null)
                                          .Select(kv => kv.Key).ToList())
                     s_Posts.Remove(g);
-                return s_Posts.Values.OrderByDescending(x => x.At).ToList();
+                foreach (var g in s_Mode.Keys.Where(k => PlayerManager.GetOnlinePlayer(k) == null).ToList()) s_Mode.Remove(g);
+                return s_Posts.Values.Where(x => !Hidden(PlayerManager.GetOnlinePlayer(x.Guid))).OrderByDescending(x => x.At).ToList();
             }
         }
 
         static string Json(long now)
         {
-            var sb = new StringBuilder("{\"now\":").Append(now).Append(",\"posts\":[");
+            // "v":2 = join modes (open/password/request); our client shows the mode buttons only then
+            var sb = new StringBuilder("{\"v\":2,\"now\":").Append(now).Append(",\"posts\":[");
             int n = 0;
             foreach (var x in Snapshot(now))
             {
                 if (n++ > 0) sb.Append(',');
                 sb.Append("{\"g\":").Append(x.Guid).Append(",\"n\":").Append(Q(x.Name)).Append(",\"l\":").Append(x.Level)
                   .Append(",\"t\":").Append(Q(x.Text)).Append(",\"w\":").Append(Q(x.Where ?? "")).Append(",\"at\":").Append(x.At)
-                  .Append(",\"f\":").Append(LiveFellows(x.Guid)).Append('}');
+                  .Append(",\"f\":").Append(LiveFellows(x.Guid));
+                var lp = PlayerManager.GetOnlinePlayer(x.Guid);
+                if (lp != null && Led(lp) != null)
+                {
+                    // the listing: join mode, level range, max size, quest lock, and where the leader is (the client
+                    // names the place, as the admin players list does: AcAdminHud.RowPlace)
+                    var f = Led(lp);
+                    var r = LfgListingRule.Range(f.GetFellowshipMembers().Values.Where(m => m != null).Select(m => m.Level ?? 1));
+                    sb.Append(",\"m\":\"").Append(Mode(lp)).Append("\",\"lo\":").Append(r.lo).Append(",\"hi\":").Append(r.hi)
+                      .Append(",\"max\":").Append(Fellowship.MaxFellows).Append(",\"lk\":").Append(f.IsLocked ? 1 : 0);
+                }
+                var loc = lp?.Location;
+                if (loc != null)
+                {
+                    var inv = System.Globalization.CultureInfo.InvariantCulture;
+                    sb.Append(",\"c\":").Append(loc.Cell).Append(",\"x\":").Append(loc.PositionX.ToString("0.#", inv))
+                      .Append(",\"y\":").Append(loc.PositionY.ToString("0.#", inv))
+                      .Append(",\"k\":\"").Append(PresenceStateRule.Kind(loc.Indoors, lp.CurrentLandblock?.IsDungeon ?? true)).Append('"');
+                }
+                sb.Append('}');
             }
             return sb.Append("]}").ToString();
         }
@@ -222,7 +355,11 @@ namespace RevivalGuard
             return f != null && f.FellowshipLeaderGuid == guid ? f.FellowshipMembers.Count : 0;
         }
 
-        static void SendBoard(Session s, long now) => ModChannel.Send(s, "lfg", Json(now));
+        static void SendBoard(Session s, long now)
+        {
+            ModChannel.Send(s, "lfg", Json(now));
+            if (s?.Player != null && Led(s.Player) != null) SendMe(s, s.Player);
+        }
 
         /// <summary>The changed board to every connection that reads the channel.</summary>
         static void Push()

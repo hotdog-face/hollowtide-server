@@ -72,6 +72,7 @@ namespace RevivalGuard
         {
             CommandManager.TryAddCommand(Cmd, "tthuun", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld,
                 "T'thuun's Marauders (RevivalGuard): status, or reset (your own kill tasks, boss flags and wait).", "[status | reset]");
+            RaidRespawnGrace.Register();
             Mod.Log.Info($"[RevivalGuard] TthuunRaids: {TthuunRaidsRule.Sites.Length} raid sites, waves after the generators, site stones, Royal Scout kill tasks (@tthuun)");
         }
 
@@ -208,6 +209,8 @@ namespace RevivalGuard
                             yield return wo;
                 }
         }
+
+        internal static bool IsRaider(Creature c) => s_Site.TryGetValue(c, out _);
 
         static IEnumerable<Creature> Spawned(WorldObject gen) =>
             gen.GeneratorProfiles == null ? Enumerable.Empty<Creature>()

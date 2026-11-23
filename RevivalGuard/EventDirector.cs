@@ -66,6 +66,7 @@ namespace RevivalGuard
             public string Announce, Victory, Withdraw;
             public string Lost, Defeat;            // a stage row that means the players lost, and what is said then (the Present Raids)
             public bool HeldWins;                  // still running at the end of its time = the players held it (the Hero Token raids)
+            public string AwayFrom;                // a world boss (WorldBossSchedule name) whose window, anywhere, keeps it from starting
             public bool IsFestival => Festivals != null && Festivals.Length > 0;
         }
 
@@ -593,6 +594,170 @@ namespace RevivalGuard
                 Withdraw = "The raiders at Mayoi have slipped back through the Patriarchs' device.",
                 Evidence = "wiki T'Thuun's Marauders rev 477303 (raiders site, Nivinizk's Raid Commander); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunMayoi; waves after the first: TthuunRaids.cs",
             },
+            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/bz-rampage.md): retail's Dec 2000 Bael'Zharon's Rampage,
+            // Nov 24 to 30: Bael'Zharon visits one town for 30 minutes, at most one visit every 10 hours (BZ_APART_S). No
+            // generator: the row only marks the visit; BaelRampage.cs puts him in the town and takes him away. Fort Tethana, Kara
+            // and Arwic are the wiki's; the other twelve are ours. Rows: tools/public-shard/datafixes/2026-11-24-bz-rampage-1-rows.sql.
+            new Entry
+            {
+                Key = "bz-fort-tethana", Title = "Bael'Zharon Visits Fort Tethana", Where = "1.6N, 71.8W", Levels = "all",
+                Regions = new[] { "fort-tethana", EventDirectorRules.BZ_REGION }, Box = (0x24, 0x80, 0x26, 0x82), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Fort Tethana, near 1.6N, 71.8W. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Fort Tethana.",
+                Withdraw = "Bael'Zharon has left Fort Tethana.",
+                Evidence = "BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on; wiki Bael'Zharon's Rampage rev 443389, Turbine's Dec 2000 video",
+            },
+            new Entry
+            {
+                Key = "bz-kara", Title = "Bael'Zharon Visits Kara", Where = "83.3S, 47.1E", Levels = "all",
+                Regions = new[] { "kara", EventDirectorRules.BZ_REGION }, Box = (0xB9, 0x16, 0xBB, 0x18), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Kara, near 83.3S, 47.1E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Kara.",
+                Withdraw = "Bael'Zharon has left Kara.",
+                Evidence = "BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on; wiki Bael'Zharon's Rampage rev 443389, Turbine's Dec 2000 video",
+            },
+            new Entry
+            {
+                Key = "bz-arwic", Title = "Bael'Zharon Visits Arwic", Where = "33.6N, 56.8E", Levels = "all",
+                Regions = new[] { "arwic", EventDirectorRules.BZ_REGION }, Box = (0xC5, 0xA8, 0xC7, 0xAA), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Arwic, near 33.6N, 56.8E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Arwic.",
+                Withdraw = "Bael'Zharon has left Arwic.",
+                Evidence = "BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on; wiki Bael'Zharon's Rampage rev 443389, Turbine's Dec 2000 video",
+            },
+            new Entry
+            {
+                Key = "bz-cragstone", Title = "Bael'Zharon Visits Cragstone", Where = "25.6N, 48.8E", Levels = "all",
+                Regions = new[] { "cragstone", EventDirectorRules.BZ_REGION }, Box = (0xBB, 0x9E, 0xBD, 0xA0), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Cragstone, near 25.6N, 48.8E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Cragstone.",
+                Withdraw = "Bael'Zharon has left Cragstone.",
+                Evidence = "BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on; wiki Bael'Zharon's Rampage rev 443389, Turbine's Dec 2000 video",
+            },
+            new Entry
+            {
+                Key = "bz-zaikhal", Title = "Bael'Zharon Visits Zaikhal", Where = "13.7N, 0.6E", Levels = "all",
+                Regions = new[] { "zaikhal", EventDirectorRules.BZ_REGION }, Box = (0x7F, 0x8F, 0x81, 0x91), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Zaikhal, near 13.7N, 0.6E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Zaikhal.",
+                Withdraw = "Bael'Zharon has left Zaikhal.",
+                Evidence = "BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on; wiki Bael'Zharon's Rampage rev 443389, Turbine's Dec 2000 video",
+            },
+            new Entry
+            {
+                Key = "bz-shoushi", Title = "Bael'Zharon Visits Shoushi", Where = "33.5S, 72.8E", Levels = "all",
+                Regions = new[] { "shoushi", EventDirectorRules.BZ_REGION }, Box = (0xD9, 0x54, 0xDB, 0x56), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Shoushi, near 33.5S, 72.8E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Shoushi.",
+                Withdraw = "Bael'Zharon has left Shoushi.",
+                Evidence = "BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on; wiki Bael'Zharon's Rampage rev 443389, Turbine's Dec 2000 video",
+            },
+            new Entry
+            {
+                Key = "bz-yaraq", Title = "Bael'Zharon Visits Yaraq", Where = "21.5S, 1.6W", Levels = "all",
+                Regions = new[] { "yaraq", EventDirectorRules.BZ_REGION }, Box = (0x7C, 0x63, 0x7E, 0x65), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Yaraq, near 21.5S, 1.6W. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Yaraq.",
+                Withdraw = "Bael'Zharon has left Yaraq.",
+                Evidence = "BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on; wiki Bael'Zharon's Rampage rev 443389, Turbine's Dec 2000 video",
+            },
+            new Entry
+            {
+                Key = "bz-hebian-to", Title = "Bael'Zharon Visits Hebian-To", Where = "39.1S, 83.2E", Levels = "all",
+                Regions = new[] { "hebian", EventDirectorRules.BZ_REGION }, Box = (0xE6, 0x4D, 0xE8, 0x4F), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Hebian-To, near 39.1S, 83.2E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Hebian-To.",
+                Withdraw = "Bael'Zharon has left Hebian-To.",
+                Evidence = "ours (owner 2026-11-21 \"Fill it out\"): BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on",
+            },
+            new Entry
+            {
+                Key = "bz-rithwic", Title = "Bael'Zharon Visits Rithwic", Where = "10.6N, 58.3E", Levels = "all",
+                Regions = new[] { "rithwic", EventDirectorRules.BZ_REGION }, Box = (0xC7, 0x8B, 0xC9, 0x8D), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Rithwic, near 10.6N, 58.3E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Rithwic.",
+                Withdraw = "Bael'Zharon has left Rithwic.",
+                Evidence = "ours (owner 2026-11-21 \"Fill it out\"): BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on",
+            },
+            new Entry
+            {
+                Key = "bz-al-arqas", Title = "Bael'Zharon Visits Al-Arqas", Where = "31.3S, 13.6E", Levels = "all",
+                Regions = new[] { "al-arqas", EventDirectorRules.BZ_REGION }, Box = (0x8F, 0x57, 0x91, 0x59), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Al-Arqas, near 31.3S, 13.6E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Al-Arqas.",
+                Withdraw = "Bael'Zharon has left Al-Arqas.",
+                Evidence = "ours (owner 2026-11-21 \"Fill it out\"): BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on",
+            },
+            new Entry
+            {
+                Key = "bz-glenden-wood", Title = "Bael'Zharon Visits Glenden Wood", Where = "29.7N, 27.2E", Levels = "all",
+                Regions = new[] { "glenden", EventDirectorRules.BZ_REGION }, Box = (0xA0, 0xA3, 0xA2, 0xA5), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Glenden Wood, near 29.7N, 27.2E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Glenden Wood.",
+                Withdraw = "Bael'Zharon has left Glenden Wood.",
+                Evidence = "ours (owner 2026-11-21 \"Fill it out\"): BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on",
+            },
+            new Entry
+            {
+                Key = "bz-sawato", Title = "Bael'Zharon Visits Sawato", Where = "28.7S, 59.3E", Levels = "all",
+                Regions = new[] { "sawato", EventDirectorRules.BZ_REGION }, Box = (0xC8, 0x5A, 0xCA, 0x5C), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Sawato, near 28.7S, 59.3E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Sawato.",
+                Withdraw = "Bael'Zharon has left Sawato.",
+                Evidence = "ours (owner 2026-11-21 \"Fill it out\"): BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on",
+            },
+            new Entry
+            {
+                Key = "bz-tufa", Title = "Bael'Zharon Visits Tufa", Where = "14.2S, 5.4E", Levels = "all",
+                Regions = new[] { "tufa", EventDirectorRules.BZ_REGION }, Box = (0x85, 0x6C, 0x87, 0x6E), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Tufa, near 14.2S, 5.4E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Tufa.",
+                Withdraw = "Bael'Zharon has left Tufa.",
+                Evidence = "ours (owner 2026-11-21 \"Fill it out\"): BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on",
+            },
+            new Entry
+            {
+                Key = "bz-lytelthorpe", Title = "Bael'Zharon Visits Lytelthorpe", Where = "0.6N, 51.2E", Levels = "all",
+                Regions = new[] { "lytelthorpe", EventDirectorRules.BZ_REGION }, Box = (0xBE, 0x7F, 0xC0, 0x81), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Lytelthorpe, near 0.6N, 51.2E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Lytelthorpe.",
+                Withdraw = "Bael'Zharon has left Lytelthorpe.",
+                Evidence = "ours (owner 2026-11-21 \"Fill it out\"): BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on",
+            },
+            new Entry
+            {
+                Key = "bz-samsur", Title = "Bael'Zharon Visits Samsur", Where = "2.9S, 19.5E", Levels = "all",
+                Regions = new[] { "samsur", EventDirectorRules.BZ_REGION }, Box = (0x96, 0x7A, 0x98, 0x7C), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Samsur, near 2.9S, 19.5E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Samsur.",
+                Withdraw = "Bael'Zharon has left Samsur.",
+                Evidence = "ours (owner 2026-11-21 \"Fill it out\"): BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 in the town while row BaelZharonRampageVisit is on",
+            },
+            new Entry
+            {
+                Key = "bz-holtburg", Title = "Bael'Zharon Visits Holtburg", Where = "42.4N, 33.6E", Levels = "all",
+                Regions = new[] { "holtburg", EventDirectorRules.BZ_REGION }, Box = (0xA8, 0xB3, 0xAA, 0xB5), Festivals = new[] { "bzrampage" }, Minutes = 30,
+                Start = new[] { "BaelZharonRampageVisit" }, Stop = new[] { "BaelZharonRampageVisit" }, AwayFrom = "Bael'Zharon",
+                Announce = LEAD + "Bael'Zharon, the Hopeslayer, has come to Holtburg, near 42.4N, 33.6E. He cannot be harmed, and he curses whoever strikes him.",
+                Victory = "Bael'Zharon has left Holtburg.",
+                Withdraw = "Bael'Zharon has left Holtburg.",
+                Evidence = "ours (owner 2026-11-21 \"add holtberg\"): BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 north of the square, 63 m from the lifestone; never during a Holtburg raid",
+            },
             // Season 1 beat 1, "Omens" (docs/SEASON-THE-SHADOW-RETURNS.md, docs/MONSTERS-LORE-FACTIONS.md): Aerbax's
             // Umbral Legion raids three towns. Ours, not retail: rows and gens from tools/gpubox-ace/lore-factions.sql.
             // In the rotation only while event_director_omens is on (off by default); @eventdirector start works regardless.
@@ -875,10 +1040,12 @@ namespace RevivalGuard
                 if (skip.Any(s => s.Equals(e.Key, StringComparison.OrdinalIgnoreCase))) return $"listed in {P_SKIP}";
                 if (e.Key.StartsWith("omens-", StringComparison.OrdinalIgnoreCase) && !PropertyManager.GetBool(P_OMENS, false).Item)
                     return $"{P_OMENS} is off";
-                if (e.Regions.Contains(EventDirectorRules.RAID_REGION, StringComparer.OrdinalIgnoreCase)
-                    && EventDirectorRules.TooSoon(now, Catalogue.Where(c => c.Regions.Contains(EventDirectorRules.RAID_REGION, StringComparer.OrdinalIgnoreCase))
-                        .Select(c => s_State.LastRun.TryGetValue(c.Key, out var t) ? t : 0), EventDirectorRules.RAID_APART_S))
-                    return "a Present Raid ran less than 4 hours ago (retail: one every 4 hours)";
+                foreach (var (region, apart) in EventDirectorRules.APART)
+                    if (e.Regions.Contains(region, StringComparer.OrdinalIgnoreCase)
+                        && EventDirectorRules.TooSoon(now, Catalogue.Where(c => c.Regions.Contains(region, StringComparer.OrdinalIgnoreCase))
+                            .Select(c => s_State.LastRun.TryGetValue(c.Key, out var t) ? t : 0), apart))
+                        return region == EventDirectorRules.RAID_REGION ? "a Present Raid ran less than 4 hours ago (retail: one every 4 hours)"
+                            : $"one of its group ({region}) started less than {apart / 3600:0.#} hours ago";
             }
             // The same region, or the same rows, already busy: something outside the director (a
             // player killing the Witshire minion, an admin's @event) or another entry is running.
@@ -891,6 +1058,13 @@ namespace RevivalGuard
                 if (other.Regions.Intersect(e.Regions, StringComparer.OrdinalIgnoreCase).Any()) return $"its region is busy with {other.Key}";
                 if (other.Stop.Intersect(e.Stop, StringComparer.OrdinalIgnoreCase).Any()) return $"shares rows with {other.Key}, which is running";
             }
+            // A Holtburg raid (TownRaid, not a director entry) holds the town: a Holtburg entry waits for it to end, by hand too.
+            if (e.Regions.Contains("holtburg", StringComparer.OrdinalIgnoreCase) && TownRaid.Running) return "a Holtburg raid is running";
+            // One of him at a time: Bael'Zharon's Rampage waits while the world boss Bael'Zharon is up anywhere.
+            if (e.AwayFrom != null)
+                foreach (var (name, _, wFrom, wTo) in WorldBossSchedule.WindowsBetween(now, now + Duration(e) * 60))
+                    if (name == e.AwayFrom && EventDirectorRules.Overlaps(now, now + Duration(e) * 60, wFrom, wTo))
+                        return $"{name}'s window ({Stamp(wFrom)} to {Stamp(wTo)}) meets it";
             // A world boss rising nearby while it runs: his fight is the region's event.
             return BossInTheWay(e, now, now + Duration(e) * 60);
         }
@@ -1345,6 +1519,17 @@ namespace RevivalGuard
                     Say(session, "[EventDirector] @eventdirector list | on | off | next | skip | stop | start <key>");
                 }
             }
+        }
+
+        /// <summary>Start one entry by hand (BaelRampage's @rampage visit): the same as @eventdirector start key. World thread.</summary>
+        internal static void StartEntry(string key, string who, Session session) => Act("start", key, who, session);
+
+        /// <summary>Stop the running entry by hand if its key starts with this prefix (BaelRampage's @rampage leave). World thread.</summary>
+        internal static void StopEntryIf(string prefix, string who, Session session)
+        {
+            string cur; lock (s_Lock) cur = s_State.Current;
+            if (cur == null || !cur.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) { Say(session, $"[EventDirector] no {prefix}* event is running."); return; }
+            Act("stop", null, who, session);
         }
 
         static void Act(string verb, string key, string who, Session session)

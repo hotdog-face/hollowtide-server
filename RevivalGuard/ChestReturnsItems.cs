@@ -72,6 +72,7 @@ namespace RevivalGuard
             try
             {
                 if (!(container is Chest chest) || chest is Storage || chest.Inventory.Count == 0) return;
+                if (ForeverChest.Is(chest)) return;   // it keeps everything: nothing to hand back
 
                 var toOwner = new Dictionary<uint, List<WorldObject>>();
                 var names = new Dictionary<uint, string>();

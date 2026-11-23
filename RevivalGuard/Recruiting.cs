@@ -132,6 +132,14 @@ namespace RevivalGuard
 
         static bool HasVassals(Player p) => p.AllegianceNode != null && p.AllegianceNode.HasVassals;
 
+        /// <summary>NewcomerNotes: how many allegiances /recruit would show this player now, or -1 when /recruit is off
+        /// or the player is not free to join one.</summary>
+        internal static int OpenListingsFor(Player p)
+        {
+            if (!On || p == null || !Seeker(p)) return -1;
+            return Listings().Count;
+        }
+
         static bool Seeker(Player p) => RecruitRule.Seeker(p.PatronId != null, HasVassals(p), BotOrStaff(p));
 
         static RecruitRule.Toggle CanManage(Player p, out Allegiance a)

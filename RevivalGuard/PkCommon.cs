@@ -39,7 +39,8 @@ namespace RevivalGuard
             (P_IGNORE_IP, false, "PK expansion: count kills between characters on one connection address (a test aid; leave false)"),
             (PkNight.P_ON, false, "PK Night: every Sunday 7 PM Pacific, hold the spot for an hour (RevivalGuard PkNight; docs/proposals/pk-night.md)"),
             (PkNight.P_DISCORD, false, "PK Night: post the start and the result to Discord (DiscordBridge.Announce)"),
-            (PkNight.P_BANNER, false, "PK Night: the winning allegiance's monarch gets a Banner of the Held Ground (908120), once per allegiance ever (HeldGroundBanner)"),
+            (PkBattlefield.P_ON, false, "PK battlefields: player corpses in the PK zones (Dark Isle beach, Arwic's lawn, mansions, PK Night spots) never rot on a timer; over a zone's cap the oldest rots (RevivalGuard PkBattlefield)"),
+            (PkNight.P_BANNER, false, "PK Night: a Banner of the Held Ground (908120) to the winners: by fellowship, its leader once per player ever; by allegiance, its monarch once per allegiance ever (HeldGroundBanner)"),
         };
         static readonly (string key, long def, string desc)[] s_Longs =
         {
@@ -49,7 +50,10 @@ namespace RevivalGuard
             (PkBounty.P_MAX_AMOUNT, 2000000, "PK expansion: largest total bounty on one head, pyreals"),
             (PkShrines.P_ATTUNE, 60, "PK expansion: seconds a player killer must hold a Shadow Shrine uncontested to take it"),
             (PkNight.P_RADIUS, PkNight.DEFAULT_RADIUS, "PK Night: metres from the spot's centre within which a player killer holds it"),
+            (PkBattlefield.P_CAP, PkBattlefield.DEFAULT_CAP, "PK battlefields: corpses a zone keeps (a density zone keeps more, never fewer)"),
             (PkNight.P_TOKEN, 0, "PK Night: the weenie given to each winner (0 = none; the owner picks one)"),
+            (PkNight.P_MARKER, PkNight.MARKER_WCID, "PK Night: the weenie standing every 8 m round the hill's edge (0 = none; default the Tumerok Torch)"),
+            (PkNight.P_MARKER_CENTRE, PkNight.MARKER_CENTRE_WCID, "PK Night: the weenie marking the hill's centre (0 = none; default the Gout of Elemental Flame)"),
         };
         static readonly (string key, double def, string desc)[] s_Doubles =
         {
@@ -66,6 +70,7 @@ namespace RevivalGuard
             (PkShrines.P_HOURS, "", "PK expansion: UTC hours the shrines can be taken, e.g. 18-23 or 2-4,20-22; empty = always"),
             (PkRenown.P_SEASON, "Season 1", "PK expansion: the name of the current PK season"),
             (PkNight.P_TITLE, "KingofDarktide", "PK Night: the retail CharacterTitle the winners earn (an enum name; none = no title)"),
+            (PkNight.P_SIDES, PkNight.SIDES_FELLOWSHIP, "PK Night: what a side is, fellowship (a fellowship, or a player alone; unset means this) or allegiance (the monarch, or a player alone)"),
         };
 
         /// <summary>Make every key an ordinary ACE property (@modifybool / @modifylong / @fetch...):
@@ -104,7 +109,7 @@ namespace RevivalGuard
         internal static double Dbl(string key, double def) => PropertyManager.GetDouble(key, def).Item;
         internal static string Str(string key, string def) => PropertyManager.GetString(key, def).Item ?? def;
 
-        internal static bool AnyOn => On(P_RENOWN) || On(P_BOUNTY) || On(P_SHRINES) || PkNight.On;
+        internal static bool AnyOn => On(P_RENOWN) || On(P_BOUNTY) || On(P_SHRINES) || PkNight.On || PkArena.On;
 
         // ------------------------------------------------------------------ the honour check
 
@@ -117,8 +122,9 @@ namespace RevivalGuard
             var f = new Facts { NoKiller = killer == null || victim == null || killer == victim };
             if (!f.NoKiller)
             {
-                f.KillerMerc = Mercenaries.IsMerc(killer);
-                f.VictimMerc = Mercenaries.IsMerc(victim);
+                // the Hollow Company only: a Borg is a player here (owner 2026-11-22; live had logged Borg kills "a mercenary")
+                f.KillerMerc = Mercenaries.IsHollowCompany(killer);
+                f.VictimMerc = Mercenaries.IsHollowCompany(victim);
                 f.SameAccount = killer.Account != null && victim.Account != null && killer.Account.AccountId == victim.Account.AccountId;
                 f.SameAddress = !On(P_IGNORE_IP) && SameAddress(killer, victim);
                 f.Allies = Allies(killer, victim);

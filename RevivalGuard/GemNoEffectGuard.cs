@@ -1,3 +1,6 @@
+using System.Linq;
+using ACE.Entity.Enum;
+using ACE.Server.Entity;
 using ACE.Server.WorldObjects;
 using HarmonyLib;
 
@@ -25,9 +28,44 @@ namespace RevivalGuard
             bool hasEffect = __instance.SpellDID.HasValue
                              || (__instance.UseCreateContractId ?? 0) > 0
                              || (__instance.UseCreateItem ?? 0) > 0;
-            if (hasEffect) return true;
+            if (hasEffect) return HasTarget(__instance, player);
             player.SendTransientError(GemNoEffectRule.Message(__instance.Name,
                 __instance.Use, __instance.LongDesc));
+            return false;
+        }
+
+        /// <summary>Report 261123-0021: a weapon rare (Rage of Grael, spell 3828) used with no enchantable weapon wielded
+        /// hits the "You fail to affect" branch of ACE's TryCastItemEnchantment_WithRedirects, yet UseGem still consumes it
+        /// and starts the rare timer. An armor rare (impen/bane type) with no enchantable armor worn silently does the same.
+        /// Mirrors that method's target choice and refuses before UseGem.</summary>
+        static bool HasTarget(Gem gem, Player player)
+        {
+            if (!gem.SpellDID.HasValue) return true;
+            var spell = new Spell(gem.SpellDID.Value);
+            if (spell.NotFound) return true;
+            if (spell.IsImpenBaneType)
+            {
+                if (player.EquippedObjects.Values.Any(i => (i.WeenieType == WeenieType.Clothing || i.IsShield) && i.IsEnchantable))
+                    return true;
+                player.SendTransientError(GemNoEffectRule.WieldFirst(gem.Name, GemNoEffectRule.Needs.Armor));
+                return false;
+            }
+            if (!spell.IsItemRedirectableType) return true;
+            var t = spell.NonComponentTargetType;
+            var item = t switch
+            {
+                ItemType.Weapon => player.GetEquippedWeapon(),
+                ItemType.Caster => player.GetEquippedWand(),
+                ItemType.WeaponOrCaster => player.GetEquippedWeapon() ?? player.GetEquippedWand(),
+                ItemType.MeleeWeapon => player.GetEquippedMeleeWeapon(),
+                ItemType.MissileWeapon => player.GetEquippedMissileWeapon(),
+                _ => null
+            };
+            if (item != null && item.IsEnchantable) return true;
+            var needs = t == ItemType.Caster ? GemNoEffectRule.Needs.Wand
+                : t == ItemType.WeaponOrCaster ? GemNoEffectRule.Needs.WeaponOrWand
+                : GemNoEffectRule.Needs.Weapon;
+            player.SendTransientError(GemNoEffectRule.WieldFirst(gem.Name, needs, item != null));
             return false;
         }
     }

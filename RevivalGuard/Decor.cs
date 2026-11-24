@@ -29,30 +29,41 @@ namespace RevivalGuard
     /// tools/decor/decor.py turns into a datafix (server rows) and a cell-overlay record (DAT statics). The database is
     /// never written here: a restart puts the test shard's rows back until a datafix is applied.
     /// Layer: one entry per thing touched, keyed, holding its first-seen pose ("before") and its latest ("after", null =
-    /// removed), so undo is just another edit and the file is the net result.
-    ///   s:&lt;guid&gt;      a placed server object (landblock_instance row, link children included)
+    /// removed), so the file is the net result.
+    /// V2 (owner 2026-11-23, "decorate the whole world of dereth easily in game"): one layer per AREA (&lt;area&gt;.json, with
+    /// the landblocks it covers, its name and its spot), padlocks ("locks"), undo kept per area on disk (&lt;area&gt;.undo.json:
+    /// each command's edits before and after), batches (one message, one undo step), kits (decor/kits/), and each landblock
+    /// gets its edits when it loads (DecorBlockLoad), not only when Decorate opens.
+    ///   s:&lt;guid&gt;     a placed server object (landblock_instance row, link children included)
     ///   a:&lt;n&gt;         a server object added from the palette (a Stuck copy of a retail weenie)
     ///   t:&lt;blk&gt;:&lt;i&gt;  a DAT static of block blk, i-th entry of its object list
     ///   n:&lt;n&gt;         a DAT static added from the palette
     /// Poses are AC landblock-local: cell, x, y, z, qw, qx, qy, qz.
     /// </summary>
-    internal static class Decor
+    internal static partial class Decor
     {
         static readonly object s_Lock = new object();
         static string Dir => Path.Combine(ModFolder.Path(), "decor");
         static bool Enabled => File.Exists(Path.Combine(Dir, "enabled"));
-        static string s_Area = "holtburg";
-        static JsonObject s_Layer;
         internal static volatile bool On;
 
         internal static void Register()
         {
             CommandManager.TryAddCommand(Cmd, "decor", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld,
                 "World decorator (test shard only; sent by the client's Decorate mode).",
-                "state | move <guid> <pose> | remove <guid> | restore <guid> | add <wcid> <pose> | unadd <id> | static <blk> <i> <model> <pose|gone> | staticadd <id> <model> <pose|gone>");
+                "state | move <guid> <pose> | remove <guid> | restore <guid> | add <wcid> <pose> [size] | unadd <id> | static <blk> <i> <model> <pose|gone> | "
+                + "staticadd <id> <model> <pose|gone> [size] | lock <guid|key> on|off | undo | redo | revert | area <id> | newarea | goto [id] | "
+                + "batch <label> <verb args>;<verb args>... | part <id> <i> <n> <text> | kitsave <name> <items> | publish <area> [props rows pieces] | pub");
             On = Enabled;
             Mod.Log.Info("[RevivalGuard] Decor: @decor (world decorator, test shard only: " + (Enabled ? "ENABLED here" : "off here") + ")");
         }
+
+        // a long batch arrives as several chat lines ("part"), put together before it runs
+        static readonly Dictionary<string, string[]> s_Parts = new Dictionary<string, string[]>();
+
+        /// <summary>Verbs that change the layout: each run is ONE undo step (a batch of fifty is one step too).</summary>
+        static readonly HashSet<string> s_Editing = new HashSet<string>
+            { "scale", "piecescale", "move", "remove", "restore", "add", "unadd", "static", "staticadd", "batch", "revert", "way" };
 
         static void Cmd(Session s, params string[] args)
         {
@@ -67,26 +78,147 @@ namespace RevivalGuard
                 lock (s_Lock)
                 {
                     Load();
-                    switch (args[0].ToLowerInvariant())
+                    string verb = args[0].ToLowerInvariant();
+                    if (verb == "part")
                     {
-                        case "state": SendState(s); return;
-                        case "info": Info(s, me, args); return;
-                        case "audit": Audit(me, Reply); break;
-                        case "scale": Scale(s, me, args, Reply); break;
-                        case "piecescale": PieceScale(args); break;
-                        case "move": Move(s, me, args, Reply); break;
-                        case "remove": Remove(me, args, Reply); break;
-                        case "restore": Restore(me, args, Reply); break;
-                        case "add": Add(s, me, args, Reply); break;
-                        case "unadd": Unadd(me, args, Reply); break;
-                        case "static": Static(args, Reply); break;
-                        case "staticadd": StaticAdd(args, Reply); break;
-                        default: Reply("Unknown decor verb."); return;
+                        // part <id> <i> <n> <text>: kept until all n are in, then run as one command
+                        string pid = me.Guid.Full.ToString("X8") + ":" + args[1];
+                        int i = int.Parse(args[2], CultureInfo.InvariantCulture), n = int.Parse(args[3], CultureInfo.InvariantCulture);
+                        if (n < 1 || n > 64 || i < 0 || i >= n) return;
+                        if (!s_Parts.TryGetValue(pid, out var got) || got.Length != n) s_Parts[pid] = got = new string[n];
+                        got[i] = string.Join(" ", args.Skip(4));
+                        if (got.Any(x => x == null)) return;
+                        s_Parts.Remove(pid);
+                        args = string.Join(" ", got).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        if (args.Length == 0) return;
+                        verb = args[0].ToLowerInvariant();
                     }
-                    Save();
+                    s_Cur = ActiveOf(me);
+                    if (s_Editing.Contains(verb))
+                    {
+                        var before = Snapshot();
+                        string label = verb == "batch" ? string.Join(" ", args[1].Split('_')) : verb;
+                        if (verb == "batch") Batch(s, me, args, Reply);
+                        else if (verb == "revert") Revert(me, Reply);
+                        else Dispatch(s, me, args, Reply);
+                        EndStep(label, before, s_Cur);
+                        Save();
+                        if (verb == "revert") SendState(s, me); else SendCounts(s, me);
+                        return;
+                    }
+                    switch (verb)
+                    {
+                        case "state": SendState(s, me); return;
+                        case "info": Info(s, me, args); return;
+                        case "infos":   // a box selection: one answer for all of them
+                        {
+                            var list = new JsonArray();
+                            s_InfoInto = list;
+                            try { foreach (var g in args.Skip(1).Take(200)) Info(s, me, new[] { "info", g }); }
+                            finally { s_InfoInto = null; }
+                            Send(s, new JsonObject { ["k"] = "infos", ["list"] = list });
+                            return;
+                        }
+                        case "audit": Audit(me, Reply); Save(); return;
+                        case "undo": case "redo": UndoRedo(me, verb == "undo", Reply); Save(); SendState(s, me); return;
+                        case "lock": Lock(me, args, Reply); Save(); SendState(s, me); return;
+                        case "kitsave": KitSave(args, Reply); SendState(s, me); return;
+                        case "area":
+                            if (args.Length < 2 || !s_Areas.ContainsKey(args[1])) { Reply("No such area."); return; }
+                            s_Active[me.Guid.Full] = args[1];
+                            SendState(s, me);
+                            return;
+                        case "newarea": NewArea(me, Reply, args.Length > 1 ? string.Join(" ", args.Skip(1)) : null); Save(); SendState(s, me); return;
+                        case "goto": GoTo(me, args.Length > 1 ? args[1] : null, Reply); return;
+                        case "publish": Publish(s, me, args, Reply); SendPub(s); return;
+                        case "pub": SendPub(s); return;
+                        default: if (WorldVerb(s, me, verb, args, Reply)) return; Reply("Unknown decor verb."); return;
+                    }
                 }
             }
             catch (Exception e) { Reply("That edit failed: " + e.Message); Mod.Log.Warn($"[RevivalGuard] Decor {string.Join(' ', args)}: {e}"); }
+        }
+
+        static void Dispatch(Session s, Player me, string[] args, Action<string> reply)
+        {
+            switch (args[0].ToLowerInvariant())
+            {
+                case "scale": Scale(s, me, args, reply); break;
+                case "piecescale": PieceScale(args); break;
+                case "move": Move(s, me, args, reply); break;
+                case "remove": Remove(me, args, reply); break;
+                case "restore": Restore(me, args, reply); break;
+                case "add": Add(s, me, args, reply); break;
+                case "unadd": Unadd(me, args, reply); break;
+                case "static": Static(args, reply); break;
+                case "staticadd": StaticAdd(args, reply); break;
+                case "way": Way(me, args, reply); break;
+                default: reply("Unknown decor verb in a batch: " + args[0]); break;
+            }
+        }
+
+        /// <summary>batch &lt;label_words&gt; &lt;verb args&gt;;&lt;verb args&gt;;...: a kit, line, ring, brush stroke or group edit as one
+        /// message, one undo step and one answer (the props it added, in order, and what was refused).</summary>
+        static void Batch(Session s, Player me, string[] args, Action<string> reply)
+        {
+            var ops = string.Join(" ", args.Skip(2)).Split(';').Select(x => x.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)).Where(x => x.Length > 0).ToList();
+            var said = new List<string>();
+            s_BatchAdded = new List<JsonObject>();
+            int failed = 0;
+            string label = string.Join(" ", args[1].Split('_'));
+            try
+            {
+                foreach (var op in ops)
+                {
+                    string first = null;
+                    int added0 = s_BatchAdded.Count;
+                    try { Dispatch(null, me, op, t => first ??= t); }
+                    catch (Exception e) { first = "failed: " + e.Message; }
+                    bool refused = op[0] == "add" ? s_BatchAdded.Count == added0
+                        : first != null && !(op[0] == "remove" && first.Contains("removed")) && !(op[0] == "restore" && first.Contains("back where"));
+                    if (refused) { failed++; if (said.Count < 3 && first != null) said.Add(first); }
+                }
+                var added = new JsonArray(s_BatchAdded.Select(x => (JsonNode)x).ToArray());
+                Send(s, new JsonObject { ["k"] = "batch", ["label"] = label, ["ops"] = ops.Count, ["added"] = added, ["failed"] = failed });
+                reply(failed == 0 ? $"{label}: {ops.Count} done" : $"{label}: {ops.Count - failed} of {ops.Count} done. {string.Join(" ", said)}");
+            }
+            finally { s_BatchAdded = null; }
+        }
+
+        /// <summary>newarea: an area around where you stand, named by its map spot; it becomes the one you decorate.</summary>
+        static void NewArea(Player me, Action<string> reply, string name = null)
+        {
+            var at = new ACE.Entity.Position(me.Location);
+            uint blk = at.LandblockId.Landblock;
+            int n = 1;
+            string id;
+            while (s_Areas.ContainsKey(id = $"area-{blk:x4}-{n}")) n++;
+            string where;
+            try { where = at.GetMapCoordStr() ?? $"block {blk:X4}"; } catch { where = $"block {blk:X4}"; }
+            // indoors (a dungeon or a building's room, decor-world): the client names the place; map coordinates mean little there
+            if (at.Indoors && !string.IsNullOrWhiteSpace(name)) where = CleanName(name);
+            var ar = new Area
+            {
+                Id = id,
+                Layer = new JsonObject
+                {
+                    ["area"] = id, ["name"] = $"New area {s_Areas.Count + 1} ({where})", ["blocks"] = new JsonArray($"{blk:X4}"),
+                    ["home"] = PoseOf(at), ["next"] = 1, ["edits"] = new JsonObject(), ["locks"] = new JsonObject(),
+                },
+            };
+            s_Areas[id] = ar;
+            s_Active[me.Guid.Full] = id;
+            reply($"{ar.Layer["name"]}: made. Your changes go in it now.");
+        }
+
+        /// <summary>goto [id]: the decorator to an area's spot (where it was made, or Holtburg's lifestone).</summary>
+        static void GoTo(Player me, string id, Action<string> reply)
+        {
+            var ar = id != null && s_Areas.TryGetValue(id, out var x) ? x : ActiveOf(me);
+            if (!(ar.Layer["home"] is JsonObject home)) { reply("That area has no spot to go to."); return; }
+            var to = PosFrom(home);
+            to.LandblockId = new LandblockId(to.GetCell());
+            me.Teleport(to);
         }
 
         // ---- server objects ----
@@ -173,8 +305,8 @@ namespace RevivalGuard
             {
                 Load();
                 if ((p.Id & 0xF0000000u) != 0x70000000u)
-                    return !(s_Layer["edits"]![$"s:{p.Generator.Guid.Full:X8}"] is JsonObject g && g["spawn0"] != null && g.ContainsKey("after") && g["after"] == null);
-                if (!(s_Layer["edits"]![$"s:{p.Id:X8}"] is JsonObject e) || !e.ContainsKey("after")) return true;
+                    return !(Get($"s:{p.Generator.Guid.Full:X8}") is JsonObject g && g["spawn0"] != null && g.ContainsKey("after") && g["after"] == null);
+                if (!(Get($"s:{p.Id:X8}") is JsonObject e) || !e.ContainsKey("after")) return true;
                 if (e["after"] == null) return false;
                 SetProfilePose(p, PosFrom((JsonObject)e["after"]!));
                 return true;
@@ -190,11 +322,11 @@ namespace RevivalGuard
                 Load();
                 if ((p.Id & 0xF0000000u) != 0x70000000u)
                 {
-                    if (s_Layer["edits"]![$"s:{p.Generator.Guid.Full:X8}"] is JsonObject g && g["spawn"] is JsonObject at)
+                    if (Get($"s:{p.Generator.Guid.Full:X8}") is JsonObject g && g["spawn"] is JsonObject at)
                         foreach (var wo in spawned) Place(wo, PosFrom(at), _ => { });
                     return;
                 }
-                if (!(s_Layer["edits"]![$"s:{p.Id:X8}"] is JsonObject e) || e["scale"] == null) return;
+                if (!(Get($"s:{p.Id:X8}") is JsonObject e) || e["scale"] == null) return;
                 foreach (var wo in spawned) ApplyScale(wo, N(e["scale"]));
             }
         }
@@ -233,7 +365,7 @@ namespace RevivalGuard
             uint guid = Hex(a[1]);
             var wo = Find(me, guid);
             var o = new JsonObject { ["k"] = "info", ["guid"] = $"0x{guid:X8}" };
-            if (wo == null) { o["why"] = "That object is not here any more."; Send(s, o); return; }
+            if (wo == null) { o["why"] = "That object is not here any more."; Answer(s, o); return; }
             string why = WhyNot(wo);
             if (why != null) o["why"] = why;
             else
@@ -244,9 +376,19 @@ namespace RevivalGuard
                 string noScale = WhyNoScale(wo);
                 if (noScale != null) o["noscale"] = noScale;
                 o["scale"] = R(wo.ObjScale ?? 1f);
+                if (LockedName(key) != null) o["locked"] = true;
             }
-            Send(s, o);
+            o["wcid"] = wo.WeenieClassId;
+            // its drawing, so a kit of Turbine's things can show them while placing (F7 261124-0004)
+            if (wo.SetupTableId != 0) o["setup"] = $"0x{wo.SetupTableId:X8}";
+            string noCopy = WhyNoCopy(wo);
+            if (noCopy != null) o["nocopy"] = noCopy;
+            Answer(s, o);
         }
+
+        static JsonArray s_InfoInto;
+
+        static void Answer(Session s, JsonObject o) { if (s_InfoInto != null) s_InfoInto.Add(o); else Send(s, o); }
 
         /// <summary>@decor audit (test shard): every object in the landblocks around you is really moved, moved back, removed and
         /// restored through the same verbs the panel sends, and the result written to decor/audit.json. The layer ends as it began.</summary>
@@ -260,7 +402,7 @@ namespace RevivalGuard
                 if (Math.Abs((int)(id >> 8 & 0xFF) - (int)bx) > 1 || Math.Abs((int)(id & 0xFF) - (int)by) > 1) continue;
                 all.AddRange(l.GetAllWorldObjectsForDiagnostics().Where(w => !(w is Player)));
             }
-            string before = s_Layer["edits"]!.ToJsonString();
+            string before = AllEditsJson();
             var rows = new JsonArray();
             string P(ACE.Entity.Position q, float dx) => string.Format(CultureInfo.InvariantCulture, "0x{0:X8} {1} {2} {3} {4} {5} {6} {7}",
                 q.Cell, q.PositionX + dx, q.PositionY, q.PositionZ, q.RotationW, q.RotationX, q.RotationY, q.RotationZ);
@@ -278,7 +420,7 @@ namespace RevivalGuard
                 rows.Add(o);
                 if (hidden || why != null || key == null || !placed) continue;
                 uint guid = wo.Guid.Full, row = Hex(key.Substring(2));
-                bool had = s_Layer["edits"]![key] != null;
+                bool had = Get(key) != null;
                 if (had) { o["skipped"] = "already in the layout"; continue; }
                 var home = new ACE.Entity.Position(wo.Location);
                 var rowHome = ProfileOf(wo) is GeneratorProfile rp && (rp.Id & 0xF0000000u) == 0x70000000u ? ProfilePose(rp) : home;   // where its row says
@@ -296,12 +438,12 @@ namespace RevivalGuard
                     var back = Find(me, row);
                     o["restored"] = back != null && (back.IsGenerator || back.Location.DistanceTo(rowHome) < 0.6f);
                     if (back == null) o["restoreSaid"] = said;
-                    if (s_Layer["edits"]![key] != null) ((JsonObject)s_Layer["edits"]!).Remove(key);
+                    Del(key);
                 }
-                catch (Exception e) { o["error"] = e.GetType().Name + ": " + e.Message; if (s_Layer["edits"]![key] != null) ((JsonObject)s_Layer["edits"]!).Remove(key); }
+                catch (Exception e) { o["error"] = e.GetType().Name + ": " + e.Message; Del(key); }
             }
             File.WriteAllText(Path.Combine(Dir, "audit.json"), rows.ToJsonString());
-            reply($"audit: {rows.Count} objects; layout unchanged: {before == s_Layer["edits"]!.ToJsonString()}");
+            reply($"audit: {rows.Count} objects; layout unchanged: {before == AllEditsJson()}");
         }
 
         static void Scale(Session s, Player me, string[] a, Action<string> reply)
@@ -313,6 +455,7 @@ namespace RevivalGuard
             string why = WhyNot(wo) ?? WhyNoScale(wo);
             if (why != null) { reply(why); return; }
             string key = KeyOf(wo, out bool placed);
+            if (Locked(key, reply)) return;
             float was = wo.ObjScale ?? 1f;
             var here = PoseOf(wo.Location);
             var e = Entry(key, () => new JsonObject
@@ -330,18 +473,21 @@ namespace RevivalGuard
         /// <summary>A map piece's size: the client draws it; the layer keeps it (decor.py publishes a sized piece as a prop).</summary>
         static void PieceScale(string[] a)
         {
-            if (s_Layer["edits"]![a[1]] is JsonObject e) e["scale"] = R(Mathf01(F(a[2])));
+            if (Locked(a[1], null)) return;
+            if (Get(a[1]) is JsonObject e) e["scale"] = R(Mathf01(F(a[2])));
         }
 
         static void Move(Session s, Player me, string[] a, Action<string> reply)
         {
             uint guid = Hex(a[1]);
             var pose = Pose(a, 2);
+            if (WhyNotCell(pose, reply)) return;
             var wo = SpawnOf(Find(me, guid));
             if (wo == null) { reply("That object is not here any more."); return; }
             string why = WhyNot(wo);
             if (why != null) { reply(why); return; }
             string key = KeyOf(wo, out bool placed);
+            if (Locked(key, reply)) return;
             var gen = GenRowOf(wo);
             if (gen != null && key == $"s:{gen.Guid.Full:X8}") { MoveWithGenerator(wo, gen, pose, key, reply); return; }
             var profile = placed ? ProfileOf(wo) : null;
@@ -358,7 +504,7 @@ namespace RevivalGuard
             // back on its original spot with its own size: no longer an edit (an undo must not leave a row in the datafix)
             if (placed && e["scale"] == null && e["before"] is JsonObject b && wo.Location.DistanceTo(PosFrom(b)) < 0.005f
                 && Math.Abs(Math.Abs(wo.Location.RotationW * N(b["qw"]) + wo.Location.RotationZ * N(b["qz"])) - 1f) < 0.0005f)
-                ((JsonObject)s_Layer["edits"]!).Remove(key);
+                Del(key);
             if (s != null) Send(s, new JsonObject { ["k"] = "moved", ["key"] = key, ["guid"] = $"0x{guid:X8}" });
         }
 
@@ -372,7 +518,7 @@ namespace RevivalGuard
             var global = wo.Location.ToGlobal() - was.ToGlobal();
             var to = new ACE.Entity.Position(gen.Location);
             to.PositionX += global.X; to.PositionY += global.Y; to.PositionZ += global.Z;
-            if (to.PositionX < 0f || to.PositionX >= 192f || to.PositionY < 0f || to.PositionY >= 192f)
+            if (!to.Indoors && (to.PositionX < 0f || to.PositionX >= 192f || to.PositionY < 0f || to.PositionY >= 192f))
             {
                 Place(wo, was, _ => { });
                 reply($"{wo.Name} can't leave its landblock: its spawn point stays in this one.");
@@ -388,7 +534,7 @@ namespace RevivalGuard
             e["spawn"] = PoseOf(wo.Location);
             if (e["spawn0"] is JsonObject s0 && wo.Location.DistanceTo(PosFrom(s0)) < 0.005f
                 && Math.Abs(Math.Abs(wo.Location.RotationW * N(s0["qw"]) + wo.Location.RotationZ * N(s0["qz"])) - 1f) < 0.0005f)
-                ((JsonObject)s_Layer["edits"]!).Remove(key);
+                Del(key);
         }
 
         static void Remove(Player me, string[] a, Action<string> reply)
@@ -399,6 +545,7 @@ namespace RevivalGuard
             string why = WhyNot(wo);
             if (why != null) { reply(why); return; }
             string key = KeyOf(wo, out bool placed);
+            if (Locked(key, reply)) return;
             if (!placed) { Unadd(me, new[] { "unadd", key.Substring(2) }, reply); return; }
             var gen = GenRowOf(wo);
             if (gen != null && key == $"s:{gen.Guid.Full:X8}")
@@ -432,14 +579,15 @@ namespace RevivalGuard
             uint guid = Hex(a[1]);
             var named = SpawnOf(Find(me, guid));   // a live spawn's guid or a row's
             string key = named != null ? KeyOf(named, out _) ?? $"s:{guid:X8}" : $"s:{guid:X8}";
-            if (!(s_Layer["edits"]![key] is JsonObject e)) { reply("Nothing to restore."); return; }
+            if (Locked(key, reply)) return;
+            if (!(Get(key) is JsonObject e)) { reply("Nothing to restore."); return; }
             var before = (JsonObject)e["before"]!;
             uint row = Hex(key.Substring(2));
             var wo = named;
             var profile = ProfileOfRow(row);
             if (profile != null)
             {
-                ((JsonObject)s_Layer["edits"]!).Remove(key);   // first: its spawn must no longer be held back
+                Del(key);   // first: its spawn must no longer be held back
                 SetProfilePose(profile, PosFrom(before));
                 if (wo == null)
                 {
@@ -457,7 +605,7 @@ namespace RevivalGuard
                 // moved, not removed: the generator and what it made go back
                 if (!Place(liveGen, PosFrom(before), reply)) return;
                 if (wo != null && wo != liveGen) Place(wo, PosFrom((JsonObject)e["spawn0"]!), reply);
-                ((JsonObject)s_Layer["edits"]!).Remove(key);
+                Del(key);
                 reply($"{(string)e["name"]} is back where it was.");
                 return;
             }
@@ -470,7 +618,7 @@ namespace RevivalGuard
                 // it stood here before: nothing nearby may refuse it (a portal beside a wall came back as "could not place")
                 bool wasEthereal = wo.Ethereal ?? false;
                 wo.Ethereal = true;
-                ((JsonObject)s_Layer["edits"]!).Remove(key);   // first: a generator's own first spawn must not be held back
+                Del(key);   // first: a generator's own first spawn must not be held back
                 if (!wo.EnterWorld())
                 {
                     // ACE's placement refuses a spot in the air or against a wall that the world's own load accepts (a portal above
@@ -481,7 +629,7 @@ namespace RevivalGuard
                     wo.Location = new ACE.Entity.Position(me.Location);
                     if (wo == null || !wo.EnterWorld() || !Place(wo, PosFrom(before), reply))
                     {
-                        s_Layer["edits"]![key] = JsonNode.Parse(e.ToJsonString());
+                        Put(key, (JsonObject)JsonNode.Parse(e.ToJsonString())!);
                         wo?.Destroy();
                         reply("Could not place it again.");
                         return;
@@ -494,45 +642,108 @@ namespace RevivalGuard
             }
             else if (!Place(wo, PosFrom(before), reply)) return;
             if (e["scale0"] != null) ApplyScale(wo, N(e["scale0"]));
-            ((JsonObject)s_Layer["edits"]!).Remove(key);
+            Del(key);
             reply($"{wo.Name} is back where it was.");
         }
 
+        /// <summary>add &lt;wcid&gt; &lt;pose&gt; [size]: a Stuck copy of a retail weenie (the palette, a copy of something in the world, a
+        /// kit, a line, a ring or a brush stroke).</summary>
         static void Add(Session s, Player me, string[] a, Action<string> reply)
         {
             uint wcid = uint.Parse(a[1], CultureInfo.InvariantCulture);
             var pose = Pose(a, 2);
-            var wo = WorldObjectFactory.CreateNewWorldObject(wcid);
-            if (wo == null) { reply($"No such thing ({wcid})."); return; }
-            if (wo is Creature) { wo.Destroy(); reply("New NPCs and monsters are not in the palette."); return; }
-            wo.SetProperty(PropertyBool.Stuck, true);   // as the datafix clones it: nobody picks it up
-            wo.TimeToRot = -1;
-            wo.Location = pose;
-            wo.Location.LandblockId = new LandblockId(wo.Location.GetCell());
-            if (!wo.EnterWorld()) { wo.Destroy(); reply($"{wo.Name} could not be placed there."); return; }
-            int n = (int)(s_Layer["next"]?.GetValue<int>() ?? 1);
-            s_Layer["next"] = n + 1;
-            string key = $"a:{n}";
-            ((JsonObject)s_Layer["edits"]!)[key] = new JsonObject
+            string badCell = null;
+            if (WhyNotCell(pose, t => badCell = t))
+            {
+                // answered as a refusal: the client queued this add and pairs the next answer with it
+                reply(badCell);
+                if (s_BatchAdded == null && s != null) Send(s, new JsonObject { ["k"] = "refused", ["wcid"] = wcid, ["why"] = badCell });
+                return;
+            }
+            float? size = a.Length > 10 ? Mathf01(F(a[10])) : (float?)null;
+            string why = null;
+            var wo = MakeAdd(wcid, pose, size, t => { why = t; reply(t); });
+            if (wo == null)
+            {
+                // the client queued this add: say so, or its next "added" answer was taken for this one. A hidden trigger's
+                // look can still go down as a map piece (F7 261123-0014): "piece" asks the client to do that instead.
+                var no = new JsonObject { ["k"] = "refused", ["wcid"] = wcid, ["why"] = why };
+                if (why != null && why.Contains(HIDDEN_TRIGGER)) no["piece"] = true;
+                if (s_BatchAdded == null && s != null) Send(s, no);
+                return;
+            }
+            string key = $"a:{NextAdd()}";
+            var e = new JsonObject
             {
                 ["kind"] = "add", ["wcid"] = wcid, ["name"] = wo.Name, ["guid"] = $"0x{wo.Guid.Full:X8}", ["after"] = PoseOf(wo.Location),
             };
+            if (size.HasValue) e["scale"] = R(size.Value);
+            Put(key, e);
             s_Added[wo.Guid.Full] = key;
-            Send(s, new JsonObject { ["k"] = "added", ["key"] = key, ["guid"] = $"0x{wo.Guid.Full:X8}", ["name"] = wo.Name });
+            var msg = new JsonObject { ["k"] = "added", ["key"] = key, ["guid"] = $"0x{wo.Guid.Full:X8}", ["name"] = wo.Name };
+            if (s_BatchAdded != null) s_BatchAdded.Add(msg);
+            else if (s != null) Send(s, msg);
+        }
+
+        /// <summary>Things a copy must never be: anything that walks, talks back as a creature, teleports or spawns.</summary>
+        static string WhyNoCopy(WorldObject wo)
+        {
+            if (wo is Creature) return "New NPCs and monsters can't be placed: copy props and map pieces.";
+            // the "flat dirt floor patch" props (Tusker's Friend, The Tunnel, Scold ...) are invisible pressure plates: no client
+            // is sent one, so a click placed nothing anyone could see, and stepping on one fires its trap (F7 261123-0014)
+            if (wo is PressurePlate || wo.Visibility)
+                return $"{wo.Name} is {HIDDEN_TRIGGER} (a trap that fires when stepped on), so it can't be placed as a prop.";
+            if (wo is Portal || wo is Door || wo is Lifestone || wo.IsGenerator || wo is House || wo is Hook || wo is Storage)
+                return $"{wo.Name} does something when used, so it can't be copied.";
+            return null;
+        }
+
+        const string HIDDEN_TRIGGER = "an invisible trigger";
+
+        static WorldObject MakeAdd(uint wcid, ACE.Entity.Position pose, float? size, Action<string> reply)
+        {
+            var wo = WorldObjectFactory.CreateNewWorldObject(wcid);
+            if (wo == null) { reply($"No such thing ({wcid})."); return null; }
+            string no = WhyNoCopy(wo);
+            if (no != null) { wo.Destroy(); reply(no); return null; }
+            wo.SetProperty(PropertyBool.Stuck, true);   // as the datafix clones it: nobody picks it up
+            wo.TimeToRot = -1;
+            if (size.HasValue) wo.ObjScale = size.Value;
+            wo.Location = new ACE.Entity.Position(pose);
+            wo.Location.LandblockId = new LandblockId(wo.Location.GetCell());
+            if (!wo.EnterWorld()) { wo.Destroy(); reply($"{wo.Name} could not be placed there."); return null; }
+            return wo;
+        }
+
+        /// <summary>a:n keys are unique over every area (decor.py and the client look them up by key alone).</summary>
+        static int NextAdd()
+        {
+            int n = 1;
+            foreach (var ar in s_Areas.Values)
+            {
+                n = Math.Max(n, (int)(ar.Layer["next"]?.GetValue<int>() ?? 1));
+                // a stale "next" (a hand-edited or old file) never hands out a key an edit already has (Codex review 11-23)
+                if (ar.Layer["edits"] is JsonObject ed)
+                    foreach (var kv in ed)
+                        if (kv.Key.StartsWith("a:") && int.TryParse(kv.Key.Substring(2), out var k)) n = Math.Max(n, k + 1);
+            }
+            s_Cur.Layer["next"] = n + 1;
+            return n;
         }
 
         static void Unadd(Player me, string[] a, Action<string> reply)
         {
             string key = a[1].StartsWith("a:") ? a[1] : "a:" + a[1];
-            if (!(s_Layer["edits"]![key] is JsonObject e)) { reply("Nothing to take away."); return; }
+            if (Locked(key, reply)) return;
+            if (!(Get(key) is JsonObject e)) { reply("Nothing to take away."); return; }
             uint guid = Hex((string)e["guid"]!);
-            var wo = Find(me, guid);
+            var wo = s_Added.ContainsKey(guid) ? Find(me, guid) : null;
             // Not found = not in any loaded landblock; an added prop is never saved (DecorNoSave), so it is gone for good
             // and the entry can go too. Found: destroyed first, then forgotten.
             wo?.Destroy();
-            ((JsonObject)s_Layer["edits"]!).Remove(key);
+            Del(key);
             s_Added.Remove(guid);
-            reply(wo != null ? $"{wo.Name} taken away." : "Taken away (it was no longer in the world).");
+            if (s_BatchAdded == null) reply(wo != null ? $"{wo.Name} taken away." : "Taken away (it was no longer in the world).");
         }
 
         // ---- DAT statics: the client draws them; the server only keeps the layer ----
@@ -540,21 +751,33 @@ namespace RevivalGuard
         static void Static(string[] a, Action<string> reply)
         {
             string key = $"t:{a[1].ToUpperInvariant()}:{a[2]}";
-            var edits = (JsonObject)s_Layer["edits"]!;
-            if (a[4] == "reset") { edits.Remove(key); return; }
+            if (Locked(key, reply)) return;
+            if (a[4] == "reset") { Del(key); return; }
+            // a ROOM's object (decor-world): <blk> is then its cell (more than four hex digits), the entry names the cell, and the
+            // pose must be inside the rooms (decor.py rewrites that cell's object list in the overlay)
+            uint where = Hex(a[1]);
+            bool room = where > 0xFFFF;
+            if (room && WhyNotRoom(where, reply)) return;
+            if (a[4] != "gone" && WhyNotCell(Pose(a, 4), reply)) return;
             var e = Entry(key, () => new JsonObject { ["kind"] = "static", ["block"] = a[1].ToUpperInvariant(), ["id"] = a[2], ["model"] = a[3] });
+            if (room) e["cell"] = $"0x{where:X8}";
             int from;
             if (a[4] == "gone") { e["after"] = null; from = 5; }
             else { e["after"] = PoseOf(Pose(a, 4)); from = 12; }
             if (e["before"] == null && a.Length > from + 8 && a[from] == "from") e["before"] = PoseOf(Pose(a, from + 1));
         }
 
+        /// <summary>staticadd &lt;id&gt; &lt;model&gt; &lt;pose|gone&gt; [size]</summary>
         static void StaticAdd(string[] a, Action<string> reply)
         {
             string key = "n:" + a[1];
-            var edits = (JsonObject)s_Layer["edits"]!;
-            if (a[3] == "gone") { edits.Remove(key); return; }
-            edits[key] = new JsonObject { ["kind"] = "staticadd", ["model"] = a[2], ["after"] = PoseOf(Pose(a, 3)) };
+            if (Locked(key, reply)) return;
+            if (a[3] == "gone") { Del(key); return; }
+            if (WhyNotCell(Pose(a, 3), reply)) return;
+            var e = new JsonObject { ["kind"] = "staticadd", ["model"] = a[2], ["after"] = PoseOf(Pose(a, 3)) };
+            if (a.Length > 11) e["scale"] = R(Mathf01(F(a[11])));
+            else if (Get(key) is JsonObject old && old["scale"] != null) e["scale"] = old["scale"]!.DeepClone();
+            Put(key, e);
         }
 
         // ---- helpers ----
@@ -596,7 +819,8 @@ namespace RevivalGuard
             // it moved (F7 261122-0027, 0030).
             var phys = wo.PhysicsObj;
             var target = pos.PhysPosition();
-            var cell = phys.AdjustPosition(target, System.Numerics.Vector3.Zero, false, true);
+            // indoors the origin sits ON the floor, the room's boundary: ask for the room a hand above it (decor-world)
+            var cell = phys.AdjustPosition(target, pos.Indoors ? new System.Numerics.Vector3(0f, 0f, 0.1f) : System.Numerics.Vector3.Zero, false, true);
             var r = phys.ForceIntoCell(cell, target);
             if (r != ACE.Server.Physics.Common.SetPositionError.OK) { reply($"{wo.Name} can't go there ({r})."); return false; }
             phys.Position.ObjCellID = cell.ID;
@@ -610,10 +834,9 @@ namespace RevivalGuard
 
         static JsonObject Entry(string key, Func<JsonObject> make)
         {
-            var edits = (JsonObject)s_Layer["edits"]!;
-            if (edits[key] is JsonObject e) return e;
+            if (Get(key) is JsonObject e) return e;
             e = make();
-            edits[key] = e;
+            Put(key, e);
             return e;
         }
 
@@ -642,82 +865,544 @@ namespace RevivalGuard
 
         static double R(float v) => Math.Round(v, 4);
 
-        static string LayerPath => Path.Combine(Dir, s_Area + ".json");
+        // ---- areas (decor v2): one layer file per area, each listing its landblocks ----
 
+        sealed class Area
+        {
+            public string Id;
+            public JsonObject Layer;
+            public JsonArray Undo = new JsonArray(), Redo = new JsonArray();
+            public JsonObject Edits => (JsonObject)Layer["edits"]!;
+            public JsonObject Locks => Layer["locks"] as JsonObject ?? (JsonObject)(Layer["locks"] = new JsonObject());
+            public string LayerPath => Path.Combine(Dir, Id + ".json");
+            public string UndoPath => Path.Combine(Dir, Id + ".undo.json");
+        }
+
+        const int UNDO_KEEP = 100;
+        const string FIRST_AREA = "holtburg";
+        static Dictionary<string, Area> s_Areas;
+        static Area s_Cur;                                                     // the area this command edits (under s_Lock)
+        static readonly Dictionary<uint, string> s_Active = new Dictionary<uint, string>();   // player -> area id
+        static List<JsonObject> s_BatchAdded;                                  // set while a batch runs: one answer for all
+
+        static bool ValidId(string id) => id.Length > 0 && id.Length <= 40 && id.All(c => (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-');
+
+        /// <summary>Every area on this shard. holtburg.json from before areas loads untouched (its edits as they were; "blocks",
+        /// "name" and "home" are added beside them). The drudge range is made once, its three target drudges locked.</summary>
         static void Load()
         {
-            if (s_Layer != null) return;
-            try { if (File.Exists(LayerPath)) s_Layer = JsonNode.Parse(File.ReadAllText(LayerPath)) as JsonObject; }
-            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] Decor: {LayerPath} unreadable, starting a new layer: {e.Message}"); }
-            s_Layer ??= new JsonObject { ["area"] = s_Area, ["next"] = 1, ["edits"] = new JsonObject() };
-            // added objects do not survive a restart (the database has no row for them): their entries stay, and
-            // the client re-adds what is missing when it asks for the state.
+            if (s_Areas != null) return;
+            s_Areas = new Dictionary<string, Area>();
+            Directory.CreateDirectory(Dir);
+            foreach (var f in Directory.GetFiles(Dir, "*.json"))
+            {
+                string id = Path.GetFileNameWithoutExtension(f);
+                if (id.EndsWith(".undo", StringComparison.Ordinal) || !ValidId(id)) continue;
+                try
+                {
+                    if (!(JsonNode.Parse(File.ReadAllText(f)) is JsonObject layer) || !(layer["edits"] is JsonObject)) continue;
+                    var ar = new Area { Id = id, Layer = layer };
+                    if (File.Exists(ar.UndoPath) && JsonNode.Parse(File.ReadAllText(ar.UndoPath)) is JsonObject u)
+                    {
+                        if (u["undo"] is JsonArray ua) ar.Undo = (JsonArray)ua.DeepClone();
+                        if (u["redo"] is JsonArray ra) ar.Redo = (JsonArray)ra.DeepClone();
+                    }
+                    s_Areas[id] = ar;
+                }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] Decor: {f} unreadable, left alone: {e.Message}"); }
+            }
+            if (!s_Areas.ContainsKey(FIRST_AREA))
+                s_Areas[FIRST_AREA] = new Area { Id = FIRST_AREA, Layer = new JsonObject { ["area"] = FIRST_AREA, ["next"] = 1, ["edits"] = new JsonObject() } };
+            if (!s_Areas.ContainsKey("drudge-range") && !File.Exists(Path.Combine(Dir, "drudge-range.json")))
+            {
+                // owner 2026-11-23: "decorate the drudge target practice area first". The three Pyreal Target Drudges
+                // (tools/public-shard/datafixes/20261123-3-holtburg-dummies-move.sql) start locked.
+                var locks = new JsonObject();
+                foreach (var g in new[] { "7A9B4E70", "7A9B4E71", "7A9B4E72" }) locks["s:" + g] = "Pyreal Target Drudge";
+                s_Areas["drudge-range"] = new Area
+                {
+                    Id = "drudge-range",
+                    Layer = new JsonObject
+                    {
+                        ["area"] = "drudge-range", ["name"] = "Drudge range (42.2N 33.8E)", ["blocks"] = new JsonArray("A9B4"),
+                        ["home"] = PoseOf(new ACE.Entity.Position(0xA9B4002Au, 132f, 28f, 94.005f, 0f, 0f, 0f, 1f)),
+                        ["next"] = 1, ["edits"] = new JsonObject(), ["locks"] = locks,
+                    },
+                };
+            }
+            foreach (var ar in s_Areas.Values) Migrate(ar);
         }
+
+        /// <summary>Fields an area has always had since v2, filled in for a layer from before (its edits are not touched).</summary>
+        static void Migrate(Area ar)
+        {
+            var l = ar.Layer;
+            l["area"] ??= ar.Id;
+            if (l["name"] == null) l["name"] = ar.Id == FIRST_AREA ? "Holtburg" : ar.Id;
+            if (l["home"] == null && ar.Id == FIRST_AREA)   // Holtburg's lifestone
+                l["home"] = PoseOf(new ACE.Entity.Position(0xA9B40019u, 86f, 4f, 94.005f, 0f, 0f, 0.707107f, 0.707107f));
+            var blocks = l["blocks"] as JsonArray ?? new JsonArray();
+            var have = new HashSet<string>(blocks.Select(x => (string)x!));
+            if (ar.Id == FIRST_AREA) have.Add("A9B4");
+            foreach (var kv in ar.Edits) { uint b = BlockOfEdit(kv.Key, kv.Value as JsonObject); if (b != 0) have.Add($"{b:X4}"); }
+            if (have.Count != blocks.Count) l["blocks"] = new JsonArray(have.OrderBy(x => x).Select(x => (JsonNode)x).ToArray());
+        }
+
+        /// <summary>The landblock an edit is applied in: a row's own block (where the world loads it), else where it stands.</summary>
+        static uint BlockOfEdit(string key, JsonObject e)
+        {
+            try
+            {
+                if (key.StartsWith("s:")) return (Hex(key.Substring(2)) >> 12) & 0xFFFF;
+                if (key.StartsWith("t:")) { uint w = Hex(key.Split(':')[1]); return w > 0xFFFF ? w >> 16 : w; }   // a room's: its cell
+                if (e?["after"] is JsonObject a) return Hex((string)a["cell"]!) >> 16;
+                if (e?["before"] is JsonObject b) return Hex((string)b["cell"]!) >> 16;
+            }
+            catch { }
+            return 0;
+        }
+
+        static Area AreaOfKey(string key)
+        {
+            foreach (var ar in s_Areas.Values) if (ar.Edits.ContainsKey(key)) return ar;
+            return null;
+        }
+
+        /// <summary>An edit wherever it lives (every area: an object belongs to the area that first touched it).</summary>
+        static JsonObject Get(string key) => AreaOfKey(key)?.Edits[key] as JsonObject;
+
+        static void Del(string key) { foreach (var ar in s_Areas.Values) ar.Edits.Remove(key); }
+
+        /// <summary>Into the area that already holds it, else the area being decorated (which then covers its landblock).</summary>
+        static void Put(string key, JsonObject e, Area into = null)
+        {
+            var ar = AreaOfKey(key) ?? into ?? s_Cur ?? s_Areas[FIRST_AREA];
+            if (into != null && ar != into) { ar.Edits.Remove(key); ar = into; }
+            ar.Edits[key] = e;
+            uint b = BlockOfEdit(key, e);
+            var blocks = ar.Layer["blocks"] as JsonArray;
+            if (b != 0 && blocks != null && !blocks.Any(x => (string)x! == $"{b:X4}")) blocks.Add($"{b:X4}");
+        }
+
+        static string AllEditsJson() => string.Join("|", s_Areas.Values.OrderBy(a => a.Id).Select(a => a.Edits.ToJsonString()));
+
+        static Area ActiveOf(Player me)
+        {
+            if (me != null && s_Active.TryGetValue(me.Guid.Full, out var id) && s_Areas.TryGetValue(id, out var ar)) return ar;
+            return s_Areas[FIRST_AREA];
+        }
+
+        // ---- locks: a padlocked thing refuses move, turn, size and remove ----
+
+        static string LockedName(string key)
+        {
+            if (key == null) return null;
+            foreach (var ar in s_Areas.Values) if (ar.Locks[key] is JsonNode n) return (string)n ?? "It";
+            return null;
+        }
+
+        static bool Locked(string key, Action<string> reply)
+        {
+            string n = LockedName(key);
+            if (n == null) return false;
+            reply?.Invoke($"{n} is locked. Press Unlock first.");
+            return true;
+        }
+
+        /// <summary>lock on|off &lt;0xguid | key&gt;... (or lock &lt;target&gt; on|off)</summary>
+        static void Lock(Player me, string[] a, Action<string> reply)
+        {
+            if (a.Length > 2 && (a[1] == "on" || a[1] == "off"))
+            {
+                foreach (var t in a.Skip(2)) Lock(me, new[] { "lock", t, a[1] }, reply);
+                return;
+            }
+            if (a.Length < 2) return;
+            string key = a[1], name = null;
+            if (key.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            {
+                var wo = SpawnOf(Find(me, Hex(key)));
+                if (wo == null) { reply("That object is not here any more."); return; }
+                key = KeyOf(wo, out _);
+                if (key == null) { reply(WhyNot(wo) ?? "That can't be locked."); return; }
+                name = wo.Name;
+            }
+            bool on = a.Length < 3 || a[2] != "off";
+            foreach (var ar in s_Areas.Values) ar.Locks.Remove(key);
+            if (on) (AreaOfKey(key) ?? s_Cur).Locks[key] = name ?? (string)Get(key)?["name"] ?? "This map piece";
+        }
+
+        // ---- undo: each command is one step, kept per area on disk (survives closing Decorate, a relog, a restart) ----
+
+        static Dictionary<string, (string area, string json)> Snapshot()
+        {
+            var d = new Dictionary<string, (string, string)>();
+            foreach (var ar in s_Areas.Values) foreach (var kv in ar.Edits) d[kv.Key] = (ar.Id, kv.Value?.ToJsonString());
+            return d;
+        }
+
+        /// <summary>What one command changed, as each edit's state before and after: undo puts the before back.</summary>
+        static bool EndStep(string label, Dictionary<string, (string area, string json)> before, Area into)
+        {
+            var after = Snapshot();
+            var list = new JsonArray();
+            foreach (var key in before.Keys.Union(after.Keys))
+            {
+                before.TryGetValue(key, out var b); after.TryGetValue(key, out var f);
+                if (b.json == f.json) continue;
+                list.Add(new JsonObject
+                {
+                    ["k"] = key, ["a"] = f.area ?? b.area,
+                    ["b"] = b.json == null ? null : JsonNode.Parse(b.json), ["f"] = f.json == null ? null : JsonNode.Parse(f.json),
+                });
+            }
+            if (list.Count == 0) return false;
+            into.Undo.Add(new JsonObject { ["label"] = label, ["at"] = DateTime.UtcNow.ToString("o"), ["edits"] = list });
+            while (into.Undo.Count > UNDO_KEEP) into.Undo.RemoveAt(0);
+            into.Redo.Clear();
+            return true;
+        }
+
+        /// <summary>undo | redo: the active area's last step, every edit in it back to its state before (after).</summary>
+        static void UndoRedo(Player me, bool undo, Action<string> reply)
+        {
+            var from = undo ? s_Cur.Undo : s_Cur.Redo;
+            var to = undo ? s_Cur.Redo : s_Cur.Undo;
+            if (from.Count == 0) { reply(undo ? "Nothing to undo." : "Nothing to redo."); return; }
+            var step = (JsonObject)from[from.Count - 1]!;
+            from.RemoveAt(from.Count - 1);
+            var edits = ((JsonArray)step["edits"]!).Select(x => (JsonObject)x!).ToList();
+            if (undo) edits.Reverse();
+            int skipped = 0;
+            foreach (var ed in edits)
+            {
+                string key = (string)ed["k"]!;
+                if (LockedName(key) != null) { skipped++; continue; }
+                s_Areas.TryGetValue((string)ed["a"] ?? s_Cur.Id, out var ar);
+                Reconcile(me, key, (undo ? ed["b"] : ed["f"]) as JsonObject, ar ?? s_Cur, reply);
+            }
+            to.Add(step);
+            reply($"{(undo ? "Undid" : "Redid")} {(string)step["label"]}" + (skipped > 0 ? $" ({skipped} locked thing(s) left as they are)" : ""));
+        }
+
+        /// <summary>revert: every unlocked edit of the area taken away (one step, so Undo brings it all back).</summary>
+        static void Revert(Player me, Action<string> reply)
+        {
+            int n = 0, kept = 0;
+            foreach (var key in s_Cur.Edits.Select(kv => kv.Key).ToList())
+            {
+                if (LockedName(key) != null) { kept++; continue; }
+                Reconcile(me, key, null, s_Cur, _ => { });
+                n++;
+            }
+            reply($"{s_Cur.Layer["name"]}: {n} change(s) taken back" + (kept > 0 ? $", {kept} locked kept" : "") + ". Undo brings them back.");
+        }
+
+        static string[] PoseArgs(JsonObject p) => new[]
+        {
+            (string)p["cell"]!, Num(p["x"]), Num(p["y"]), Num(p["z"]), Num(p["qw"]), Num(p["qx"]), Num(p["qy"]), Num(p["qz"]),
+        };
+
+        static string Num(JsonNode n) => D(n).ToString("0.#####", CultureInfo.InvariantCulture);
+
+        /// <summary>Make the world and the layer match <paramref name="want"/> for one key (null = no edit: as retail has it).
+        /// Undo, redo and Revert all come through here.</summary>
+        static void Reconcile(Player me, string key, JsonObject want, Area into, Action<string> reply)
+        {
+            var cur = Get(key);
+            if (cur?.ToJsonString() == want?.ToJsonString()) return;
+            string kind = (string)(want ?? cur)?["kind"];
+            want = want == null ? null : (JsonObject)want.DeepClone();
+            if (kind == "server")
+            {
+                string row = "0x" + key.Substring(2);
+                if (cur != null) Restore(me, new[] { "restore", row }, _ => { });
+                Del(key);
+                if (want == null) return;
+                if (want.ContainsKey("after") && want["after"] == null) Remove(me, new[] { "remove", row }, reply);
+                else if ((want["spawn"] ?? want["after"]) is JsonObject to)
+                {
+                    Move(null, me, new[] { "move", row }.Concat(PoseArgs(to)).ToArray(), reply);
+                    if (want["scale"] != null) Scale(null, me, new[] { "scale", row, Num(want["scale"]) }, _ => { });
+                }
+                Put(key, want, into);
+            }
+            else if (kind == "add")
+            {
+                // moved or turned only: the same object goes there (it keeps its guid, so the client's selection holds)
+                if (cur != null && want?["after"] is JsonObject wa && cur["after"] is JsonObject
+                    && (want["scale"]?.ToJsonString() ?? "") == (cur["scale"]?.ToJsonString() ?? "")
+                    && s_Added.ContainsKey(Hex((string)cur["guid"]!)) && Find(me, Hex((string)cur["guid"]!)) is WorldObject same
+                    && Place(same, PosFrom(wa), reply))
+                {
+                    want["guid"] = cur["guid"]!.DeepClone();
+                    Del(key);
+                    Put(key, want, into);
+                    return;
+                }
+                if (cur != null)
+                {
+                    uint g = Hex((string)cur["guid"]!);
+                    if (s_Added.ContainsKey(g)) Find(me, g)?.Destroy();
+                    s_Added.Remove(g);
+                    Del(key);
+                }
+                if (want == null || !(want["after"] is JsonObject after)) return;
+                var wo = MakeAdd((uint)D(want["wcid"]), PosFrom(after), want["scale"] != null ? N(want["scale"]) : (float?)null, reply);
+                if (wo == null) return;
+                want["guid"] = $"0x{wo.Guid.Full:X8}";
+                s_Added[wo.Guid.Full] = key;
+                Put(key, want, into);
+            }
+            else if (kind == "way") ReconcileWay(key, cur, want, into);
+            else
+            {
+                Del(key);
+                if (want != null) Put(key, want, into);
+            }
+        }
+
+        // ---- saving ----
 
         static void Save()
         {
-            s_Layer["saved"] = DateTime.UtcNow.ToString("o");
-            var tmp = LayerPath + ".tmp";
-            File.WriteAllText(tmp, s_Layer.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-            File.Move(tmp, LayerPath, true);
-        }
-
-        static void SendState(Session s)
-        {
-            Reapply(s.Player);
-            Save();
-            Send(s, new JsonObject { ["k"] = "state", ["layer"] = JsonNode.Parse(s_Layer.ToJsonString()) });
-        }
-
-        /// <summary>After a restart the test shard's rows are back and added objects are gone: put the layer back on the
-        /// world (moves, removals, additions; the additions get new guids).</summary>
-        static void Reapply(Player me)
-        {
-            foreach (var kv in ((JsonObject)s_Layer["edits"]!).ToList())
+            var opt = new JsonSerializerOptions { WriteIndented = true };
+            foreach (var ar in s_Areas.Values)
             {
-                if (!(kv.Value is JsonObject e)) continue;
-                string kind = (string)e["kind"]!;
+                ar.Layer["saved"] = DateTime.UtcNow.ToString("o");
+                Write(ar.LayerPath, ar.Layer.ToJsonString(opt));
+                if (ar.Undo.Count > 0 || ar.Redo.Count > 0 || File.Exists(ar.UndoPath))
+                    Write(ar.UndoPath, new JsonObject { ["undo"] = ar.Undo.DeepClone(), ["redo"] = ar.Redo.DeepClone() }.ToJsonString());
+            }
+        }
+
+        static void Write(string path, string text)
+        {
+            var tmp = path + ".tmp";
+            File.WriteAllText(tmp, text);
+            File.Move(tmp, path, true);
+        }
+
+        // ---- what the client is told ----
+
+        static JsonObject AreaInfo(Area ar) => new JsonObject
+        {
+            ["id"] = ar.Id, ["name"] = (string)ar.Layer["name"] ?? ar.Id, ["blocks"] = ar.Layer["blocks"]?.DeepClone(),
+            ["home"] = ar.Layer["home"]?.DeepClone(), ["edits"] = ar.Edits.Count, ["locks"] = ar.Locks.Count,
+            ["undo"] = ar.Undo.Count, ["redo"] = ar.Redo.Count, ["world"] = ar.Layer["world"]?.DeepClone(), ["pub"] = PubStatus(ar),
+            ["keys"] = new JsonArray(ar.Edits.Select(kv => (JsonNode)kv.Key).ToArray()),   // the panel's publish summary sorts by area
+        };
+
+        /// <summary>Every area's edits and locks together (the client draws every map-piece edit in view), the area list, the
+        /// active one's undo and redo, and the kits.</summary>
+        static void SendState(Session s, Player me)
+        {
+            Reapply(me);
+            Save();
+            var edits = new JsonObject();
+            var locks = new JsonObject();
+            foreach (var ar in s_Areas.Values)
+            {
+                foreach (var kv in ar.Edits) edits[kv.Key] = kv.Value?.DeepClone();
+                foreach (var kv in ar.Locks) locks[kv.Key] = kv.Value?.DeepClone();
+            }
+            var cur = ActiveOf(me);
+            Send(s, new JsonObject
+            {
+                ["k"] = "state", ["layer"] = new JsonObject { ["edits"] = edits, ["locks"] = locks },
+                ["areas"] = new JsonArray(s_Areas.Values.OrderBy(a => a.Id == FIRST_AREA ? "" : a.Id).Select(a => (JsonNode)AreaInfo(a)).ToArray()),
+                ["active"] = cur.Id, ["undo"] = cur.Undo.Count, ["redo"] = cur.Redo.Count,
+                ["undoLabel"] = cur.Undo.Count > 0 ? cur.Undo[cur.Undo.Count - 1]!["label"]?.DeepClone() : null,
+                ["kits"] = Kits(),
+            });
+        }
+
+        static void SendCounts(Session s, Player me)
+        {
+            var cur = ActiveOf(me);
+            Send(s, new JsonObject { ["k"] = "counts", ["active"] = cur.Id, ["undo"] = cur.Undo.Count, ["redo"] = cur.Redo.Count });
+        }
+
+        // ---- self-restoring: each landblock gets its edits when it loads, without anyone pressing Decorate ----
+
+        /// <summary>DecorBlockLoad, after a landblock's own objects are in: its moves, removals and sizes, and the props added
+        /// in it (each exactly once: an added prop is never saved, and one still in the world is left alone).</summary>
+        internal static void ApplyBlock(Landblock lb)
+        {
+            if (!On) return;
+            lock (s_Lock)
+            {
                 try
                 {
-                    if (kind == "server")
-                    {
-                        var wo = Find(me, Hex((string)e["guid"]!));
-                        if (wo == null) continue;
-                        if (!e.ContainsKey("after")) continue;   // never a removal by omission
-                        if (e["spawn0"] != null)
-                        {
-                            var child = SpawnOf(wo);
-                            if (e["after"] == null) { if (child != wo) child.Destroy(); wo.Destroy(); continue; }
-                            Place(wo, PosFrom((JsonObject)e["after"]!), _ => { });
-                            if (child != wo && e["spawn"] is JsonObject sp) Place(child, PosFrom(sp), _ => { });
-                            continue;
-                        }
-                        if (e["after"] == null) wo.Destroy();
-                        else
-                        {
-                            if (wo.Location.DistanceTo(PosFrom((JsonObject)e["after"]!)) > 0.01f) Place(wo, PosFrom((JsonObject)e["after"]!), _ => { });
-                            if (e["scale"] != null && Math.Abs((wo.ObjScale ?? 1f) - N(e["scale"])) > 0.001f) ApplyScale(wo, N(e["scale"]));
-                        }
-                    }
-                    else if (kind == "add" && e["after"] is JsonObject after)
-                    {
-                        uint g = Hex((string)e["guid"]!);
-                        if (s_Added.ContainsKey(g) && Find(me, g) != null) continue;
-                        var wo = WorldObjectFactory.CreateNewWorldObject((uint)D(e["wcid"]));
-                        if (wo == null) continue;
-                        wo.SetProperty(PropertyBool.Stuck, true);
-                        wo.TimeToRot = -1;
-                        if (e["scale"] != null) wo.ObjScale = N(e["scale"]);
-                        wo.Location = PosFrom(after);
-                        wo.Location.LandblockId = new LandblockId(wo.Location.GetCell());
-                        if (!wo.EnterWorld()) { wo.Destroy(); continue; }
-                        s_Added.Remove(g);
-                        s_Added[wo.Guid.Full] = kv.Key;
-                        e["guid"] = $"0x{wo.Guid.Full:X8}";
-                    }
+                    Load();
+                    uint blk = lb.Id.Landblock;
+                    int n = 0;
+                    foreach (var ar in s_Areas.Values)
+                        foreach (var kv in ar.Edits.ToList())
+                            if (kv.Value is JsonObject e && BlockOfEdit(kv.Key, e) == blk && ReapplyOne(null, kv.Key, e)) n++;
+                    if (n > 0) { Save(); Mod.Log.Info($"[RevivalGuard] Decor: landblock {blk:X4} loaded, {n} edit(s) applied"); }
                 }
-                catch (Exception x) { Mod.Log.Warn($"[RevivalGuard] Decor reapply {kv.Key}: {x.Message}"); }
+                catch (Exception x) { Mod.Log.Warn($"[RevivalGuard] Decor block load: {x.Message}"); }
             }
+        }
+
+        /// <summary>The whole layer back on the loaded world (Decorate opened): the same per-edit rule as a block load.</summary>
+        static void Reapply(Player me)
+        {
+            foreach (var ar in s_Areas.Values)
+                foreach (var kv in ar.Edits.ToList())
+                    if (kv.Value is JsonObject e) ReapplyOne(me, kv.Key, e);
+        }
+
+        /// <summary>One edit onto the world if its object is loaded and not yet as the layer says; true = something changed.</summary>
+        static bool ReapplyOne(Player me, string key, JsonObject e)
+        {
+            string kind = (string)e["kind"]!;
+            try
+            {
+                if (kind == "server")
+                {
+                    var wo = Find(me, Hex((string)e["guid"]!));
+                    if (wo == null) return false;
+                    if (!e.ContainsKey("after")) return false;   // never a removal by omission
+                    if (e["spawn0"] != null)
+                    {
+                        var child = SpawnOf(wo);
+                        if (e["after"] == null) { if (child != wo) child.Destroy(); wo.Destroy(); return true; }
+                        if (wo.Location.DistanceTo(PosFrom((JsonObject)e["after"]!)) < 0.01f) return false;
+                        Place(wo, PosFrom((JsonObject)e["after"]!), _ => { });
+                        if (child != wo && e["spawn"] is JsonObject sp) Place(child, PosFrom(sp), _ => { });
+                        return true;
+                    }
+                    if (e["after"] == null) { wo.Destroy(); return true; }
+                    bool did = false;
+                    if (wo.Location.DistanceTo(PosFrom((JsonObject)e["after"]!)) > 0.01f) { Place(wo, PosFrom((JsonObject)e["after"]!), _ => { }); did = true; }
+                    if (e["scale"] != null && Math.Abs((wo.ObjScale ?? 1f) - N(e["scale"])) > 0.001f) { ApplyScale(wo, N(e["scale"])); did = true; }
+                    return did;
+                }
+                if (kind == "way") return ReapplyWay(key, e);
+                if (kind == "add" && e["after"] is JsonObject after)
+                {
+                    uint g = Hex((string)e["guid"]!);
+                    if (s_Added.ContainsKey(g) && Find(me, g) != null) return false;
+                    // its landblock must be loaded, or EnterWorld would load it just to hold a prop
+                    uint blk = Hex((string)after["cell"]!) >> 16;
+                    if (!LandblockManager.GetLoadedLandblocks().Any(l => l.Id.Landblock == blk)) return false;
+                    var wo = MakeAdd((uint)D(e["wcid"]), PosFrom(after), e["scale"] != null ? N(e["scale"]) : (float?)null, _ => { });
+                    if (wo == null) return false;
+                    s_Added.Remove(g);
+                    s_Added[wo.Guid.Full] = key;
+                    e["guid"] = $"0x{wo.Guid.Full:X8}";
+                    return true;
+                }
+            }
+            catch (Exception x) { Mod.Log.Warn($"[RevivalGuard] Decor reapply {key}: {x.Message}"); }
+            return false;
+        }
+
+        // ---- one-click publish (owner 2026-11-24: "Publish this area", his in-game "Yes, publish" is his yes) ----
+        // The mod only WRITES A REQUEST: decor/publish/requests/<area>.json, the approved layer as it was at the click plus the
+        // approval record (who, when, which area). tools/decor/publish_job.py on the GPU box (run by publish-watch.sh) picks it
+        // up, builds the datafix and undo with decor.py into its outbox, and writes decor/publish/status/<area>.json back,
+        // which the panel shows. Nothing here runs a program or reaches live; the coordinator forwards approved packages.
+
+        static string PubDir => Path.Combine(Dir, "publish");
+
+        static string EditsSha(Area ar)
+        {
+            using var h = System.Security.Cryptography.SHA256.Create();
+            return Convert.ToHexString(h.ComputeHash(System.Text.Encoding.UTF8.GetBytes(ar.Edits.ToJsonString()))).ToLowerInvariant();
+        }
+
+        /// <summary>publish &lt;area&gt; [props rows pieces]: the counts are the summary the panel showed before "Yes, publish".</summary>
+        static void Publish(Session s, Player me, string[] a, Action<string> reply)
+        {
+            if (s == null || s.AccessLevel < AccessLevel.Admin) { reply("Only an Admin can publish an area."); return; }
+            string id = a.Length > 1 ? a[1] : ActiveOf(me).Id;
+            if (!ValidId(id) || !s_Areas.TryGetValue(id, out var ar)) { reply("No such area."); return; }
+            if (ar.Edits.Count == 0) { reply($"{(string)ar.Layer["name"] ?? id} has no changes to publish."); return; }
+            int N(int i) => a.Length > i && int.TryParse(a[i], NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) ? v : -1;
+            string when = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+            string sha = EditsSha(ar);
+            var req = new JsonObject
+            {
+                ["area"] = id, ["name"] = (string)ar.Layer["name"] ?? id, ["edits_sha"] = sha, ["layer"] = ar.Layer.DeepClone(),
+                ["approval"] = new JsonObject
+                {
+                    ["said"] = "Yes, publish", ["what"] = "approved by the owner in game", ["time"] = when, ["area"] = id,
+                    ["character"] = me.Name, ["account"] = s.Account, ["access"] = s.AccessLevel.ToString(),
+                    ["shown"] = new JsonObject { ["props"] = N(2), ["rows"] = N(3), ["pieces"] = N(4) },
+                },
+            };
+            Directory.CreateDirectory(Path.Combine(PubDir, "requests"));
+            Directory.CreateDirectory(Path.Combine(PubDir, "status"));
+            Write(Path.Combine(PubDir, "requests", id + ".json"), req.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            Write(Path.Combine(PubDir, "status", id + ".json"), new JsonObject { ["state"] = "queued", ["time"] = when, ["edits_sha"] = sha }.ToJsonString());
+            Mod.Log.Info($"[RevivalGuard] Decor: publish {id} approved in game by {me.Name} ({s.Account}) at {when}");
+            reply($"{req["name"]}: publishing. The package is built on the box in a minute or so.");
+        }
+
+        /// <summary>The area's publish state as the box's job last wrote it, and whether it changed since.</summary>
+        static JsonObject PubStatus(Area ar)
+        {
+            try
+            {
+                var f = Path.Combine(PubDir, "status", ar.Id + ".json");
+                if (!File.Exists(f) || !(JsonNode.Parse(File.ReadAllText(f)) is JsonObject st)) return null;
+                st["changed"] = (string)st["edits_sha"] != EditsSha(ar);
+                return st;
+            }
+            catch { return null; }
+        }
+
+        static void SendPub(Session s)
+        {
+            var o = new JsonObject();
+            foreach (var ar in s_Areas.Values) if (PubStatus(ar) is JsonObject st) o[ar.Id] = st;
+            Send(s, new JsonObject { ["k"] = "pub", ["areas"] = o });
+        }
+
+        // ---- kits: a group saved as poses relative to its centre (Mods/RevivalGuard/decor/kits; decor.py pull keeps them in git) ----
+
+        static string KitDir => Path.Combine(Dir, "kits");
+
+        /// <summary>kitsave &lt;Name_With_Underscores&gt; w|m &lt;wcid|model&gt; &lt;x y z qw qx qy qz size&gt; [name words_ [look]];...
+        /// Any weenie and any model goes in (Turbine's own things too, F7 261124-0004): a w item is placed later through add,
+        /// which refuses NPCs, portals, doors and generators (WhyNoCopy) there as well. look: a w item's setup, for the ghost.</summary>
+        static void KitSave(string[] a, Action<string> reply)
+        {
+            string name = string.Join(" ", a[1].Split('_', StringSplitOptions.RemoveEmptyEntries)).Trim();
+            string id = new string(name.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray()).Trim('-');
+            while (id.Contains("--")) id = id.Replace("--", "-");
+            if (id.Length == 0 || id.Length > 40) { reply("A kit needs a short name."); return; }
+            var items = new JsonArray();
+            foreach (var part in string.Join(" ", a.Skip(2)).Split(';'))
+            {
+                var f = part.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (f.Length < 10) continue;
+                var it = new JsonObject();
+                if (f[0] == "w") it["wcid"] = int.Parse(f[1], CultureInfo.InvariantCulture); else it["model"] = f[1];
+                it["x"] = R(F(f[2])); it["y"] = R(F(f[3])); it["z"] = R(F(f[4]));
+                it["qw"] = R(F(f[5])); it["qx"] = R(F(f[6])); it["qy"] = R(F(f[7])); it["qz"] = R(F(f[8]));
+                it["scale"] = R(Mathf01(F(f[9])));
+                if (f.Length > 10) it["name"] = string.Join(" ", f[10].Split('_'));
+                if (f.Length > 11 && f[0] == "w" && f[11].StartsWith("0x") && f[11].Length <= 10) it["look"] = f[11];
+                items.Add(it);
+            }
+            if (items.Count == 0) { reply("Select some things first."); return; }
+            Directory.CreateDirectory(KitDir);
+            Write(Path.Combine(KitDir, id + ".json"), new JsonObject { ["name"] = name, ["items"] = items }.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            reply($"Kit \"{name}\" saved ({items.Count} thing(s)).");
+        }
+
+        static JsonArray Kits()
+        {
+            var o = new JsonArray();
+            if (!Directory.Exists(KitDir)) return o;
+            foreach (var f in Directory.GetFiles(KitDir, "*.json").OrderBy(x => x))
+                try { if (JsonNode.Parse(File.ReadAllText(f)) is JsonObject k) { k["id"] = Path.GetFileNameWithoutExtension(f); o.Add(k); } }
+                catch { }
+            return o;
         }
 
         static void Send(Session s, JsonObject o)
@@ -757,6 +1442,29 @@ namespace RevivalGuard
             if (!Decor.On) return;
             try { Decor.RowSpawned(__instance, __result); }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] DecorSpawn: {e.Message}"); }
+        }
+    }
+
+    /// <summary>Self-restoring layouts (decor v2): when a landblock has made its own objects, its decor edits go on (queued
+    /// behind CreateWorldObjects' own action, so the objects are there). Off unless this shard has decor/enabled.</summary>
+    [HarmonyPatch]
+    static class DecorBlockLoad
+    {
+        static System.Reflection.MethodBase TargetMethod() => AccessTools.Method(typeof(Landblock), "CreateWorldObjects");
+
+        static bool Prepare(System.Reflection.MethodBase original)
+        {
+            if (original != null) return true;
+            bool ok = AccessTools.Method(typeof(Landblock), "CreateWorldObjects") != null;
+            if (!ok) Mod.Log.Warn("[RevivalGuard] DecorBlockLoad: Landblock.CreateWorldObjects not found; layouts apply only when Decorate opens");
+            return ok;
+        }
+
+        static void Postfix(Landblock __instance)
+        {
+            if (!Decor.On) return;
+            var lb = __instance;
+            lb.EnqueueAction(new ActionEventDelegate(() => Decor.ApplyBlock(lb)));
         }
     }
 }

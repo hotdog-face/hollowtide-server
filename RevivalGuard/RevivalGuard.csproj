@@ -40,5 +40,9 @@
     <EmbeddedResource Include="OnThisDay.json" LogicalName="RevivalGuard.OnThisDay.json" />
     <!-- Boss kill news (BossBroadcast): wiki "Boss Creatures" + ours (tools/bossbroadcast/build_list.py). -->
     <EmbeddedResource Include="BossBroadcast.json" LogicalName="RevivalGuard.BossBroadcast.json" />
+    <!-- Our ClothingTables (CustomClothing; tools/gpubox-ace/gen_rune_suits.py), seeded into clothing/ beside the dll. -->
+    <EmbeddedResource Include="clothing/*.json" LogicalName="RevivalGuard.clothing.%(Filename)%(Extension)" />
+    <!-- The look showcase's effects (LookShowcase; tools/gpubox-ace/gen_look_showcase.py), read from the dll. -->
+    <EmbeddedResource Include="LookShowcase.json" LogicalName="RevivalGuard.LookShowcase.json" />
   </ItemGroup>
 </Project>

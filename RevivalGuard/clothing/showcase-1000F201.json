@@ -1,0 +1,28 @@
+{
+ "Id": "0x1000F201",
+ "ClothingBaseEffects": {
+  "0x02000065": {
+   "CloObjectEffects": [
+    {
+     "Index": 0,
+     "ModelId": "0x010002E9",
+     "CloTextureEffects": [
+      {
+       "OldTexture": "0x05000C53",
+       "NewTexture": "0x050018CE"
+      },
+      {
+       "OldTexture": "0x05000C54",
+       "NewTexture": "0x050018CE"
+      },
+      {
+       "OldTexture": "0x05000C55",
+       "NewTexture": "0x050018CE"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "ClothingSubPalEffects": {}
+}

@@ -72,6 +72,8 @@ namespace RevivalGuard
             Try(nameof(Broker), Broker.Register);
             Try(nameof(TownCrier), TownCrier.Register);        // the Holtburg Town Crier's question desk (rg_crier, off by default)
             Try(nameof(DressingRoom), DressingRoom.Register);
+            Try(nameof(CustomClothing), CustomClothing.Register);   // our ClothingTables 0x1000F000+ (rune-skin suits; rg_custom_clothing, off)
+            Try(nameof(LookShowcase), LookShowcase.Register);       // the Staff Base look showcase's effects (rg_look_showcase, off)
             Try(nameof(DiscordBridge), DiscordBridge.Register);
             Try(nameof(DerethChatHost), DerethChatHost.Register);   // the cross-server Dereth channel (off without dereth-chat.json)
             Try(nameof(ItemLink), ItemLink.Register);
@@ -146,7 +148,7 @@ namespace RevivalGuard
                 + "gear at any level and every rare (PkDeathLoot), and keyrings that open their chests and "
                 + "spend a key per unlock (Keyrings), the audit trail on disk and in game (@audit), and character "
                 + "snapshots with a confirmed restore (@snapshot), and bonded items into an offline "
-                + "character's pack (@bestow), and the looking-for-group board (@lfgboard), and the feature request board (@features), and locked items (@lockitem / @unlockitem), and cell furniture taken out of the world (HiddenCellStatics), and no house purchase waits for dev accounts (DevHousing), and the allegiance hall: bank, hall board, hall portal, lawn corpses, kill board and raid alarm (/mansion), and ragdoll corpses where the body lands (@ragdollcorpse), and the login screen's population count on the login port (PopulationQuery), and combat pets that only pick targets in line of sight (PetLos, pet_los_targets), and dyes that take only on clothing whose art has the colour (DyeArt, dye_by_art), and hovering NPCs reported lower than their physics (HoverDrop, hover_drop), and generator spawns placed in the air dropped to the ground (SpawnGround, rg_spawn_ground), and monsters ACE sends home sent as a teleport (ForceHomeStamp, rg_forcehome_stamp), and town NPCs that keep one face across landblock reloads (NpcFaceStable, rg_npc_face_stable), and Azimar greeting players by name, level, hour and visit, with paced blessings (AzimarVoice, azimar_voice), and every new character starting in Holtburg whatever town the client asked for (HoltburgOnly, rg_holtburg_only), and Holtburg's Royal Guards talking, patrolling and keeping the town (HoltburgGuards, rg_holtburg_guards), and Holtburg's townsfolk going about their day, mostly in silence, under one speech budget (TownLife, rg_town_life), and the chest beside the Holtburg grocer keeping what players leave in it (ForeverChest, rg_forever_chest " + (ForeverChest.On ? "ON" : "off") + "), and the Pyreal Target Drudge as a damage meter (TargetDummy, rg_target_dummy " + (TargetDummy.On ? "ON" : "off") + "), and one object's or player's tick exception contained instead of stopping the server (TickContainment, rg_tick_containment " + (TickContainment.On ? "ON" : "off") + ", @tickfaults)");
+                + "character's pack (@bestow), and the looking-for-group board (@lfgboard), and the feature request board (@features), and locked items (@lockitem / @unlockitem), and cell furniture taken out of the world (HiddenCellStatics), and no house purchase waits for dev accounts (DevHousing), and the allegiance hall: bank, hall board, hall portal, lawn corpses, kill board and raid alarm (/mansion), and ragdoll corpses where the body lands (@ragdollcorpse), and the login screen's population count on the login port (PopulationQuery), and combat pets that only pick targets in line of sight (PetLos, pet_los_targets), and dyes that take only on clothing whose art has the colour (DyeArt, dye_by_art), and hovering NPCs reported lower than their physics (HoverDrop, hover_drop), and generator spawns placed in the air dropped to the ground (SpawnGround, rg_spawn_ground), and monsters ACE sends home sent as a teleport (ForceHomeStamp, rg_forcehome_stamp), and town NPCs that keep one face across landblock reloads (NpcFaceStable, rg_npc_face_stable), and Azimar greeting players by name, level, hour and visit, with paced blessings (AzimarVoice, azimar_voice), and every new character starting in Holtburg whatever town the client asked for (HoltburgOnly, rg_holtburg_only), and Holtburg's Royal Guards talking, patrolling and keeping the town (HoltburgGuards, rg_holtburg_guards), and Holtburg's townsfolk going about their day, mostly in silence, under one speech budget (TownLife, rg_town_life), and the chest beside the Holtburg grocer keeping what players leave in it (ForeverChest, rg_forever_chest " + (ForeverChest.On ? "ON" : "off") + "), and the Pyreal Target Drudge as a damage meter (TargetDummy, rg_target_dummy " + (TargetDummy.On ? "ON" : "off") + "), and one object's or player's tick exception contained instead of stopping the server (TickContainment, rg_tick_containment " + (TickContainment.On ? "ON" : "off") + ", @tickfaults), and Hollowtide Marionette essences in the normal essence loot (HollowEssences, rg_hollow_essences " + (HollowEssences.On ? "ON" : "off") + ", @hollowessences)");
         }
 
         // ---- one failure loses one feature, not the mod (assessment 2026-11: a single PatchAll lost every guard on 2026-09-22) ----
@@ -649,6 +651,7 @@ namespace RevivalGuard
             if (session?.Player == null) return true;
             if (opcode == GameActionType.AbuseLogRequest) { TicketDesk.Take(message, session); return false; }   // ACE has no handler
             if (!ChatGuard.Allow(opcode, message, session)) return false;
+            if (!SocialGuard.Allow(opcode, message, session)) return false;
             var b = s_Buckets.GetOrCreateValue(session);
             long sec = DateTime.UtcNow.Ticks / TimeSpan.TicksPerSecond;
             lock (b)
@@ -701,6 +704,7 @@ namespace RevivalGuard
             {
                 case GameActionType.Talk: case GameActionType.Tell: case GameActionType.ChatChannel:
                 case GameActionType.TalkDirect: case GameActionType.Emote: break;
+                case (GameActionType)0x01E1: break;   // SoulEmote: a *wave* typed in chat, a text line to everyone near
                 default: return true;
             }
             if (session.AccessLevel >= AccessLevel.Admin) return true;   // the owner and the harness only
@@ -718,6 +722,10 @@ namespace RevivalGuard
             // Admin, so without this a few quick colour clicks would be dropped as spam.
             if (opcode == GameActionType.Talk && session.AccessLevel >= AccessLevel.Sentinel && text != null
                 && text.TrimStart().StartsWith("@dress ", StringComparison.OrdinalIgnoreCase)) return true;
+            // The Decorate panel speaks one @decor line per gesture (Undo pressed three times is the same text three times);
+            // @decor needs Developer and works only on a test shard (Decor.cs).
+            if (opcode == GameActionType.Talk && session.AccessLevel >= AccessLevel.Developer && text != null
+                && text.TrimStart().StartsWith("@decor ", StringComparison.OrdinalIgnoreCase)) return true;
 
             var h = s_Hist.GetOrCreateValue(session);
             var now = DateTime.UtcNow;
@@ -741,10 +749,57 @@ namespace RevivalGuard
                     Offences.Add(session.Player, "chat", $"{opcode} dropped: {why}");
                     return false;
                 }
+                // SLOW, AUTOMATED REPEATS (ChatCadenceRule, macro abuse audit 2026-11-24): staff (Sentinel and up) exempt
+                // off until the owner approves it live (switch rg_macro_guards, default off; coordinator 2026-11-24)
+                if (text != null && session.AccessLevel < AccessLevel.Sentinel && PkCommon.On("rg_macro_guards"))
+                {
+                    string said = text.StartsWith("#") && text.IndexOf(':') > 0 ? text.Substring(text.IndexOf(':') + 1) : text;
+                    var c = s_Cadence.Check(session.Player.Guid.Full, said, now);
+                    if (c.Drop)
+                    {
+                        if (c.Verdict != ChatCadenceRule.Verdict.Muted || (now - h.NoticeAt).TotalSeconds > 10)
+                        { h.NoticeAt = now; session.Player.SendTransientError(ChatCadenceRule.Notice(c, now)); }
+                        if (c.Verdict == ChatCadenceRule.Verdict.Muted) Offences.Add(session.Player, "chat", $"{opcode} dropped: muted until {c.Until:HH:mm} UTC");
+                        else Mod.Log.Warn($"[RevivalGuard] chat-macro: {session.Player.Name} (0x{session.Player.Guid.Full:X8}) strike {c.Strike}, "
+                            + (c.Verdict == ChatCadenceRule.Verdict.Warn ? "warned" : $"muted until {c.Until:HH:mm} UTC") + $": {c.Why} (\"{Clip(said)}\")");
+                        return false;
+                    }
+                }
                 h.Times.Enqueue(now);
                 if (text != null) h.Texts.Enqueue((now, text));
                 return true;
             }
+        }
+
+        static readonly ChatCadenceRule s_Cadence = new ChatCadenceRule();
+        static string Clip(string t) => t.Length <= 80 ? t : t.Substring(0, 80) + "...";
+    }
+
+    /// <summary>
+    /// TRADE REQUESTS, FELLOWSHIP INVITES, ALLEGIANCE REQUESTS each pop up on another player's screen; a macro looping them
+    /// locks that player out of play (SocialRequestRule). Staff (Sentinel and up) exempt.
+    /// </summary>
+    static class SocialGuard
+    {
+        static readonly SocialRequestRule s_Rule = new SocialRequestRule();
+
+        public static bool Allow(GameActionType opcode, ClientMessage message, Session session)
+        {
+            if (!PkCommon.On("rg_macro_guards")) return true;   // off until the owner approves it live (default off)
+            if (!SocialRequestRule.Covers((uint)opcode) || session.AccessLevel >= AccessLevel.Sentinel) return true;
+            uint to;
+            try
+            {
+                var st = message.Payload.BaseStream; long pos = st.Position;
+                try { to = message.Payload.ReadUInt32(); }
+                finally { st.Position = pos; }   // the real handler reads it again
+            }
+            catch { return true; }
+            string why = s_Rule.Check(session.Player.Guid.Full, (uint)opcode, to, DateTime.UtcNow);
+            if (why == null) return true;
+            session.Player.SendTransientError(why);
+            Offences.Add(session.Player, "request", $"{SocialRequestRule.What((uint)opcode)} to 0x{to:X8} dropped: {why}");
+            return false;
         }
     }
 

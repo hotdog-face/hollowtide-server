@@ -200,6 +200,19 @@ namespace RevivalGuard
             }
         }
 
+        /// <summary>A marker's guid is forgotten when it is destroyed, by any path (a hill move, the night's end, its Lifespan,
+        /// a landblock unload): ACE recycles dynamic guids, and a stale one here would stop a later object with that guid from
+        /// ever being saved (Codex review 11-23).</summary>
+        [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.Destroy))]
+        static class HillForget
+        {
+            static void Postfix(WorldObject __instance)
+            {
+                try { if (__instance != null) s_MarkerGuids.TryRemove(__instance.Guid.Full, out _); }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] PkNight: marker forget: {e.Message}"); }
+            }
+        }
+
         /// <summary>For @pknight gate: the markers now, in a line.</summary>
         internal static string MarkerStatus()
         {

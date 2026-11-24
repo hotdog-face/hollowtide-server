@@ -16,7 +16,7 @@ namespace RevivalGuard
     /// and ends by itself after the last PK Night with the titles (EndSeason). Needs pk_renown_enabled (live: on).
     ///
     ///     @pkseason                    (admin) the plan and where it stands
-    ///     @pkseason plan [yyyy-mm-dd] [weeks]   plan Darktide Season 1 (default: Sunday 2026-12-06, 8 weeks)
+    ///     @pkseason plan [yyyy-mm-dd] [nights]  plan Darktide Season 1 (default: Sunday 2026-12-06, 5 PK Nights to Jan 31)
     ///     @pkseason cancel             drop a plan that has not opened yet
     ///     @pkseason start              open the planned season now
     ///     @pkseason end                end the running season now, with its titles
@@ -40,14 +40,14 @@ namespace RevivalGuard
             }
             catch (Exception e) { Mod.Log.Error($"[RevivalGuard] PkSeason: cannot read {s_PlanPath}: {e.Message}; no season planned"); }
             CommandManager.TryAddCommand(SeasonCommand, "pkseason", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld,
-                "The dated PK season (Darktide Season 1): plan, open, end.", "[plan [yyyy-mm-dd] [weeks] | cancel | start | end]");
+                "The dated PK season (Darktide Season 1): plan, open, end.", "[plan [yyyy-mm-dd] [nights] | cancel | start | end]");
             Mod.Log.Info("[RevivalGuard] PkSeason: " + (s_Plan == null ? "no season planned" : PlanWords(s_Plan)));
         }
 
         static string PlanWords(PkSeasonRules.Schedule s) =>
             s.Ended ? $"{s.Name} is over"
             : $"{s.Name} {(s.Started ? "running since" : "opens")} {PkSeasonRules.NightWords(s.StartAt, false)}, ends after PK Night on "
-              + $"{PkSeasonRules.NightWords(s.EndAt, true)} ({PkSeasonRules.Weeks(s)} weeks); then {s.NextName}";
+              + $"{PkSeasonRules.NightWords(s.EndAt, true)} ({PkSeasonRules.Rounds(s)} PK Nights); then {s.NextName}";
 
         static void SavePlan()
         {
@@ -136,7 +136,7 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] PkSeason: {s.Name} ended by {who}; {s.NextName} begins (no end date)");
         }
 
-        /// <summary>PK Night's end (a recorded round): the season's week and top three, while a season runs.</summary>
+        /// <summary>PK Night's end (a recorded round): which of the season's PK Nights it was and the top three, while a season runs.</summary>
         internal static void SeasonFinale()
         {
             try
@@ -172,12 +172,12 @@ namespace RevivalGuard
                 {
                     if (s != null && s.Started && !s.Ended) { PkCommon.Say(p, $"{s.Name} is running; end it first (@pkseason end)."); return; }
                     var sunday = PkSeasonRules.PROPOSED_SUNDAY;
-                    int weeks = PkSeasonRules.PROPOSED_WEEKS;
+                    int rounds = PkSeasonRules.PROPOSED_ROUNDS;
                     if (args.Length > 1 && !DateTime.TryParseExact(args[1], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out sunday))
-                    { PkCommon.Say(p, "Usage: @pkseason plan [yyyy-mm-dd, a Sunday] [weeks]"); return; }
-                    if (args.Length > 2 && !int.TryParse(args[2], out weeks)) { PkCommon.Say(p, "Usage: @pkseason plan [yyyy-mm-dd] [weeks]"); return; }
+                    { PkCommon.Say(p, "Usage: @pkseason plan [yyyy-mm-dd, a PK Night Sunday] [PK Nights]"); return; }
+                    if (args.Length > 2 && !int.TryParse(args[2], out rounds)) { PkCommon.Say(p, "Usage: @pkseason plan [yyyy-mm-dd] [PK Nights]"); return; }
                     PkSeasonRules.Schedule plan;
-                    try { plan = PkSeasonRules.Plan(sunday, weeks, PkSeasonRules.PROPOSED_NAME, PkSeasonRules.PROPOSED_NEXT); }
+                    try { plan = PkSeasonRules.Plan(sunday, rounds, PkSeasonRules.PROPOSED_NAME, PkSeasonRules.PROPOSED_NEXT); }
                     catch (ArgumentException e) { PkCommon.Say(p, $"Not planned: {e.Message}."); return; }
                     if (plan.StartAt <= PkCommon.Now()) { PkCommon.Say(p, "Not planned: that PK Night has already begun. @pkseason start opens a season now."); return; }
                     lock (s_Lock) { s_Plan = plan; SavePlan(); }

@@ -86,8 +86,8 @@ namespace RevivalGuard
 
             if (f.PkNightStartUtc.HasValue)
                 l.Add(f.PkNightRunningNow
-                    ? "Want a fair fight? PK Night is on right now, and runs every Sunday at 7 PM Pacific."
-                    : $"Want a fair fight? PK Night runs every Sunday at 7 PM Pacific. The next one is {When(f.PkNightLocal)} Pacific.");
+                    ? "Want a fair fight? PK Night is on right now, and runs every other Sunday at 7 PM Pacific."
+                    : $"Want a fair fight? PK Night runs every other Sunday at 7 PM Pacific. The next one is {When(f.PkNightLocal)} Pacific.");
 
             if (f.KillerWanted && f.Killer != null)
                 l.Add($"{f.Killer} is Wanted on the PK board: five fair kills in a row without falling. Whoever ends the streak earns extra renown.");

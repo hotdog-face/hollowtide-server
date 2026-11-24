@@ -7,19 +7,19 @@ namespace RevivalGuard
     /// <summary>
     /// DARKTIDE SEASON 1, THE PURE HALF (no ACE types; tools/nettest compiles it by path with PkNightRules.cs, PkSeasonCase).
     /// Owner 2026-11-21 ("yes all 1-5", docs/findings/pk-server-plan-2026-11-21.md move 1): a dated PK season. It opens
-    /// with PK Night on a Sunday at 7 PM Pacific with a fresh renown ladder, runs a whole number of weeks with each
-    /// PK Night as its weekly finale, and ends when the last PK Night's hour ends: the leader is Warlord of Dereth,
+    /// with PK Night on a Sunday at 7 PM Pacific with a fresh renown ladder, runs a number of PK Nights (every other Sunday,
+    /// owner 2026-11-23), each closing a round, and ends when the last PK Night's round ends: the leader is Warlord of Dereth,
     /// second and third Gladiator Champion (PkRenown.EndSeason). PkSeason.cs runs it on the world loop.
     /// </summary>
     public static class PkSeasonRules
     {
         /// <summary>The proposal (owner confirms date and name): opens with PK Night on Sunday 2026-12-06, 7 PM PST
-        /// (Mon 12-07 03:00 UTC), eight weeks, the last PK Night Sunday 2027-01-31.</summary>
+        /// (Mon 12-07 03:00 UTC), five PK Nights (Dec 6, Dec 20, Jan 3, Jan 17, Jan 31), the last Sunday 2027-01-31.</summary>
         public static readonly DateTime PROPOSED_SUNDAY = new DateTime(2026, 12, 6, 0, 0, 0, DateTimeKind.Unspecified);
-        public const int PROPOSED_WEEKS = 8;
+        public const int PROPOSED_ROUNDS = 5;
         public const string PROPOSED_NAME = "Darktide Season 1", PROPOSED_NEXT = "Darktide Season 2";
         public const string PRESEASON = "Preseason";
-        const long WEEK = 7 * 24 * 3600, DAY = 24 * 3600, HOUR = 3600;
+        const long DAY = 24 * 3600, HOUR = 3600, INTERVAL = PkNight.INTERVAL_DAYS * DAY;
 
         public sealed class Schedule
         {
@@ -35,14 +35,14 @@ namespace RevivalGuard
         public static long Unix(DateTime utc) => new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeSeconds();
         public static DateTime Utc(long unix) => DateTimeOffset.FromUnixTimeSeconds(unix).UtcDateTime;
 
-        /// <summary>A season opening with PK Night on `sunday` (a Pacific date) and ending when the PK Night `weeks`
-        /// weeks later is over (so it holds `weeks` + 1 PK Nights, the first and last included).</summary>
-        public static Schedule Plan(DateTime sunday, int weeks, string name, string next)
+        /// <summary>A season opening with PK Night on `sunday` (a Pacific date, a PK Night Sunday) and ending when its
+        /// `rounds`th PK Night is over (the first and last included).</summary>
+        public static Schedule Plan(DateTime sunday, int rounds, string name, string next)
         {
-            if (sunday.DayOfWeek != DayOfWeek.Sunday) throw new ArgumentException("the season opens on a Sunday (PK Night)");
-            if (weeks < 1 || weeks > 52) throw new ArgumentException("a season is 1 to 52 weeks");
+            if (!PkNight.IsNightSunday(sunday)) throw new ArgumentException("the season opens on a PK Night Sunday (every other Sunday from Nov 22)");
+            if (rounds < 2 || rounds > 26) throw new ArgumentException("a season is 2 to 26 PK Nights");
             var start = PkNight.StartUtcOf(sunday);
-            var lastNight = PkNight.StartUtcOf(sunday.Date.AddDays(7 * weeks));
+            var lastNight = PkNight.StartUtcOf(sunday.Date.AddDays(PkNight.INTERVAL_DAYS * (rounds - 1)));
             return new Schedule
             {
                 Name = name, NextName = next, StartAt = Unix(start),
@@ -73,9 +73,11 @@ namespace RevivalGuard
 
         static bool Window(Schedule s, string key, long now, long from, long until) => now >= from && now < until && !s.Said.Contains(key);
 
-        public static int Weeks(Schedule s) => (int)Math.Round((s.EndAt - s.StartAt) / (double)WEEK);
-        /// <summary>Which week a moment falls in, 1-based (the opening PK Night starts week 1).</summary>
-        public static int WeekOf(Schedule s, long now) => (int)Math.Max(1, Math.Min(Weeks(s), (now - s.StartAt) / WEEK + 1));
+        /// <summary>The season's PK Nights, the first and last included (from its dates, so a plan saved before
+        /// 2026-11-23 as "8 weeks" from Dec 6 reads as its 5).</summary>
+        public static int Rounds(Schedule s) => (int)Math.Round((s.EndAt - s.StartAt) / (double)INTERVAL) + 1;
+        /// <summary>Which PK Night of the season a moment falls in or after, 1-based (the opening PK Night is the first).</summary>
+        public static int RoundOf(Schedule s, long now) => (int)Math.Max(1, Math.Min(Rounds(s), (now - s.StartAt) / INTERVAL + 1));
 
         /// <summary>"Sunday, Dec 6 at 7 PM Pacific" for the PK Night that opens or closes the season.</summary>
         public static string NightWords(long startOrEnd, bool isEnd)
@@ -104,16 +106,16 @@ namespace RevivalGuard
 
         public static string OpenLine(Schedule s, bool trophies) =>
             $"{s.Name} has begun. The renown ladder is fresh: honourable kills earn renown{(trophies ? " and a Darktide Trophy" : "")}. "
-            + $"PK Night, every Sunday at 7 PM Pacific, is the weekly finale. The season ends after PK Night on {Day(s.EndAt)}.";
+            + $"It runs over {Rounds(s)} PK Nights, {PkNight.SCHEDULE_WORDS}. The season ends after PK Night on {Day(s.EndAt)}.";
 
         public static string EndDayLine(Schedule s, string leader, long renown) =>
             $"{s.Name} ends in a day, after PK Night on {NightWords(s.EndAt, true)}. "
             + (leader != null ? $"{leader} leads with {renown:N0} renown." : "Nobody has earned renown yet.");
 
-        /// <summary>After each PK Night round while the season runs: the week and the top three.</summary>
+        /// <summary>After each PK Night round while the season runs: which PK Night of the season it was and the top three.</summary>
         public static string FinaleLine(Schedule s, long now, IList<(string name, long renown)> top)
         {
-            var head = $"{s.Name}, week {WeekOf(s, now)} of {Weeks(s)}";
+            var head = $"{s.Name} after PK Night {RoundOf(s, now)} of {Rounds(s)}";
             if (top == null || top.Count == 0) return head + ": nobody has earned renown yet.";
             var parts = new List<string>();
             for (int i = 0; i < top.Count && i < 3; i++) parts.Add($"{i + 1}. {top[i].name} ({top[i].renown:N0})");

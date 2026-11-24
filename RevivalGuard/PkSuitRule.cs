@@ -153,7 +153,7 @@ namespace RevivalGuard
         public static Tinkers TinkerPlan(Kind k, int timesTinkered, bool imbued, bool elemental)
         {
             var t = new Tinkers();
-            int room = Math.Max(0, MAX_TINKERS - timesTinkered);
+            int room = Math.Max(0, MAX_TINKERS - Math.Max(0, timesTinkered));   // a bad negative count never adds tinks (Codex review 11-23)
             if (room == 0) return t;
             switch (k)
             {
@@ -181,7 +181,7 @@ namespace RevivalGuard
         /// never less than 5000 nor less than it had. Rounded up to a hundred.</summary>
         public static int EveningMana(int currentMax, double burnPerSecond)
         {
-            double need = Math.Max(5000, Math.Abs(burnPerSecond) * 12 * 3600);
+            double need = Math.Min(2_000_000_000, Math.Max(5000, Math.Abs(burnPerSecond) * 12 * 3600));   // no int overflow (Codex review 11-23)
             int m = (int)Math.Ceiling(need / 100.0) * 100;
             return Math.Max(m, currentMax);
         }

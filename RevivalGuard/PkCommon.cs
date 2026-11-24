@@ -37,7 +37,7 @@ namespace RevivalGuard
             (P_BOUNTY, false, "PK expansion: player-posted bounties in pyreals, escrowed (RevivalGuard PkBounty)"),
             (P_SHRINES, false, "PK expansion: capturable Shadow Shrines with an allegiance XP boon (RevivalGuard PkShrines)"),
             (P_IGNORE_IP, false, "PK expansion: count kills between characters on one connection address (a test aid; leave false)"),
-            (PkNight.P_ON, false, "PK Night: every Sunday 7 PM Pacific, hold the spot for an hour (RevivalGuard PkNight; docs/proposals/pk-night.md)"),
+            (PkNight.P_ON, false, "PK Night: every other Sunday 7 PM Pacific, hold the hill for 40 minutes (RevivalGuard PkNight; docs/proposals/pk-night.md)"),
             (PkNight.P_DISCORD, false, "PK Night: post the start and the result to Discord (DiscordBridge.Announce)"),
             (PkBattlefield.P_ON, false, "PK battlefields: player corpses in the PK zones (Dark Isle beach, Arwic's lawn, mansions, PK Night spots) never rot on a timer; over a zone's cap the oldest rots (RevivalGuard PkBattlefield)"),
             (PkNight.P_BANNER, false, "PK Night: a Banner of the Held Ground (908120) to the winners: by fellowship, its leader once per player ever; by allegiance, its monarch once per allegiance ever (HeldGroundBanner)"),

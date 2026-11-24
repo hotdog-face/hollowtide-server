@@ -153,12 +153,18 @@ namespace RevivalGuard
             if (on)
             {
                 s_Loaded[g] = c;
-                if (!s_Index.Has(g))
                 {
+                    // where it lies NOW, each tick (Codex review 11-23: an indexed corpse a staff teleport moved kept its old
+                    // zone): out of every zone it is ACE's again; into another zone it counts against that zone's cap
                     var loc = c.Location;
                     var z = loc == null ? null : ZoneOf(loc.LandblockId.Landblock, loc.PositionX, loc.PositionY);
-                    if (z == null) return true;   // moved out of every zone (a staff teleport): ACE's
-                    s_Index.Add(z.Key, g, since.Value);
+                    if (z == null) { s_Index.Remove(g); return true; }
+                    if (s_Index.ZoneKeyOf(g) != z.Key)
+                    {
+                        s_Index.Remove(g);
+                        s_Index.Add(z.Key, g, since.Value);
+                        lock (s_ZoneByKey) s_ZoneByKey[z.Key] = z;
+                    }
                 }
                 var key = s_Index.ZoneKeyOf(g);
                 if (key == null) return true;

@@ -46,8 +46,10 @@ namespace RevivalGuard
     public static partial class DressingRoom
     {
         public const uint TAILOR = 908200, MANNEQUIN = 908201, TRUNK = 908206;
-        // the room's dressed mannequins, and the JawnTide gallery's (2026-11-25-jawntide-3-gallery.sql, 914200+)
-        static bool IsMannequin(uint wcid) => (wcid >= 908202 && wcid <= 908204) || (wcid >= 914200 && wcid <= 914299);
+        // the room's dressed mannequins, the JawnTide gallery's (2026-11-25-jawntide-3-gallery.sql, 914200+) and the
+        // rune-suit ones that replaced them in the Staff Base (2026-11-26-rune-mannequins.sql, 915530-915559)
+        static bool IsMannequin(uint wcid) => (wcid >= 908202 && wcid <= 908204) || (wcid >= 914200 && wcid <= 914299)
+            || (wcid >= 915530 && wcid <= 915559);
         const AccessLevel STAFF = AccessLevel.Sentinel;
         const uint LOOK_MASK = 0x7FFF | (uint)EquipMask.Cloak;   // the clothing and armour slots, and the cloak
         const uint OURS = 900000;   // our own weenies (masks, costume pieces, suits) start here

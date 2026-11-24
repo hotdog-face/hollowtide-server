@@ -22,8 +22,8 @@ namespace RevivalGuard
     /// winning fellowship's leader once per player. Only PK Night: bounties, renown and the ladder keep PkCommon.Side.
     /// What follows says "allegiance"; read "side".
     ///
-    /// Every Sunday at 7 PM Pacific, for ROUND_MINUTES (40), the allegiance that holds a known outdoor landmark longest wins.
-    /// The spot rotates weekly (PkNightRules.SPOTS) and is announced a day, 30 minutes and ten minutes ahead. During
+    /// Every other Sunday at 7 PM Pacific (PkNightRules.INTERVAL_DAYS), for ROUND_MINUTES (40), the allegiance that holds a known outdoor landmark longest wins.
+    /// The spot rotates once per round (PkNightRules.SPOTS) and is announced a day, 30 minutes and ten minutes ahead. During
     /// the round, every TICK seconds, the player killers within pk_night_radius metres of the hill are counted by
     /// allegiance (PkCommon.Side: the monarch, or a lone player): one allegiance alone there holds it and earns
     /// the tick, two or more are a contest and nobody earns it. Mercenaries never count; the Borg count like any
@@ -31,11 +31,11 @@ namespace RevivalGuard
     /// torches mark it, and players near it hear the standings every 15 s (PkNightHill.cs, PkNightHillRules.cs). Normal Hollowtide PK death rules apply, this changes nothing about dying.
     ///
     /// The reward is glory: a title (pk_night_title, a retail CharacterTitle) to the winners who stood there, a
-    /// world line, a line for the Town Crier (CrierLine), a weekly leaderboard, and a small token (pk_night_token,
+    /// world line, a line for the Town Crier (CrierLine), a leaderboard of nights, and a small token (pk_night_token,
     /// a weenie; 0 = none until the owner picks one). State: PkLedger/pknight.json beside the dll (ModFolder).
     ///
     ///   @pknight                          what is next, or the standings now (any player; a retail client's board)
-    ///   @pknight start [minutes] [spot] [record]   staff: a round now (default 10 minutes, this week's spot; `record`
+    ///   @pknight start [minutes] [spot] [record]   staff: a round now (default 10 minutes, the next round's spot; `record`
     ///                                     counts it on the leaderboard; without it the round is a rehearsal)
     ///   @pknight stop                     staff: end the running round now
     ///   @pknight say                      staff: every line players are told, to you only
@@ -327,7 +327,7 @@ namespace RevivalGuard
         {
             var spot = SpotNamed(live.SpotKey) ?? SPOTS[0];
             var utc = DateTimeOffset.FromUnixTimeSeconds((long)now).UtcDateTime;
-            var next = Next(utc);                                        // at a scheduled round's end this is next week's
+            var next = Next(utc);                                        // at a scheduled round's end this is the next round
             if (next != null && next.Running(utc)) next = After(next);   // a forced round inside the live hour
             var w = Leader(live);
             var rec = new RoundRec
@@ -376,7 +376,7 @@ namespace RevivalGuard
             ClearMarkers("the night is over");
             s_LineAt = 0;
             World(EndLine(live, spot, live.Forced ? null : next));
-            if (live.Record) PkRenown.SeasonFinale();   // Darktide Season: each PK Night is the week's finale
+            if (live.Record) PkRenown.SeasonFinale();   // Darktide Season: each PK Night closes a round of the season
             if (PkCommon.On(P_DISCORD) && !live.Forced) DiscordBridge.Announce(DiscordEndLine(live, spot));
             if (live.Record) foreach (var p in winners) Reward(p);
             if (bannerTo != 0) GiveBanner(bannerTo, w.Name);
@@ -520,7 +520,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ what the crier and the calendar read
 
-        /// <summary>The Town Crier's line about last week's night (null until a round has been recorded).</summary>
+        /// <summary>The Town Crier's line about the last night (null until a round has been recorded).</summary>
         internal static string CrierLine() { lock (s_Lock) return On ? s_State.CrierLine : null; }
 
         /// <summary>The Town Crier's answer to "when is PK Night": the night running now, or the next one with its way.</summary>
@@ -629,7 +629,7 @@ namespace RevivalGuard
             else
             {
                 var next = Next(utc);
-                if (next != null) lines.Add($"PK Night is {WhenWords(next.StartUtc)}: hold the hill at {next.Spot.Name} ({next.Spot.Where}) for {RoundWords()}. The {(fs ? "fellowship" : "allegiance")} that holds it longest takes the night. {HillWords()}");
+                if (next != null) lines.Add(NextRoundLine(next, fs));
             }
             var last = rounds.LastOrDefault();
             if (last != null)

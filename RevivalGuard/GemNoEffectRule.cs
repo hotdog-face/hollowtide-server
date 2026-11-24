@@ -14,6 +14,20 @@ namespace RevivalGuard
             return $"The {name} cannot be used by itself.";
         }
 
+        public enum Needs { Weapon, Wand, WeaponOrWand, Armor }
+
+        /// <summary>The line for a gem whose spell lands on a wielded or worn item when none can take it (report
+        /// 261123-0021: Rage of Grael with no weapon wielded). The gem is kept. `unenchantable`: something is wielded but
+        /// it resists all magic.</summary>
+        public static string WieldFirst(string name, Needs needs, bool unenchantable = false)
+        {
+            if (unenchantable) return $"Your wielded item cannot be enchanted, so the {name} was not used.";
+            if (needs == Needs.Armor) return $"Wear enchantable armor first: the {name} enchants what you wear. It was not used.";
+            string what = needs == Needs.Wand ? "a casting implement"
+                : needs == Needs.WeaponOrWand ? "a weapon or casting implement" : "a weapon";
+            return $"Wield {what} first: the {name} enchants what you wield. It was not used.";
+        }
+
         static bool Names(string text, string who) =>
             text != null && text.IndexOf(who, System.StringComparison.OrdinalIgnoreCase) >= 0;
     }

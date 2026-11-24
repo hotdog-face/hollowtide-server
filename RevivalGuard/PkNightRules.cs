@@ -7,7 +7,7 @@ namespace RevivalGuard
 {
     /// <summary>
     /// PK NIGHT, THE PURE HALF (no ACE types; tools/nettest compiles this file by path, PkNightCase). The schedule
-    /// (every Sunday 7 PM Pacific for ROUND_MINUTES, first run 2026-11-22), the spot rotation, the hold scoring, the tie
+    /// (every other Sunday 7 PM Pacific for ROUND_MINUTES, first run 2026-11-22), the spot rotation, the hold scoring, the tie
     /// rule, which announcement is due when, and every line a player reads. PkNight.cs runs it on the world loop.
     /// Design: docs/proposals/pk-night.md; the owner's decisions: docs/proposals/pk-night-decisions.md.
     /// </summary>
@@ -24,7 +24,10 @@ namespace RevivalGuard
         public static string RoundWords(int minutes = ROUND_MINUTES) => minutes == 60 ? "the hour" : $"{minutes} minutes";
         /// <summary>The moving hill in a sentence (PkNightHillRules), for the notices, the login line and the board.</summary>
         public static string HillWords() => $"The hill moves every {HILL_MOVE_MINUTES} minutes and torches mark its edge.";
-        public const string WHEN_WORDS = "Sunday at 7 PM Pacific";
+        /// <summary>Every other Sunday (owner 2026-11-23: "Let's make pk night every other week. That was allot of work."):
+        /// rounds fall only on Sundays a multiple of INTERVAL_DAYS after FIRST_SUNDAY (Nov 22, Dec 6, Dec 20, ...).</summary>
+        public const int INTERVAL_DAYS = 14;
+        public const string SCHEDULE_WORDS = "every other Sunday at 7 PM Pacific";
 
         /// <summary>US daylight saving (since 2007): from the second Sunday of March at 2:00 to the first Sunday of
         /// November at 2:00, local time. Pacific is UTC-8 in winter and UTC-7 in summer.</summary>
@@ -56,43 +59,47 @@ namespace RevivalGuard
 
         public sealed class Scheduled
         {
-            public int Week;                // 0 = the first run
+            public int Round;               // 0 = the first run (Nov 22), 1 = Dec 6, ...: one per held night, not per week
             public DateTime StartUtc, EndUtc;
             public Spot Spot;
             public bool Running(DateTime utc) => utc >= StartUtc && utc < EndUtc;
-            public string Key => $"week{Week}";
+            /// <summary>"week0" for the first run (its saved record), "round1" on: the day before's notices and Played() key on it.</summary>
+            public string Key => Round == 0 ? "week0" : $"round{Round}";
         }
 
-        /// <summary>The round running now, or the next one: the first Sunday on or after the first run whose hour
-        /// has not ended yet.</summary>
+        /// <summary>A PK Night Sunday: on or after the first run, a whole number of INTERVAL_DAYS after it (a Pacific date).</summary>
+        public static bool IsNightSunday(DateTime localDate)
+        {
+            int days = (int)Math.Round((localDate.Date - FIRST_SUNDAY).TotalDays);
+            return localDate.DayOfWeek == DayOfWeek.Sunday && days >= 0 && days % INTERVAL_DAYS == 0;
+        }
+
+        /// <summary>The round running now, or the next one: the first PK Night Sunday on or after today whose round
+        /// has not ended yet. The off Sundays between have nothing.</summary>
         public static Scheduled Next(DateTime utcNow)
         {
             var local = PacificLocal(utcNow).Date;
-            var sunday = local.AddDays(((int)DayOfWeek.Sunday - (int)local.DayOfWeek + 7) % 7);
-            if (sunday < FIRST_SUNDAY) sunday = FIRST_SUNDAY;
-            for (int i = 0; i < 3; i++, sunday = sunday.AddDays(7))
+            int days = (int)Math.Round((local - FIRST_SUNDAY).TotalDays);
+            int round = days <= 0 ? 0 : (days + INTERVAL_DAYS - 1) / INTERVAL_DAYS;
+            for (int i = 0; i < 3; i++, round++)
             {
-                var start = StartUtcOf(sunday);
-                var end = start.AddMinutes(ROUND_MINUTES);
-                if (utcNow < end) return Make(sunday, start, end);
+                var s = OfRound(round);
+                if (utcNow < s.EndUtc) return s;
             }
             return null;
         }
 
-        public static Scheduled After(Scheduled s)
+        public static Scheduled After(Scheduled s) => OfRound(s.Round + 1);
+
+        /// <summary>Round n: the Sunday n * INTERVAL_DAYS after the first run, at the nth spot of the rotation.</summary>
+        public static Scheduled OfRound(int round)
         {
-            var sunday = PacificLocal(s.StartUtc).Date.AddDays(7);
+            var sunday = FIRST_SUNDAY.AddDays(INTERVAL_DAYS * round);
             var start = StartUtcOf(sunday);
-            return Make(sunday, start, start.AddMinutes(ROUND_MINUTES));
+            return new Scheduled { Round = round, StartUtc = start, EndUtc = start.AddMinutes(ROUND_MINUTES), Spot = SpotOfRound(round) };
         }
 
-        static Scheduled Make(DateTime sunday, DateTime start, DateTime end)
-        {
-            int week = (int)Math.Round((sunday - FIRST_SUNDAY).TotalDays / 7.0);
-            return new Scheduled { Week = week, StartUtc = start, EndUtc = end, Spot = SpotOfWeek(week) };
-        }
-
-        public static Spot SpotOfWeek(int week) => SPOTS[((week % SPOTS.Length) + SPOTS.Length) % SPOTS.Length];
+        public static Spot SpotOfRound(int round) => SPOTS[((round % SPOTS.Length) + SPOTS.Length) % SPOTS.Length];
 
         /// <summary>"Sunday, Nov 22 at 7 PM Pacific", for a start time.</summary>
         public static string WhenWords(DateTime startUtc)
@@ -123,10 +130,10 @@ namespace RevivalGuard
             public override string ToString() => $"{Name} ({Where})";
         }
 
-        /// <summary>The rotation, in order from the first run (week 0 = the first). Every one is outdoors and far
+        /// <summary>The rotation, in order from the first run (round 0 = the first). Every one is outdoors and far
         /// from Holtburg (42.1N 33.6E), the arrival town (owner: never near the Holtburg arrival area). Owner 2026-11-20
-        /// ("Yes, this Sunday"): the Dark Isle takes week 0 and the Mite Maze moves to the end, so weeks 1 to 6 keep their
-        /// dates and the Mite Maze still falls on week 7 (Jan 10); only the second time round (week 8 on) shifts.</summary>
+        /// ("Yes, this Sunday"): the Dark Isle takes round 0 and the Mite Maze moves to the end. Owner 2026-11-23 (every
+        /// other Sunday): the rotation moves one spot per held round, so Dec 6 is Zombie Castle and the Mite Maze round 7 (Feb 28).</summary>
         public static readonly Spot[] SPOTS =
         {
             // the owner's 2017 Darktide footage "PVP at 150 Island": the open sand of the south beach by the lifestone
@@ -428,7 +435,7 @@ namespace RevivalGuard
         }
 
         public static string DayBeforeLine(Spot spot, bool fs = true) =>
-            $"PK Night is tomorrow, {WHEN_WORDS}: hold the hill at {spot.Name} ({spot.Where}) for {RoundWords()}. The {Word(fs)} that holds it longest takes the night. {HillWords()}" + GateTail(spot);
+            $"PK Night is tomorrow, Sunday at 7 PM Pacific: hold the hill at {spot.Name} ({spot.Where}) for {RoundWords()}. The {Word(fs)} that holds it longest takes the night. {HillWords()}" + GateTail(spot);
 
         public static string PrepBeforeLine(Spot spot, bool fs = true) =>
             $"PK Night begins in {LeadWords()} at {spot.Name} ({spot.Where}). Gather your {Word(fs)}. {HillWords()}" + WayTail(spot);
@@ -475,15 +482,23 @@ namespace RevivalGuard
             string line = w == null
                 ? $"PK Night is over: no one held {spot.Name}. The night goes unclaimed."
                 : $"PK Night is over: {w.Name} held {spot.Name} for {Clock(w.Held)} and takes the night!";
-            if (next != null) line += $" Next {WHEN_WORDS}: {next.Spot.Name} ({next.Spot.Where}).";
+            if (next != null) line += $" Next is {WhenWords(next.StartUtc)}: {next.Spot.Name} ({next.Spot.Where}).";
             return line;
         }
 
         /// <summary>The Town Crier's line for the week (the crier on branch claude/town-crier reads CrierLine()).</summary>
         public static string CrierLine(string winner, Spot spot, double held, Scheduled next, bool fs = true) =>
             winner == null
-                ? $"Hear ye! No {Word(fs)} held {spot.Name} on PK Night. Next {WHEN_WORDS}: {next?.Spot.Name ?? "a new spot"}."
-                : $"Hear ye! {winner} held {spot.Name} for {Clock(held)} and took PK Night. Next {WHEN_WORDS}: {next?.Spot.Name ?? "a new spot"}.";
+                ? $"Hear ye! No {Word(fs)} held {spot.Name} on PK Night. {NextWords(next)}"
+                : $"Hear ye! {winner} held {spot.Name} for {Clock(held)} and took PK Night. {NextWords(next)}";
+
+        static string NextWords(Scheduled next) => next == null
+            ? $"PK Night is {SCHEDULE_WORDS}, at a new spot."
+            : $"Next is {WhenWords(next.StartUtc)}: {next.Spot.Name}.";
+
+        /// <summary>The @pknight text board's line about the next round (between rounds, the off Sundays too).</summary>
+        public static string NextRoundLine(Scheduled next, bool fs = true) =>
+            $"PK Night is {SCHEDULE_WORDS}. The next is {WhenWords(next.StartUtc)}: hold the hill at {next.Spot.Name} ({next.Spot.Where}) for {RoundWords()}. The {Word(fs)} that holds it longest takes the night. {HillWords()}";
 
         public static string LoginLiveLine(Spot spot, double secondsLeft) =>
             $"PK Night is on now: hold the hill at {spot.Name} ({spot.Where}). {HillWords()} {Clock(secondsLeft)} left.";
@@ -508,8 +523,7 @@ namespace RevivalGuard
             var live = new Live { StartedAt = 0, EndsAt = ROUND_MINUTES * 60 };
             live.Sides[1] = new Standing { Side = 1, Name = "The Borg", Held = 1230, LastHeldAt = 100 };
             live.Sides[2] = new Standing { Side = 2, Name = "Hollow Crown", Held = 600, LastHeldAt = 200 };
-            var next = new Scheduled { Week = 1, StartUtc = StartUtcOf(FIRST_SUNDAY.AddDays(7)), Spot = SPOTS[1] };
-            next.EndUtc = next.StartUtc.AddMinutes(ROUND_MINUTES);
+            var next = OfRound(1);
             yield return DayBeforeLine(spot, fs);
             yield return PrepBeforeLine(spot, fs);
             yield return TenMinutesLine(spot);
@@ -526,7 +540,9 @@ namespace RevivalGuard
             yield return DiscordStartLine(spot, fs);
             yield return DiscordEndLine(live, spot);
             yield return GateOpenLine(spot);
-            yield return LoginSoonLine(new Scheduled { Week = 0, StartUtc = StartUtcOf(FIRST_SUNDAY), Spot = spot }, fs);
+            yield return LoginSoonLine(OfRound(0), fs);
+            yield return NextRoundLine(next, fs);
+            yield return CrierLine(null, spot, 0, null, fs);
             yield return NoneHeldYetLine(fs);
             yield return HowToHoldLine(40, fs);
             if (fs) yield return BenchedLine(spot);

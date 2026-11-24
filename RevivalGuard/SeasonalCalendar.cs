@@ -522,7 +522,7 @@ namespace RevivalGuard
                 Say(session, "No festival is running.");
                 if (next != null)
                     Say(session, $"Next is {next.f.Name}, in {next.d} day{(next.d == 1 ? "" : "s")}.");
-                var night = PkNight.FestivalLine();   // the weekly PK Night, when it is on
+                var night = PkNight.FestivalLine();   // PK Night (every other Sunday), when it is on
                 if (night != null) Say(session, night);
             }
             else

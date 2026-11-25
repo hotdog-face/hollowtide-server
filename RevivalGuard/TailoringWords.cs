@@ -113,8 +113,18 @@ namespace RevivalGuard
             [HarmonyPriority(Priority.Last)]
             static void Postfix(Player player, WorldObject source, WorldObject target, WeenieError __result)
             {
-                if (!On || __result == WeenieError.None || source == null || target == null || source == target || target.Retained) return;
-                if (source.IsSocietyArmor || target.IsSocietyArmor) Say(player, "Society armor cannot be tailored.");
+                if (!On || __result == WeenieError.None || player == null || source == null || target == null || source == target) return;
+                // EVERY REFUSAL NAMES ITS REASON (owner F7 261125-0018, three tries of a kit on a Radiant Blood Helm, no line):
+                // ACE refuses a target outside the pack before its society test, and only a worn one is let through
+                // (WornTailoring), so a helm on the ground, a hook or a mannequin got the bare generic line.
+                bool srcHere = player.FindObject(source.Guid.Full, Player.SearchLocations.MyInventory) != null;
+                bool tgtPack = player.FindObject(target.Guid.Full, Player.SearchLocations.MyInventory) != null;
+                bool tgtWorn = !tgtPack && player.FindObject(target.Guid.Full, Player.SearchLocations.MyEquippedItems) != null;
+                if (source.IsSocietyArmor || target.IsSocietyArmor) { Say(player, "Society armor cannot be tailored."); return; }
+                if (!srcHere) { Say(player, $"Your {N(source)} must be in your pack to use it."); return; }
+                if (!tgtPack && !tgtWorn) { Say(player, $"The {N(target)} must be in your pack or worn by you to tailor it."); return; }
+                if (tgtWorn && !target.Retained) { Say(player, $"Take off the {N(target)} and put it in your pack to tailor it."); return; }   // tailoring_worn off
+                // a retained target: ACE (pack) or WornTailoring (worn) already said to use Sandstone Salvage
             }
         }
 

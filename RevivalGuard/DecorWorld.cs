@@ -399,6 +399,8 @@ namespace RevivalGuard
             string dir = a.Length > 1 ? a[1].ToLowerInvariant() : "";
             if (dir != "in" && dir != "out") { reply("way in | way out"); return; }
             var ar = s_Cur;
+            string wait = DecorAccessRule.WhyNotWay(Mode, ar.Layer["world"] != null);
+            if (wait != null) { reply(wait); return; }
             if (!(ar.Layer["home"] is JsonObject home)) { reply("This area has no spot to lead to."); return; }
             JsonObject to;
             if (dir == "in") to = (JsonObject)home.DeepClone();

@@ -38,6 +38,11 @@ namespace RevivalGuard
     {
         internal const string PREFIX = "~htlt1~";            // AcLogin.TOKEN_PREFIX on the client
         internal const uint REVOKE_Q = 0x52545448;           // "HTTR" little-endian
+        /// <summary>"HTRA": SIGN OUT EVERYWHERE (multibox, owner 2026-11-24). The token proves the account; every token
+        /// of that account goes, on every computer. Behind rg_login_revoke_all (off until his yes): off, it is ignored
+        /// and the client's HTTR that follows still ends the one it holds.</summary>
+        internal const uint REVOKE_ALL_Q = 0x41525448;
+        internal const string P_REVOKE_ALL = "rg_login_revoke_all";
         static readonly TimeSpan EXPIRY = TimeSpan.FromDays(90);
         const int PER_ACCOUNT = 8;
         const string BAD_PASSWORD = " because the password entered for this account was not correct";
@@ -65,6 +70,7 @@ namespace RevivalGuard
         {
             CommandManager.TryAddCommand(Issue, "logintoken", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
                 "Our client asks for a stay-logged-in token after a password login.", "");
+            PkCommon.RegisterBool(P_REVOKE_ALL, false, "RevivalGuard LoginTokens: 'Sign out everywhere' ends every saved login of the account");
             lock (s_Lock) Load();
         }
 
@@ -211,7 +217,7 @@ namespace RevivalGuard
                 {
                     if (packet == null || endPoint == null) return true;
                     var hd = packet.Header;
-                    if (hd.Sequence != REVOKE_Q || hd.Id != 0xFFFF || (uint)hd.Flags != 0) return true;
+                    if ((hd.Sequence != REVOKE_Q && hd.Sequence != REVOKE_ALL_Q) || hd.Id != 0xFFFF || (uint)hd.Flags != 0) return true;
                     var d = packet.Data;
                     if (d == null || BadSize(hd.Size, d.Length)) return true;
                     long pos = d.Position;
@@ -219,9 +225,23 @@ namespace RevivalGuard
                     var buf = new byte[d.Length];
                     int got = d.Read(buf, 0, buf.Length);
                     d.Position = pos;
-                    if (got != buf.Length || BitConverter.ToUInt32(buf, 0) != REVOKE_Q) return true;
+                    if (got != buf.Length || BitConverter.ToUInt32(buf, 0) != hd.Sequence) return true;
                     string token = Encoding.ASCII.GetString(buf, 4, buf.Length - 4);
                     string h = Hash(token);
+                    if (hd.Sequence == REVOKE_ALL_Q)
+                    {
+                        if (!RevokeAllOn) return false;       // ours either way; off, the HTTR after it does the one token
+                        int n = 0;
+                        lock (s_Lock)
+                        {
+                            Load();
+                            if (s_ByHash.TryGetValue(h, out var e))
+                                foreach (var k in s_ByHash.Where(kv => kv.Value.Account == e.Account).Select(kv => kv.Key).ToList()) { s_ByHash.Remove(k); n++; }
+                            if (n > 0) Save();
+                        }
+                        if (n > 0) Mod.Log.Info($"[RevivalGuard] login tokens revoked everywhere ({n}) from {endPoint.Address}");
+                        return false;
+                    }
                     bool gone;
                     lock (s_Lock)
                     {
@@ -237,6 +257,8 @@ namespace RevivalGuard
 
             static bool BadSize(int size, long len) => size < 5 || size > 4 + 64 || len != size;
         }
+
+        static bool RevokeAllOn { get { try { return ACE.Server.Managers.PropertyManager.GetBool(P_REVOKE_ALL, false).Item; } catch { return false; } } }
 
         // ---- storage ---------------------------------------------------------------------------------
 

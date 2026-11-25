@@ -247,6 +247,7 @@ namespace RevivalGuard
             public double Held { get; set; }          // seconds held, uncontested
             public double LastHeldAt { get; set; }    // unix; the tie rule
             public HashSet<uint> Present { get; set; } = new HashSet<uint>();   // who stood there for the side, by guid
+            public Dictionary<uint, int> Ticks { get; set; } = new Dictionary<uint, int>();   // scoring ticks each stood there (RuneSkinsRule.PkWinner)
             public uint Leader { get; set; }          // fellowship mode: its leader at the last scoring tick (a side of one: the player)
         }
 
@@ -359,28 +360,31 @@ namespace RevivalGuard
 
         static string Word(bool fs) => fs ? "fellowship" : "allegiance";
 
-        /// <summary>One scoring tick. `present` is every eligible player killer within the radius. One side alone
-        /// holds and earns the tick; two or more sides are a contest and nobody earns it; nobody there, nobody
-        /// earns it. Returns the side that took the lead on this tick, or 0.</summary>
+        /// <summary>One scoring tick. `present` is every eligible player killer within the radius. "Outnumber to score"
+        /// (owner 2026-11-25): the side with more of its members there than every other side present holds and earns
+        /// the tick, so a big allegiance's extra fellowships no longer block a bigger side; a tie for most is a contest
+        /// and nobody earns it; nobody there, nobody earns it. Returns the side that took the lead on this tick, or 0.</summary>
         public static uint Tick(Live live, IEnumerable<Presence> present, double now, double dt, List<uint> benched = null)
         {
             var here = Admit(live, present, benched);
-            var sides = here.Select(p => p.Side).Distinct().ToList();
+            var groups = here.GroupBy(p => p.Side).OrderByDescending(g => g.Count()).ToList();
+            bool outnumbers = groups.Count == 1 || (groups.Count > 1 && groups[0].Count() > groups[1].Count());
+            var holders = outnumbers ? groups[0].ToList() : null;
             live.PresentNow = here.Count;
-            live.Contested = sides.Count > 1;
-            live.Holding = sides.Count == 1 ? sides[0] : 0;
+            live.Contested = groups.Count > 1 && !outnumbers;
+            live.Holding = holders != null ? holders[0].Side : 0;
             live.LastTickAt = now;
             uint before = Leader(live)?.Side ?? 0;
-            if (sides.Count == 1)
+            if (holders != null)
             {
-                var side = sides[0];
+                var side = holders[0].Side;
                 if (!live.Sides.TryGetValue(side, out var st))
-                    live.Sides[side] = st = new Standing { Side = side, Name = here[0].Label };
-                st.Name = here[0].Label;
-                if (here[0].Leader != 0) st.Leader = here[0].Leader;
+                    live.Sides[side] = st = new Standing { Side = side, Name = holders[0].Label };
+                st.Name = holders[0].Label;
+                if (holders[0].Leader != 0) st.Leader = holders[0].Leader;
                 st.Held += dt;
                 st.LastHeldAt = now;
-                foreach (var p in here) st.Present.Add(p.Guid);
+                foreach (var p in holders) { st.Present.Add(p.Guid); st.Ticks[p.Guid] = st.Ticks.GetValueOrDefault(p.Guid) + 1; }
             }
             uint after = Leader(live)?.Side ?? 0;
             if (after != 0 && after != before) { live.Leader = after; return after; }
@@ -457,7 +461,7 @@ namespace RevivalGuard
         /// <summary>The @pknight text board's lines that name the side (the rest are in PkNight.cs).</summary>
         public static string NoneHeldYetLine(bool fs = true) => $"No {Word(fs)} has held it yet.";
         public static string HowToHoldLine(double radius, bool fs = true) =>
-            $"Stand within {radius:0} metres of the hill with no other {Word(fs)} there to hold it. {HillWords()} Dying there counts as it always does."
+            $"Stand within {radius:0} metres of the hill with more of your {Word(fs)} there than any other {Word(fs)} to hold it; a tie scores for no one. {HillWords()} Dying there counts as it always does."
             + (fs ? " " + HopRule : "");
 
         static string WayTail(Spot spot) => string.IsNullOrEmpty(spot.Way) ? "" : " " + spot.Way;

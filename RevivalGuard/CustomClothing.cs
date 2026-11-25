@@ -82,6 +82,39 @@ namespace RevivalGuard
             }
         }
 
+        /// <summary>LOOK LAB "MAKE IT NOW" (owner 261125-0009; LookLabMake): a table built at runtime from a recipe, kept as
+        /// clothing/looklabrun-&lt;id&gt;.json beside the others (so a restart loads it again, as Load does every file there),
+        /// put in the portal cache at once and served by Sync like every other table, so each client gets the item's
+        /// look in its ObjDesc. The same JSON again gets the same id back. Null when the range is full.</summary>
+        internal const uint RUNTIME_LO = 0x1000FF00, RUNTIME_HI = 0x1000FFFF;
+        internal static uint? AddRuntime(Func<uint, string> jsonFor)
+        {
+            lock (s_Tables)
+            {
+                foreach (var f in Directory.GetFiles(Dir, "looklabrun-*.json"))
+                {
+                    try
+                    {
+                        var (fid, _, _, _) = CustomClothingRule.Build(File.ReadAllText(f));
+                        if (File.ReadAllText(f) == jsonFor(fid)) return fid;   // this look was made before: its table again
+                    }
+                    catch { }
+                }
+                uint id = RUNTIME_LO;
+                while (id <= RUNTIME_HI && s_Tables.ContainsKey(id)) id++;
+                if (id > RUNTIME_HI) return null;
+                string json = jsonFor(id);
+                var (bid, blob, _, _) = CustomClothingRule.Build(json);
+                var t = new ClothingTable();
+                using (var r = new BinaryReader(new MemoryStream(blob))) t.Unpack(r);
+                File.WriteAllText(Path.Combine(Dir, $"looklabrun-{bid:X8}.json"), json);
+                s_Tables[bid] = t;
+                if (PkCommon.On(P_ON)) { var cache = DatManager.PortalDat?.FileCache; if (cache != null) cache[bid] = t; }
+                Mod.Log.Info($"[RevivalGuard] CustomClothing: runtime table 0x{bid:X8} (Look Lab, Make it now)");
+                return bid;
+            }
+        }
+
         /// <summary>Make the portal cache match the switch: ours in it when on, out of it when off.</summary>
         static void Sync()
         {

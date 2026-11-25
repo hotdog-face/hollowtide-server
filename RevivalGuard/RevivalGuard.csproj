@@ -44,5 +44,7 @@
     <EmbeddedResource Include="clothing/*.json" LogicalName="RevivalGuard.clothing.%(Filename)%(Extension)" />
     <!-- The look showcase's effects (LookShowcase; tools/gpubox-ace/gen_look_showcase.py), read from the dll. -->
     <EmbeddedResource Include="LookShowcase.json" LogicalName="RevivalGuard.LookShowcase.json" />
+    <!-- The Look Lab's packaged items' effects (LookShowcase, rg_look_lab; tools/looklab/package.py). -->
+    <EmbeddedResource Include="LookLab.json" LogicalName="RevivalGuard.LookLab.json" />
   </ItemGroup>
 </Project>

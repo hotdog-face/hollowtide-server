@@ -87,9 +87,13 @@ namespace RevivalGuard
             public bool Mustered;
             public readonly HashSet<uint> Detached = new HashSet<uint>();
             public readonly Dictionary<uint, (Vector2 at, double since)> Still = new Dictionary<uint, (Vector2, double)>();
+            public readonly Dictionary<uint, MarchState> Aim = new Dictionary<uint, MarchState>();
             public string ThemeGroup;                          // a themed raid's name in the lines (the tier's, else the theme's)
             public string Group => Theme != null && Theme.Replace ? ThemeGroup ?? Theme.Group : Kind?.Group ?? "raiders";
         }
+
+        /// <summary>A raider's march on the town: the point it goes for, and the streets once the straight walk stuck.</summary>
+        sealed class MarchState { public float[] To; public double At; public List<float[]> Legs; public int Leg; public Vector2 LastPos; public double MovedAt; }
 
         sealed class Tag { public int RaidId; public int ProtectBelow; public bool Reserve; }
         static readonly ConditionalWeakTable<Creature, Tag> s_Raiders = new ConditionalWeakTable<Creature, Tag>();
@@ -471,7 +475,7 @@ namespace RevivalGuard
 
         /// <summary>A raider's home is its point in town: it runs there now, and ACE walks it back there after each fight;
         /// HomeRadius pulls a chase back before it strays far.</summary>
-        static void Send(Creature c, Position to)
+        static void Send(Creature c, Position to, Position home = null)
         {
             var chain = new ActionChain();
             chain.AddAction(c, () =>
@@ -479,7 +483,7 @@ namespace RevivalGuard
                 try
                 {
                     if (c.IsDead || c.IsDestroyed) return;
-                    c.Home = new Position(to);
+                    c.Home = new Position(home ?? to);
                     c.HomeRadius = s_Cfg.HomeRadius;
                     // Creature.MoveTo runs the walk on the server for a sleeping monster too (MoveToHome leaves it to the
                     // awake monster's own tick); once it wakes on a player, ACE's monster tick takes over
@@ -499,7 +503,12 @@ namespace RevivalGuard
         {
             // every raider not dead or destroyed counts, loaded or not (a block with nobody near can go quiet under it)
             var alive = Live(r.All).ToList();
-            if (InTown().Count == 0) { if (r.EmptySince == 0) r.EmptySince = now; } else r.EmptySince = 0;
+            var town = InTown();
+            if (town.Count == 0) { if (r.EmptySince == 0) r.EmptySince = now; } else r.EmptySince = 0;
+            // who a raider can march on: alive, outdoors, not just back from a death (RaidRespawnGrace)
+            var targets = s_Cfg.Advance.On
+                ? town.Where(p => !p.IsDead && p.Location != null && !p.Location.Indoors && !p.Teleporting && !RaidRespawnGrace.Covers(p)).ToList()
+                : new List<Player>();
             foreach (var c in alive)
             {
                 if (c.CurrentLandblock == null || c.Location == null)
@@ -545,6 +554,8 @@ namespace RevivalGuard
                     chain.EnqueueChain();
                     if (Tracing) Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} {c.Name} went indoors, sent back to its point");
                 }
+                else if (targets.Count > 0 && c.AttackTarget == null && c.MonsterState != Creature.State.Return && R.InBox(s_Cfg, here.X, here.Y, 0))
+                    March(r, c, here, targets, now);
             }
             if (!r.Arrived && alive.Any(c => { if (c.Location == null) return false; var at = Local(c.Location); return R.InBox(s_Cfg, at.X, at.Y, 0); }))
             {
@@ -565,6 +576,57 @@ namespace RevivalGuard
             if (r.Pending > 0) return;
             var outcome = R.Judge(r.Spawned, alive.Count, r.Killed, moreToCome, now - r.SpawnAt, now - r.LastHit, s_Cfg.Schedule, r.EmptySince > 0 ? now - r.EmptySince : 0);
             if (outcome != R.Outcome.Running) End(r, outcome, now, null);
+        }
+
+        /// <summary>A raider in town with nobody to fight marches on the nearest player (TownRaidRule.AdvancePoint): its Home
+        /// moves there, so it is seen in the square rather than idling at the town's edge (owner F7 261125-0022), and a
+        /// player it may pick within AlertMeters wakes it as walking past would (ACE's AlertMonster, our filters).</summary>
+        static void March(Raid r, Creature c, Vector2 here, List<Player> targets, double now)
+        {
+            var may = targets.Where(p => !Protected(p, c)).ToList();
+            float[] Pt(Player p) { var v = Local(p.Location); return new[] { v.X, v.Y }; }
+            var near = may.Select(p => (p, d: Vector2.Distance(Local(p.Location), here))).OrderBy(x => x.d).FirstOrDefault();
+            if (near.p != null && near.d <= s_Cfg.Advance.AlertMeters)
+            {
+                var pl = near.p; var cc = c;
+                var ch = new ActionChain();
+                ch.AddAction(cc, () => { try { if (!cc.IsDead && !cc.IsDestroyed && cc.AttackTarget == null && !pl.IsDead) pl.AlertMonster(cc); } catch (Exception e) { TickGuard.Report("TownRaid.Alert", e); } });
+                ch.EnqueueChain();
+                return;
+            }
+            var to = R.AdvancePoint(s_Cfg, here.X, here.Y, may.Select(Pt).ToList(), targets.Select(Pt).ToList());
+            var a = s_Cfg.Advance;
+            r.Aim.TryGetValue(c.Guid.Full, out var st);
+            var from = new[] { here.X, here.Y };
+            if (st == null || R.ReAim(s_Cfg, st.To, now - st.At, to))
+            {
+                if (to == null) return;
+                bool first = st == null;
+                // straight at first; once a march has needed the streets it keeps to them
+                var legs = st?.Legs != null ? R.StreetRoute(s_Cfg, from, to) : null;
+                st = new MarchState { To = to, At = now, Legs = legs, LastPos = here, MovedAt = now };
+                r.Aim[c.Guid.Full] = st;
+                if (first || Tracing)
+                    Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} {c.Name} 0x{c.Guid.Full:X8} marches from {here.X:0},{here.Y:0} on the town to {to[0]:0},{to[1]:0}{(legs != null ? $" by {legs.Count} street point(s)" : "")}");
+                var go = legs != null ? legs[0] : to;
+                Send(c, At(go[0], go[1]), At(to[0], to[1]));
+                return;
+            }
+            if (Vector2.Distance(here, st.LastPos) > 1.5f) { st.LastPos = here; st.MovedAt = now; }
+            if (st.Legs != null && st.Leg < st.Legs.Count - 1 && R.Dist(from, st.Legs[st.Leg]) <= a.LegReach)
+            {
+                st.Leg++;
+                var go = st.Legs[st.Leg];
+                Send(c, At(go[0], go[1]), At(st.To[0], st.To[1]));
+                return;
+            }
+            if (now - st.MovedAt < a.StuckSeconds || R.Dist(from, st.To) <= a.StopShort + 3) return;
+            st.MovedAt = now;
+            if (st.Legs == null) { st.Legs = R.StreetRoute(s_Cfg, from, st.To); st.Leg = 0; }
+            else if (st.Leg < st.Legs.Count - 1) st.Leg++;
+            var next = st.Legs[st.Leg];
+            Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} {c.Name} 0x{c.Guid.Full:X8} stuck at {here.X:0},{here.Y:0}: by the streets, leg {st.Leg + 1} of {st.Legs.Count} to {next[0]:0},{next[1]:0}");
+            Send(c, At(next[0], next[1]), At(st.To[0], st.To[1]));
         }
 
         /// <summary>The big wave: the lifestone guard calls, Royal Guards come in from the side's gate, and a placed guard

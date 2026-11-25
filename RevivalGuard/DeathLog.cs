@@ -33,6 +33,8 @@ namespace RevivalGuard
         static readonly JsonSerializerOptions s_Json = new JsonSerializerOptions { WriteIndented = false };
         static string s_Dir;
         static List<(string, float, float)> s_Towns = new List<(string, float, float)>();
+        /// <summary>The towns DeathPlaces.json names (ChessLobby names its boards by them).</summary>
+        internal static IList<(string name, float ns, float ew)> Towns => s_Towns;
         static Dictionary<string, string> s_Dungeons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         static AccessTools.FieldRef<Player, bool> s_Suicide;
         [ThreadStatic] internal static bool t_Falling;

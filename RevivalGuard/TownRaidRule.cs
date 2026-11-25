@@ -27,6 +27,7 @@ namespace RevivalGuard
             public List<Kind> Kinds { get; set; } = new List<Kind>();
             public BigDef Big { get; set; } = new BigDef();
             public WaveDef Waves { get; set; } = new WaveDef();
+            public AdvanceDef Advance { get; set; } = new AdvanceDef();
             public RewardDef Rewards { get; set; } = new RewardDef();
             public List<Theme> Themes { get; set; } = new List<Theme>();
             public Dictionary<string, string[]> Lines { get; set; } = new Dictionary<string, string[]>();
@@ -126,6 +127,35 @@ namespace RevivalGuard
         /// <summary>A raid comes in waves (owner 2026-11-16: "need more smaller adds in addition to the group that comes
         /// and a few waves. there were only 4 drudges"): the main group each wave, a pack of weaker adds with it, the
         /// next wave once most of the last is down (or after a while, if someone is fighting), the leader with the last.</summary>
+        /// <summary>Into the town (owner F7 261125-0022: "raids arent going to town any more. turkeys are standing idle"):
+        /// a raider at its side's point with nobody to fight marches on the nearest player in town; its Home moves with
+        /// it, so the leash and the walk back after a fight stay in the square, not at the town's edge.</summary>
+        public sealed class AdvanceDef
+        {
+            public bool On { get; set; } = true;
+            public float StopShort { get; set; } = 3;           // metres short of the player
+            public float ReAimMeters { get; set; } = 8;         // a player who moved this far is marched on again
+            public double ReAimSeconds { get; set; } = 6;       // never re-aimed more often than this
+            public float AlertMeters { get; set; } = 12;        // this close to a player it may pick, it picks them
+            public double StuckSeconds { get; set; } = 5;       // no headway this long on the straight walk: by the streets
+            public float LegReach { get; set; } = 4;            // a street waypoint this close counts as reached
+            public float JoinMeters { get; set; } = 14;         // street waypoints this close are joined
+            // Holtburg's walked streets (A9B4 metres): the Royal Guards' patrol rounds and raid musters (HoltburgGuards
+            // ROUTES, TownRaid.json musterPath/guardsFrom), every leg checked on the retail walk grid; side points join by
+            // JoinMeters. Box 2026-11-25: north mosswarts walking straight for the lifestone stuck on the town at 84,139.
+            public List<float[][]> Streets { get; set; } = new List<float[][]>
+            {
+                new[] { new[] { 9.9f, 114.1f }, new[] { 38f, 119f }, new[] { 51f, 142f }, new[] { 88f, 145f }, new[] { 50f, 144f } },
+                new[] { new[] { 30f, 118f }, new[] { 38f, 119f } },
+                new[] { new[] { 85f, 150f }, new[] { 88f, 150f }, new[] { 88f, 145f } },
+                new[] { new[] { 88f, 150f }, new[] { 120f, 140f }, new[] { 118f, 145f } },
+                new[] { new[] { 176.7f, 106.4f }, new[] { 148f, 122f }, new[] { 118f, 145f }, new[] { 134f, 133f }, new[] { 138f, 136f }, new[] { 164f, 115f }, new[] { 176.7f, 106.4f } },
+                new[] { new[] { 178f, 118f }, new[] { 176.7f, 106.4f }, new[] { 150f, 60f }, new[] { 128f, 22f }, new[] { 124f, 24f } },
+                new[] { new[] { 115.3f, 6.5f }, new[] { 124f, 24f }, new[] { 140f, 25f }, new[] { 117f, 17f }, new[] { 104f, 9f }, new[] { 96f, 2f }, new[] { 115.3f, 6.5f } },
+                new[] { new[] { 112f, 16f }, new[] { 117f, 17f } },
+            };
+        }
+
         public sealed class WaveDef
         {
             public int Count { get; set; } = 3;
@@ -202,6 +232,87 @@ namespace RevivalGuard
 
         public static bool InBox(Config c, float x, float y, float margin) =>
             x >= c.TownBox[0] - margin && x <= c.TownBox[2] + margin && y >= c.TownBox[1] - margin && y <= c.TownBox[3] + margin;
+
+        /// <summary>Where a raider with nobody to fight marches: the nearest player (players: positions in town; a raider
+        /// prefers ones it may pick, else any, so the raid is seen), StopShort metres short of them, inside the town box.
+        /// Null: nobody in town.</summary>
+        public static float[] AdvancePoint(Config c, float rx, float ry, IList<float[]> mayPick, IList<float[]> anyone)
+        {
+            var pool = mayPick != null && mayPick.Count > 0 ? mayPick : anyone;
+            if (pool == null || pool.Count == 0) return null;
+            float[] best = null; float bd = float.MaxValue;
+            foreach (var p in pool)
+            {
+                if (p == null || p.Length < 2) continue;
+                float d = (p[0] - rx) * (p[0] - rx) + (p[1] - ry) * (p[1] - ry);
+                if (d < bd) { bd = d; best = p; }
+            }
+            if (best == null) return null;
+            float dist = (float)Math.Sqrt(bd), x = best[0], y = best[1];
+            if (dist > c.Advance.StopShort) { x += (rx - best[0]) / dist * c.Advance.StopShort; y += (ry - best[1]) / dist * c.Advance.StopShort; }
+            x = Math.Clamp(x, c.TownBox[0], c.TownBox[2]); y = Math.Clamp(y, c.TownBox[1], c.TownBox[3]);
+            return new[] { x, y };
+        }
+
+        /// <summary>The streets from <paramref name="from"/> to <paramref name="to"/>: the waypoint nearest each end and the
+        /// shortest way between them over Advance.Streets (consecutive points, and any two within JoinMeters), ending at
+        /// <paramref name="to"/>. Just [to] when both ends share a waypoint or there are no streets.</summary>
+        public static List<float[]> StreetRoute(Config c, float[] from, float[] to)
+        {
+            var nodes = new List<float[]>();
+            var edges = new List<(int a, int b)>();
+            foreach (var line in c.Advance.Streets ?? new List<float[][]>())
+            {
+                int prev = -1;
+                foreach (var pt in line)
+                {
+                    if (pt == null || pt.Length < 2) continue;
+                    int i = nodes.FindIndex(n => Dist(n, pt) < 0.5f);
+                    if (i < 0) { nodes.Add(pt); i = nodes.Count - 1; }
+                    if (prev >= 0 && prev != i) edges.Add((prev, i));
+                    prev = i;
+                }
+            }
+            var result = new List<float[]>();
+            if (nodes.Count == 0) { result.Add(to); return result; }
+            for (int i = 0; i < nodes.Count; i++)
+                for (int j = i + 1; j < nodes.Count; j++)
+                    if (Dist(nodes[i], nodes[j]) <= c.Advance.JoinMeters) edges.Add((i, j));
+            int Nearest(float[] q) { int b = 0; for (int i = 1; i < nodes.Count; i++) if (Dist(nodes[i], q) < Dist(nodes[b], q)) b = i; return b; }
+            int s0 = Nearest(from), t0 = Nearest(to);
+            var dist = Enumerable.Repeat(float.MaxValue, nodes.Count).ToArray();
+            var back = Enumerable.Repeat(-1, nodes.Count).ToArray();
+            var done = new bool[nodes.Count];
+            dist[s0] = 0;
+            for (int k = 0; k < nodes.Count; k++)
+            {
+                int u = -1;
+                for (int i = 0; i < nodes.Count; i++) if (!done[i] && dist[i] < float.MaxValue && (u < 0 || dist[i] < dist[u])) u = i;
+                if (u < 0 || u == t0) break;
+                done[u] = true;
+                foreach (var (a, b) in edges)
+                {
+                    int v = a == u ? b : b == u ? a : -1;
+                    if (v < 0 || done[v]) continue;
+                    float nd = dist[u] + Dist(nodes[u], nodes[v]);
+                    if (nd < dist[v]) { dist[v] = nd; back[v] = u; }
+                }
+            }
+            if (s0 != t0 && back[t0] >= 0)
+            {
+                var way = new List<float[]>();
+                for (int v = t0; v >= 0; v = back[v]) way.Add(nodes[v]);
+                way.Reverse();
+                result.AddRange(way);
+            }
+            else if (s0 != t0) result.Add(nodes[s0]);
+            result.Add(to);
+            return result;
+        }
+
+        /// <summary>March again: never aimed, or the new point is ReAimMeters from the last and ReAimSeconds have gone.</summary>
+        public static bool ReAim(Config c, float[] last, double since, float[] next) =>
+            next != null && (last == null || since >= c.Advance.ReAimSeconds && Dist(last, next) >= c.Advance.ReAimMeters);
 
         public static float Dist(float[] a, float[] b) => (float)Math.Sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]));
 

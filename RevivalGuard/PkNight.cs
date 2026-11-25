@@ -25,8 +25,8 @@ namespace RevivalGuard
     /// Every other Sunday at 7 PM Pacific (PkNightRules.INTERVAL_DAYS), for ROUND_MINUTES (40), the allegiance that holds a known outdoor landmark longest wins.
     /// The spot rotates once per round (PkNightRules.SPOTS) and is announced a day, 30 minutes and ten minutes ahead. During
     /// the round, every TICK seconds, the player killers within pk_night_radius metres of the hill are counted by
-    /// allegiance (PkCommon.Side: the monarch, or a lone player): one allegiance alone there holds it and earns
-    /// the tick, two or more are a contest and nobody earns it. Mercenaries never count; the Borg count like any
+    /// allegiance (PkCommon.Side: the monarch, or a lone player): the side with more of its members there than every
+    /// other side holds it and earns the tick ("outnumber to score", owner 2026-11-25); a tie for most is a contest. Mercenaries never count; the Borg count like any
     /// allegiance (Mercenaries.IsHollowCompany). v2 (owner 2026-11-22): the hill moves within the spot every 10 minutes,
     /// torches mark it, and players near it hear the standings every 15 s (PkNightHill.cs, PkNightHillRules.cs). Normal Hollowtide PK death rules apply, this changes nothing about dying.
     ///
@@ -380,6 +380,7 @@ namespace RevivalGuard
             if (PkCommon.On(P_DISCORD) && !live.Forced) DiscordBridge.Announce(DiscordEndLine(live, spot));
             if (live.Record) foreach (var p in winners) Reward(p);
             if (bannerTo != 0) GiveBanner(bannerTo, w.Name);
+            if (live.Record && w != null) GiveRunePrize(w);
             Mod.Log.Info($"[RevivalGuard] PkNight: round {live.Key} over ({why}): {(w == null ? "no holder" : $"{w.Name} {Clock(w.Held)}")}, "
                 + $"{live.Sides.Count} sides by {live.SideRule ?? SIDES_ALLEGIANCE}, {live.Benched.Count} benched, winners present {winners.Count}{(live.Record ? "" : ", not recorded")}");
         }
@@ -416,6 +417,19 @@ namespace RevivalGuard
             }
             long wcid = PkCommon.Long(P_TOKEN, 0);
             if (wcid > 0 && !Give(p, (uint)wcid)) { lock (s_Lock) { Owe(p.Guid.Full, HeldGroundBannerRule.ItemKey((uint)wcid)); Save(); } }
+        }
+
+        /// <summary>The night's one Cragstone Guise piece (rg_rune_skins, off: nothing; owner 2026-11-25): to the winner who
+        /// stood on the hill longest (RuneSkinsRule.PkWinner, proposed), now if online, else at their login.</summary>
+        static void GiveRunePrize(Standing w)
+        {
+            uint wcid = RuneSkins.PkNightPrize();
+            uint g = wcid == 0 ? 0 : RuneSkinsRule.PkWinner(w.Present, w.Ticks);
+            if (g == 0) return;
+            var p = PlayerManager.GetOnlinePlayer(g);
+            if (p != null && Give(p, wcid)) { World($"{p.Name} held the ground longest and takes a piece of the Cragstone Guise."); return; }
+            lock (s_Lock) { Owe(g, HeldGroundBannerRule.ItemKey(wcid)); Save(); }
+            Mod.Log.Info($"[RevivalGuard] PkNight: Cragstone piece {wcid} for {g:X8} waits for their login");
         }
 
         /// <summary>Add a title key or an "item:" key to what a guid is owed at login. Call under s_Lock.</summary>

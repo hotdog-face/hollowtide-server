@@ -10,6 +10,7 @@ namespace RevivalGuard
     ///   1. Joke spell scrolls drop at festivals (docs/JOKE-SCROLLS-FESTIVALS.md): the festival table and its rates.
     ///   2. The approved costume casters are festival-goal prizes, one with each year's goal trophy (masks are sold by
     ///      the seasonal Costumers: world data, tools/gpubox-ace/costume-items-in-season.sql).
+    ///   2b. The same casters also drop, rarely, from level 20+ creatures all year (CostumeCasterDrops.cs, own switch).
     ///   3. Corrosion VII and Corruption VII scrolls are sold by Riftwatcher Ysanne only to a Void Magic trainee.
     /// </summary>
     public static class SeasonalSourcesRule
@@ -84,6 +85,27 @@ namespace RevivalGuard
         }
 
         public static string PrizeLine(string name) => $"With it comes a {name}, from the costume chest.";
+
+        // ---- 2b. costume casters as a rare year-round world drop (owner 2026-11-24: "Yes, add a source") -------------
+        // The festival goals stay the sure way (one a year each); this is the second, chance way, any day of the year.
+        // Same shape as the joke drops: one roll per player kill, into the corpse, killer's pet counts, mercs never.
+
+        /// <summary>All 13 approved casters (the prize pools' union, never the prototypes); each is equally likely.</summary>
+        public static readonly uint[] CostumeCasters = CostumePrizes.Values.SelectMany(x => x).Distinct().OrderBy(x => x).ToArray();
+
+        /// <summary>1 kill in N of a level 20+ creature. Why 1,500: rarer than the festival Cow (1 in 1,000, only while
+        /// its festival runs) because this runs all year on most of the world, so a caster stays a lucky find, not a farm (any one
+        /// caster is about 1 in 19,500 kills); the festival goal stays the dependable route. Retune only here.</summary>
+        public const int CASTER_DROP_ONE_IN = 1500;
+        public const int CASTER_DROP_MIN_LEVEL = 20;   // no farming them off starter-area creatures
+
+        /// <summary>The chance one kill drops a caster: 0 when off or under level 20, else rate times 1 in N, never above 1.</summary>
+        public static double CasterDropChance(bool on, int creatureLevel, double rate) =>
+            !on || creatureLevel < CASTER_DROP_MIN_LEVEL ? 0 : Math.Min(1.0, Math.Max(0.0, rate) / CASTER_DROP_ONE_IN);
+
+        /// <summary>Which caster, by roll (0 to 1), evenly over the 13.</summary>
+        public static uint CasterDropPick(double roll) =>
+            CostumeCasters[(int)Math.Floor(Math.Max(0, Math.Min(0.999999, roll)) * CostumeCasters.Length)];
 
         // ---- 3. Corrosion VII and Corruption VII ----------------------------------------------------------------
         public const uint YSANNE = 901420;                                    // Riftwatcher Ysanne (nether-rift-trainer.sql)

@@ -161,6 +161,7 @@ namespace RevivalGuard
             SyncSeed(false);
             Load(true);
             LoadVisits();
+            HolidayNpcs.Register();
             Mod.Log.Info($"[RevivalGuard] TownLife: {s_Defs.Count} Holtburg NPCs, {s_Data.Lines.Values.Sum(v => v.Length)} lines, {s_Data.Exchanges.Count} exchanges ({P_ON}, {P_SPEECH}, {P_OFF})");
         }
 
@@ -640,7 +641,7 @@ namespace RevivalGuard
             for (int pass = 0; pass < 2; pass++)
                 foreach (var name in names)
                 {
-                    if (!s_Data.Lines.TryGetValue(name, out var lines) || lines.Length == 0) continue;
+                    if ((!s_Data.Lines.TryGetValue(name, out var lines) && !HolidayNpcRule.Lines.TryGetValue(name, out lines)) || lines.Length == 0) continue;
                     var usable = new List<int>();
                     for (int i = 0; i < lines.Length; i++)
                     {
@@ -715,6 +716,9 @@ namespace RevivalGuard
             }
             var ctx = new Ctx { Npc = n.Def.D.Key, Role = n.Def.D.Role, Moment = mo, Event = ev, Festival = Festival(), News = true };
             var pools = AmbientPools(ctx, s_Rng.NextDouble());
+            // on a holiday's date (HolidayNpcs, rg_holiday_npcs) some of its lines come first; the usual pools follow
+            var hol = ev == null ? HolidayNpcs.Today() : null;
+            if (hol != null && s_Rng.NextDouble() < HolidayNpcRule.AMBIENT_SHARE) pools.InsertRange(0, HolidayNpcRule.AmbientPools(hol, n.Def.D.Key, n.Def.D.Role));
             // rumour-tellers sometimes point the nearest player at something for their level
             Player near = NearestPlayer(n.Obj, listeners);
             bool rumour = ev == null && n.Def.D.Rumours && near != null && s_Rng.NextDouble() < 0.15;
@@ -770,6 +774,8 @@ namespace RevivalGuard
                 var (visits, away) = Visit(p);
                 double died; lock (s_Lock) died = s_Died.TryGetValue(p.Guid.Full, out var t) ? Wall - t : -1;
                 var pools = GreetPools(n.Def.D.Key, visits, away, p.Level ?? 1, died, TitleOf(p) != null, NowMoment(), s_Rng.NextDouble());
+                var hol = died < 0 || died >= 900 ? HolidayNpcs.Today() : null;   // a fresh death still gets its own greeting
+                if (hol != null && s_Rng.NextDouble() < HolidayNpcRule.GREET_SHARE) pools.InsertRange(0, HolidayNpcRule.GreetPools(hol, n.Def.D.Key));
                 var line = FromPools(n, pools, p, out _);
                 if (line == null) continue;
                 lock (s_Lock) s_Budget.PromptedLine(listeners, now);
@@ -939,7 +945,13 @@ namespace RevivalGuard
             else if (kw == "rumour") line = best.Def.D.Rumours ? Rumour(p, true) : FromPools(best, new[] { "kw.rumour.other" }, p, out _);
             else if (kw == "drink") line = FromPools(best, best.Def.D.Role is "barkeeper" or "server" ? new[] { "kw.drink" } : new[] { "kw.drink.other" }, p, out _);
             else if (kw != null) line = FromPools(best, new[] { $"npc.{best.Def.D.Key}.kw.{kw}", "kw." + kw }, p, out _);
-            else line = FromPools(best, new[] { $"npc.{best.Def.D.Key}.reply", $"role.{best.Def.D.Role}.reply", "reply." + Key(mo) }, p, out _);
+            else
+            {
+                var replies = new List<string> { $"npc.{best.Def.D.Key}.reply", $"role.{best.Def.D.Role}.reply", "reply." + Key(mo) };
+                var hol = HolidayNpcs.Today();
+                if (hol != null && s_Rng.NextDouble() < HolidayNpcRule.GREET_SHARE) replies.InsertRange(0, HolidayNpcRule.GreetPools(hol, best.Def.D.Key));
+                line = FromPools(best, replies, p, out _);
+            }
             if (line == null && !again) return;
             var ls = Listeners(best.Obj, s_Budget.L.HearRange, out _);
             if (line != null) lock (s_Lock) s_Budget.PromptedLine(ls, now);
@@ -986,7 +998,7 @@ namespace RevivalGuard
                     return;
                 }
                 var L = s_Budget.L;
-                Out($"TownLife: {(On ? "on" : "OFF")}, speech {(Speech ? "on" : "OFF")}, off list '{OffList}', moment {NowMoment()}{(s_ForcedMoment != null ? " (forced)" : "")}, festival {Festival() ?? "none"}, event {(s_Event.key != null && Now < s_Event.until ? s_Event.key : "none")}");
+                Out($"TownLife: {(On ? "on" : "OFF")}, speech {(Speech ? "on" : "OFF")}, off list '{OffList}', moment {NowMoment()}{(s_ForcedMoment != null ? " (forced)" : "")}, festival {Festival() ?? "none"}, holiday {HolidayNpcs.Today() ?? "none"}, event {(s_Event.key != null && Now < s_Event.until ? s_Event.key : "none")}");
                 Out($"Budget: line gap {L.LineGap} s, NPC gap {L.NpcGap} s, exchange gap {L.ExchangeGap} s, talk {L.TalkRange} m, hear {L.HearRange} m, screen {L.Screen} s. Said: {s_Budget.Unprompted} unprompted ({s_Budget.Exchanges} exchanges), {s_Budget.Prompted} prompted, {s_Budget.Dropped} dropped.");
                 lock (s_Lock)
                     foreach (var n in s_Npcs.Values.OrderBy(x => x.Def.D.Key))

@@ -32,7 +32,8 @@ namespace RevivalGuard
     ///                        monster_ai_caster_close_m makes it back off to monster_ai_caster_range_m.
     ///   archers kite         A creature with a missile weapon wielded steps back
     ///                        monster_ai_kite_step_m when its target is inside monster_ai_kite_close_m,
-    ///                        at most once per monster_ai_kite_cooldown_s, then ACE turns and shoots.
+    ///                        at most once per monster_ai_kite_cooldown_s and monster_ai_kite_per_target
+    ///                        times per target (default 1; -1 = no limit), then ACE turns and shoots.
     ///   pack call            Once engaged (hurt, or within 20 m of its target), a creature wakes idle creatures of its own CreatureType (or its
     ///                        FriendType) within monster_ai_pack_range_m AND in line of sight, onto its
     ///                        target (ACE's AlertFriendly only runs at wake-up and uses aural range).
@@ -48,6 +49,10 @@ namespace RevivalGuard
     ///                        within monster_ai_heal_range_m (no monster in ace_world has Heal Other).
     ///   leash                An awake creature more than monster_ai_leash_m from home goes home (ACE's
     ///                        own is 192 m); one that finishes a return home is healed to full.
+    ///
+    /// STOCK AREAS. None of the above for a creature whose home landblock is in monster_ai_stock_landblocks
+    /// (default MonsterAreaRule.DEFAULT_LIST: Withered Atoll and the most played hunting areas, owner 2026-11-25):
+    /// there ACE's own tick runs untouched, it is never pack-called and never healed on return home.
     ///
     /// COST. Every switch and number is an ACE server property (@modifybool / @modifydouble /
     /// @modifystring), read into one snapshot every 2 s, not per tick. Per creature per tick: a few
@@ -100,9 +105,11 @@ namespace RevivalGuard
             ("monster_ai_heal_range_m", 20.0, "MonsterAi: healer reach (m)"),
             ("monster_ai_heal_cooldown_s", 8.0, "MonsterAi: least time between two ally heals by one healer (s)"),
             ("monster_ai_leash_m", 80.0, "MonsterAi: an awake monster further than this from home goes home (m; ACE's own is 192)"),
+            ("monster_ai_kite_per_target", MonsterKiteRule.DEFAULT_PER_TARGET, "MonsterAi: step-backs an archer makes from one target per fight (-1 no limit, 0 none)"),
         };
 
         const string P_FAMILIES = "monster_ai_morale_families";
+        internal const string P_STOCK = "monster_ai_stock_landblocks";
         const string FAMILIES_DEFAULT = "Drudge,Banderling,Mosswart,Rat,Gromnie,Reedshark";
 
         /// <summary>Families that never flee, whatever monster_ai_morale_families says.</summary>
@@ -118,9 +125,12 @@ namespace RevivalGuard
         {
             public bool Caster, Kite, Pack, Spread, Morale, Heal, Leash, Log, Any;
             public float CasterMinChance, CasterClose, CasterRange, CasterHold, KiteClose, KiteStep, KiteCooldown,
-                PackRange, MoraleHealth, FleeSeconds, FleeMetres, HealAlly, HealRange, HealCooldown, LeashM;
+                PackRange, MoraleHealth, FleeSeconds, FleeMetres, HealAlly, HealRange, HealCooldown, LeashM, KitePerTarget;
             public string FamiliesRaw;
             public bool[] FleeFamily;   // indexed by (int)CreatureType
+            public string StockRaw;
+            public bool[] Stock;        // indexed by landblock: stock ACE there (MonsterAreaRule)
+            public int StockCount, StockBad, StockVer;
         }
 
         static volatile Cfg s_Cfg = new Cfg();
@@ -148,9 +158,17 @@ namespace RevivalGuard
                 n.CasterMinChance = D(0); n.CasterClose = D(1); n.CasterRange = D(2); n.CasterHold = D(3);
                 n.KiteClose = D(4); n.KiteStep = D(5); n.KiteCooldown = D(6); n.PackRange = D(7);
                 n.MoraleHealth = D(8); n.FleeSeconds = D(9); n.FleeMetres = D(10); n.HealAlly = D(11);
-                n.HealRange = D(12); n.HealCooldown = D(13); n.LeashM = D(14);
+                n.HealRange = D(12); n.HealCooldown = D(13); n.LeashM = D(14); n.KitePerTarget = D(15);
                 n.FamiliesRaw = PropertyManager.GetString(P_FAMILIES, FAMILIES_DEFAULT).Item ?? "";
                 n.FleeFamily = n.FamiliesRaw == cfg.FamiliesRaw && cfg.FleeFamily != null ? cfg.FleeFamily : ParseFamilies(n.FamiliesRaw);
+                n.StockRaw = PropertyManager.GetString(P_STOCK, MonsterAreaRule.DEFAULT_LIST).Item ?? "";
+                if (n.StockRaw == cfg.StockRaw && cfg.Stock != null)
+                { n.Stock = cfg.Stock; n.StockCount = cfg.StockCount; n.StockBad = cfg.StockBad; n.StockVer = cfg.StockVer; }
+                else
+                {
+                    n.Stock = MonsterAreaRule.Parse(n.StockRaw, out n.StockCount, out n.StockBad);
+                    n.StockVer = cfg.StockVer + 1;   // per-creature answers are re-worked out once
+                }
                 s_Cfg = n;
                 s_CfgNext = rt + 2.0;
                 return n;
@@ -232,8 +250,8 @@ namespace RevivalGuard
             public double ModeUntil, StepReadyAt, HoldSince, HoldRollAt, NextSpread, NextLeash, HealReadyAt, NextHealScan,
                 RangedAt = -1, PackAt, NextTrace;
             public uint PackFor, LastTarget;
-            public int HoldRolls, Flanks;
-            public bool Fled, Ranged;
+            public int HoldRolls, Flanks, Kites, StockVer;
+            public bool Fled, Ranged, Stock;
         }
 
         static readonly ConditionalWeakTable<Creature, St> s_State = new ConditionalWeakTable<Creature, St>();
@@ -283,6 +301,10 @@ namespace RevivalGuard
             if (!cfg.Any || !c.IsAwake || c.IsDead) return true;
             var st = s_State.GetValue(c, s_NewSt);
 
+            // stock area: ACE's own tick, untouched (worked out once per creature and list change)
+            if (st.StockVer != cfg.StockVer) { st.Stock = InStockArea(c, cfg); st.StockVer = cfg.StockVer; }
+            if (st.Stock) { if (st.Mode != Mode.None) EndMode(c, st); return true; }
+
             if (c.MonsterState == Creature.State.Return) { if (st.Mode != Mode.None) st.Mode = Mode.None; return true; }
 
             var target = c.AttackTarget as Creature;
@@ -291,7 +313,7 @@ namespace RevivalGuard
                 if (st.Mode != Mode.None) EndMode(c, st);
                 return true;
             }
-            if (target.Guid.Full != st.LastTarget) { st.LastTarget = target.Guid.Full; st.HoldSince = 0; st.Flanks = 0; }
+            if (target.Guid.Full != st.LastTarget) { st.LastTarget = target.Guid.Full; st.HoldSince = 0; st.Flanks = 0; st.Kites = 0; }
 
             // a tactic is moving the creature: keep the tick until it arrives or runs out of time
             if (st.Mode != Mode.None)
@@ -358,11 +380,13 @@ namespace RevivalGuard
             // archers kite
             if (st.Ranged)
             {
-                if (cfg.Kite && mobile && dist < cfg.KiteClose && rt >= st.StepReadyAt && !c.IsAnimating)
+                if (cfg.Kite && mobile && dist < cfg.KiteClose && rt >= st.StepReadyAt && !c.IsAnimating
+                    && MonsterKiteRule.Allowed(st.Kites, cfg.KitePerTarget))
                 {
                     st.StepReadyAt = rt + cfg.KiteCooldown;
                     if (StepAway(c, st, target, cfg.KiteStep, Mode.Kite, 4.0, cfg, towardHome: false))
                     {
+                        st.Kites++;
                         Fired(Tactic.Kite);
                         if (cfg.Log) Mod.Log.Info($"[MonsterAI] kite: {c.Name} 0x{c.Guid.Full:X8} target {target.Name} at {dist:F1} m, stepping back {cfg.KiteStep:F0} m");
                         c.NextMonsterTickTime = now + 0.2;
@@ -435,6 +459,13 @@ namespace RevivalGuard
                 }
             }
             return true;
+        }
+
+        /// <summary>Is this creature's home landblock (else where it stands) in monster_ai_stock_landblocks?</summary>
+        static bool InStockArea(Creature c, Cfg cfg)
+        {
+            var home = c.GetPosition(PositionType.Home);
+            return MonsterAreaRule.Stock(cfg.Stock, home?.Cell ?? 0, c.Location?.Cell ?? 0);
         }
 
         static bool UsesMana(Creature c) => c.GetProperty(PropertyBool.AiUsesMana) ?? true;
@@ -557,7 +588,8 @@ namespace RevivalGuard
         static bool Eligible(Creature c, Creature n) =>
             n != null && n != c && !(n is Player) && !(n is Pet) && n.IsMonster && !n.IsDead && n.PhysicsObj != null
             && n.CurrentLandblock != null && c.CurrentLandblock != null
-            && n.CurrentLandblock.CurrentLandblockGroup == c.CurrentLandblock.CurrentLandblockGroup;
+            && n.CurrentLandblock.CurrentLandblockGroup == c.CurrentLandblock.CurrentLandblockGroup
+            && !InStockArea(n, s_Cfg);   // stock-area kin are left to ACE
 
         static void PackCall(Creature c, Creature target, Cfg cfg)
         {
@@ -698,12 +730,12 @@ namespace RevivalGuard
             if (c is Player || c is Pet) return;
             if (s_State.TryGetValue(c, out var st))
             {
-                st.Mode = Mode.None; st.Fled = false; st.HoldSince = 0; st.PackFor = 0; st.LastTarget = 0;
+                st.Mode = Mode.None; st.Fled = false; st.HoldSince = 0; st.PackFor = 0; st.LastTarget = 0; st.Kites = 0;
             }
             if (!wasReturning || c.IsDead) return;
             if (c.WeenieClassId == EventBoss.WCID) return;   // the event boss keeps his wounds: his fighters die, run and get thrown to Teth (EventBoss.cs)
             var cfg = Config(Timers.RunningTime);
-            if (!cfg.Leash || c.Health.Current >= c.Health.MaxValue) return;
+            if (!cfg.Leash || c.Health.Current >= c.Health.MaxValue || InStockArea(c, cfg)) return;
             c.SetMaxVitals();
             Fired(Tactic.HomeHeal);
             if (cfg.Log) Mod.Log.Info($"[MonsterAI] home: {c.Name} 0x{c.Guid.Full:X8} back home, healed to full");
@@ -739,7 +771,7 @@ namespace RevivalGuard
             CommandManager.TryAddCommand(Handle, "monsterai", AccessLevel.Admin, CommandHandlerFlag.None,
                 "Monster tactics (RevivalGuard): switches, tuning and counts; 'trace [sec] [m]' logs nearby monsters to ACE_Log.txt.",
                 "[trace [seconds] [metres] | trace off]");
-            Mod.Log.Info("[RevivalGuard] MonsterAi: casters keep range, archers kite, pack call and spread, morale, healers, leash (monster_ai_* server properties, @monsterai)");
+            Mod.Log.Info("[RevivalGuard] MonsterAi: casters keep range, archers kite, pack call and spread, morale, healers, leash; stock ACE in busy areas (monster_ai_* server properties, @monsterai)");
         }
 
         /// <summary>Makes the switches ordinary ACE properties, so @modifybool / @modifydouble /
@@ -756,6 +788,7 @@ namespace RevivalGuard
                 foreach (var (key, def, desc) in s_Doubles) if (!d.ContainsKey(key)) d[key] = new Property<double>(def, desc);
                 var s = Inner(DefaultPropertyManager.DefaultStringProperties);
                 if (!s.ContainsKey(P_FAMILIES)) s[P_FAMILIES] = new Property<string>(FAMILIES_DEFAULT, "MonsterAi: CreatureType names that flee at low health, comma separated");
+                if (!s.ContainsKey(P_STOCK)) s[P_STOCK] = new Property<string>(MonsterAreaRule.DEFAULT_LIST, "MonsterAi: landblocks (hex, comma separated) where monsters keep stock ACE behaviour, no tactics");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] MonsterAi: switches not registered with @modify* ({e.Message}); they are still read"); }
         }
@@ -795,10 +828,13 @@ namespace RevivalGuard
             s_CfgNext = 0;
             var cfg = Config(rt);
             Say(session, $"[MonsterAI] (ours, not retail) casters {On(cfg.Caster)}, kite {On(cfg.Kite)}, pack call {On(cfg.Pack)}, spread {On(cfg.Spread)}, morale {On(cfg.Morale)}, healers {On(cfg.Heal)}, leash {On(cfg.Leash)}, log {On(cfg.Log)}");
-            Say(session, $"[MonsterAI] caster cast chance >= {cfg.CasterMinChance:F2}, back off inside {cfg.CasterClose:F1} m to {cfg.CasterRange:F0} m, hold {cfg.CasterHold:F0} s; kite inside {cfg.KiteClose:F1} m by {cfg.KiteStep:F0} m every {cfg.KiteCooldown:F0} s; pack {cfg.PackRange:F0} m; flee at {cfg.MoraleHealth:P0} for {cfg.FleeSeconds:F0} s ({cfg.FamiliesRaw}); heal allies under {cfg.HealAlly:P0} within {cfg.HealRange:F0} m every {cfg.HealCooldown:F0} s; leash {cfg.LeashM:F0} m");
+            Say(session, $"[MonsterAI] caster cast chance >= {cfg.CasterMinChance:F2}, back off inside {cfg.CasterClose:F1} m to {cfg.CasterRange:F0} m, hold {cfg.CasterHold:F0} s; kite inside {cfg.KiteClose:F1} m by {cfg.KiteStep:F0} m every {cfg.KiteCooldown:F0} s, {(cfg.KitePerTarget < 0 ? "no limit" : cfg.KitePerTarget.ToString("F0"))} per target; pack {cfg.PackRange:F0} m; flee at {cfg.MoraleHealth:P0} for {cfg.FleeSeconds:F0} s ({cfg.FamiliesRaw}); heal allies under {cfg.HealAlly:P0} within {cfg.HealRange:F0} m every {cfg.HealCooldown:F0} s; leash {cfg.LeashM:F0} m");
             var parts = new List<string>();
             for (int i = 0; i < (int)Tactic.Count; i++) parts.Add($"{(Tactic)i} {Interlocked.Read(ref s_Fired[i])}");
             Say(session, "[MonsterAI] fired since load: " + string.Join(", ", parts));
+            var here = session?.Player?.Location;
+            Say(session, $"[MonsterAI] stock ACE (no tactics) in {cfg.StockCount} landblocks ({P_STOCK}{(cfg.StockBad > 0 ? $", {cfg.StockBad} entries not understood" : "")})"
+                + (here != null ? $"; here {here.Cell >> 16:X4}: {(cfg.Stock[here.Cell >> 16] ? "stock" : "tactics")}" : ""));
         }
 
         static string On(bool b) => b ? "on" : "off";

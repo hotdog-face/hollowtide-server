@@ -84,6 +84,8 @@ namespace RevivalGuard
     public static class ChessCheckmate
     {
         [ThreadStatic] static bool t_Searching;
+        /// <summary>ChessLobby's Normal AI sets this around its own search, which only wants ACE's cheap answer.</summary>
+        internal static bool Quiet { get => t_Searching; set => t_Searching = value; }
 
         static void Postfix(ChessLogic __instance, ref ChessMoveResult __result)
         {

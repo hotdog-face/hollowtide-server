@@ -31,8 +31,10 @@ namespace RevivalGuard
     ///
     ///   A request: one open per player; asks are spaced and capped (AllegianceFinderRule.CanAsk). The first recruiter
     ///   to answer decides; nobody on, it waits PENDING_HOURS and the next recruiter to log in is asked. On Yes the
-    ///   asker swears to THAT recruiter with retail's Swear (ACE's distance, vassal cap and locks all apply); since the
-    ///   recruiter already said Yes to this asker, ACE's second Yes/No to the patron is skipped for that one swear.
+    ///   asker is told who and where, and swears to THAT recruiter in person with retail's Swear (owner 2026-11-25: the
+    ///   kneel plays, they see each other; ACE's walk-to, distance, vassal cap and locks all apply); since the recruiter
+    ///   already said Yes to this asker, ACE's second Yes/No to the patron is skipped for that one swear. Not sworn within
+    ///   ACCEPTED_HOURS, the request closes.
     ///
     ///   Client: "@recruit board" answers on the mod channel ("allegfind"); "@recruit ask 0x&lt;monarch&gt;", "@recruit
     ///   cancel"; the recruiter verbs as Recruiting's. Staff: "@allegiancelist [remove &lt;n|monarch&gt;]".
@@ -42,6 +44,8 @@ namespace RevivalGuard
     public static partial class Recruiting
     {
         const int PUSH_READERS_S = 180, FACTS_CACHE_S = 60, HALL_CACHE_S = 600, MAX_VASSALS = 11;
+        /// <summary>The accepted swear skips the patron's second Yes/No only this close (ACE's swear walk-to ends at 2 m).</summary>
+        const float SIDE_BY_SIDE_M = 5f;
 
         static readonly Dictionary<uint, List<DateTime>> s_Asks = new Dictionary<uint, List<DateTime>>();
         static readonly Dictionary<(uint, uint), DateTime> s_Declined = new Dictionary<(uint, uint), DateTime>();
@@ -54,7 +58,9 @@ namespace RevivalGuard
         static void RegisterFinder()
         {
             CommandManager.TryAddCommand(StaffList, "allegiancelist", AccessLevel.Sentinel, CommandHandlerFlag.RequiresWorld,
-                "Staff: the allegiance finder's listings, or take one down.", "[remove <number | monarch name>]");
+                "Staff: the allegiance finder's listings, or take one down; dir lists every allegiance in the directory.", "[dir | remove <number | monarch name>]");
+            CommandManager.TryAddCommand(ConsoleDir, "allegiancedir", AccessLevel.Admin, CommandHandlerFlag.None,
+                "Staff and console: every allegiance in the directory, with its members.", "");
         }
 
         static DateTime? Unix(double? t) => t == null || t <= 0 ? (DateTime?)null : DateTimeOffset.FromUnixTimeMilliseconds((long)(t.Value * 1000)).UtcDateTime;
@@ -129,7 +135,7 @@ namespace RevivalGuard
             {
                 var m = PlayerManager.FindByGuid(e.Monarch);
                 bool online = m != null && PlayerManager.GetOnlinePlayer(m.Guid) != null;
-                if (m == null || AllegianceFinderRule.Stale(Unix(m.GetProperty(PropertyFloat.LoginTimestamp)), online, now))
+                if (e.Listed && m == null || e.Listed && AllegianceFinderRule.Stale(Unix(m.GetProperty(PropertyFloat.LoginTimestamp)), online, now))
                 {
                     lock (s_Lock) { s_Entries.Remove(e.Monarch); foreach (var r in e.Requests) Close(r, E.ListingGone, e, now); }
                     Mod.Log.Info($"[RevivalGuard] Recruiting: {m?.Name ?? e.Monarch.ToString("X8")}'s listing came down (monarch away {AllegianceFinderRule.STALE_DAYS}+ days)");
@@ -143,7 +149,12 @@ namespace RevivalGuard
                         if (aged != r.State) { Close(r, E.Timeout, e, now); changed = true; }
                     }
             }
-            lock (s_Lock) foreach (var e in s_Entries.Values) e.Requests.RemoveAll(r => !AllegianceFinderRule.Open(r.State));
+            lock (s_Lock)
+            {
+                foreach (var e in s_Entries.Values) e.Requests.RemoveAll(r => !AllegianceFinderRule.Open(r.State));
+                foreach (var k in s_Entries.Where(kv => !kv.Value.Listed && kv.Value.Requests.Count == 0).Select(kv => kv.Key).ToList())
+                { s_Entries.Remove(k); changed = true; }
+            }
             if (changed) Save();
         }
 
@@ -152,6 +163,7 @@ namespace RevivalGuard
         {
             var next = AllegianceFinderRule.Next(r.State, ev);
             if (next == r.State) return;
+            bool wasAccepted = r.State == S.Accepted;
             r.State = next;
             string label = e?.Label ?? "that allegiance";
             s_Outcome[r.Guid] = (next, label, now);
@@ -160,7 +172,7 @@ namespace RevivalGuard
             if (asker != null)
             {
                 if (next == S.Declined) Say(asker, AllegianceFinderRule.DeclinedLine(label));
-                else if (next == S.Expired) Say(asker, AllegianceFinderRule.ExpiredLine(label));
+                else if (next == S.Expired) Say(asker, wasAccepted && r.ByName != null ? AllegianceFinderRule.AcceptedExpiredLine(r.ByName) : AllegianceFinderRule.ExpiredLine(label));
             }
         }
 
@@ -172,6 +184,24 @@ namespace RevivalGuard
             var list = Listings();
             var x = list.FirstOrDefault(l => l.E.Monarch == key);
             if (x == null && int.TryParse(arg.Trim(), out int n) && n >= 1 && n <= list.Count) x = list[n - 1];
+            if (x == null)
+            {
+                // not listed: any allegiance of the directory (owner 2026-11-25, Request to join), its entry made to hold the request
+                var d = key == 0 ? null : Directory().FirstOrDefault(v => v.Monarch == key);
+                if (d != null)
+                {
+                    Entry ue;
+                    lock (s_Lock)
+                        if (!s_Entries.TryGetValue(key, out ue)) s_Entries[key] = ue = new Entry { Monarch = key, Listed = false, Since = DateTime.UtcNow, Label = d.Name };
+                    var a = d.A ?? AllegianceManager.GetAllegiance(d.M);
+                    if (a != null)
+                        x = new Live
+                        {
+                            E = ue, A = a, Contact = d.M,
+                            L = new RecruitRule.Listing { Name = d.Name, Monarch = d.M.Name, Members = d.Members, OnlineNow = d.Online },
+                        };
+                }
+            }
             if (x == null) { Say(me, RecruitRule.JoinUsage(list.Count)); SendBoard(me); return; }
             var now = DateTime.UtcNow;
             AllegianceFinderRule.AskRefusal why;
@@ -182,7 +212,7 @@ namespace RevivalGuard
                 s_Declined.TryGetValue((me.Guid.Full, x.E.Monarch), out var no);
                 why = AllegianceFinderRule.CanAsk(me.PatronId != null, BotOrStaff(me), OpenRequestOf(me.Guid.Full, out _) != null,
                     asks?.Count > 0 ? asks.Max() : (DateTime?)null, asks?.Count ?? 0, no == default ? (DateTime?)null : no, now);
-                if (x.A.Members.ContainsKey(me.Guid)) why = AllegianceFinderRule.AskRefusal.Sworn;
+                if (x.A.Members.ContainsKey(me.Guid) || me.MonarchId == x.E.Monarch) why = AllegianceFinderRule.AskRefusal.Sworn;
             }
             if (why != AllegianceFinderRule.AskRefusal.None) { Say(me, AllegianceFinderRule.Refused(why, x.L.Name)); SendBoard(me); return; }
 
@@ -197,7 +227,7 @@ namespace RevivalGuard
                 if (x.E.Requests.Count > RecruitRule.MAX_REQUESTS) x.E.Requests.RemoveAt(0);
                 s_Outcome.Remove(me.Guid.Full);
             }
-            int told = Offer(x.E, x.A, req, x.Contact.Guid.Full);
+            int told = Offer(x.E, x.A, req, x.E.Contact);
             if (req.State == S.Pending) Say(me, told > 0 ? AllegianceFinderRule.SentNow(x.L.Name, told) : AllegianceFinderRule.SentLater(x.L.Name));
             Save();
             Telemetry.Emit("allegfind_ask", me, $",\"told\":{told},\"auto\":{(req.State == S.Accepted ? 1 : 0)}");
@@ -210,10 +240,9 @@ namespace RevivalGuard
         static int Offer(Entry e, Allegiance a, Request r, uint contact)
         {
             if (r.State != S.Pending || a == null) return 0;
-            var recruiters = ContactsOf(a, contact).Where(g => g != r.Guid).Select(g => PlayerManager.GetOnlinePlayer(g))
-                                                   .Where(p => p != null && HasRoom(p)).ToList();
+            var recruiters = PromptedFor(a, e, null, r.Level, r.Guid);
             if (recruiters.Count == 0) return 0;
-            if (AllegianceFinderRule.AutoAccepts(e.Join, e.AutoRank, r.Rank))
+            if (e.Listed && AllegianceFinderRule.AutoAccepts(e.Join, e.AutoRank, r.Rank))
             {
                 Accept(e, r, recruiters[0], true);
                 return 1;
@@ -240,8 +269,9 @@ namespace RevivalGuard
             }
             Save();
             var asker = PlayerManager.GetOnlinePlayer(r.Guid);
-            if (asker != null) Say(asker, AllegianceFinderRule.AcceptedLine(by.Name, WhereOf(by)));
-            Say(by, auto ? AllegianceFinderRule.AutoToRecruiter(r.Name, e.Label ?? "your allegiance") : AllegianceFinderRule.AcceptedToRecruiter(r.Name));
+            if (asker != null) Say(asker, AllegianceFinderRule.AcceptedLine(by.Name, PlaceOf(by)));
+            Say(by, auto ? AllegianceFinderRule.AutoToRecruiter(r.Name, e.Label ?? "your allegiance", PlaceOf(asker))
+                         : AllegianceFinderRule.AcceptedToRecruiter(r.Name, PlaceOf(asker)));
             Telemetry.Emit("allegfind_yes", by, $",\"auto\":{(auto ? 1 : 0)}");
             Mod.Log.Info($"[RevivalGuard] Recruiting: {by.Name} {(auto ? "auto-" : "")}accepted {r.Name} into {e.Label}");
             Push(e, r.Guid);
@@ -290,8 +320,7 @@ namespace RevivalGuard
             var mine = OpenRequestOf(p.Guid.Full, out var me);
             if (mine != null && mine.State == S.Accepted)
             {
-                var by = PlayerManager.GetOnlinePlayer(mine.By);
-                Say(p, AllegianceFinderRule.AcceptedLine(mine.ByName, by != null ? WhereOf(by) : null));
+                TellMeet(mine, p);
             }
             else
             {
@@ -299,18 +328,19 @@ namespace RevivalGuard
                 lock (s_Lock) has = s_Outcome.TryGetValue(p.Guid.Full, out o);
                 if (has && o.state == S.Expired) Say(p, AllegianceFinderRule.ExpiredLine(o.label));
             }
+            MeetWaitingFor(p);
             var a = p.Allegiance;
             if (a?.Monarch == null || BotOrStaff(p)) return;
             Entry e; lock (s_Lock) s_Entries.TryGetValue(a.Monarch.PlayerGuid.Full, out e);
-            if (e == null || !ContactsOf(a, e.Contact).Contains(p.Guid.Full)) return;
+            if (e == null) return;
             List<Request> waiting;
             lock (s_Lock) { waiting = e.Requests.Where(r => r.State == S.Pending).ToList(); foreach (var r in waiting) r.Asked.Remove(p.Guid.Full); }
             foreach (var r in waiting)
             {
                 var who = PlayerManager.FindByGuid(r.Guid);
                 if (who == null || who.PatronId != null) { lock (s_Lock) { Close(r, E.Withdraw, e, DateTime.UtcNow); e.Requests.Remove(r); } continue; }
-                if (AllegianceFinderRule.AutoAccepts(e.Join, e.AutoRank, r.Rank)) { if (HasRoom(p)) Accept(e, r, p, true); continue; }
-                if (!HasRoom(p)) continue;
+                if (!PromptedFor(a, e, null, r.Level, r.Guid).Contains(p)) continue;   // this member can't take them
+                if (e.Listed && AllegianceFinderRule.AutoAccepts(e.Join, e.AutoRank, r.Rank)) { Accept(e, r, p, true); continue; }
                 var q = new FinderConfirmation(p.Guid, r.Guid);
                 if (p.ConfirmationManager.EnqueueSend(q, AllegianceFinderRule.Question(r.Name, r.Level, e.Label ?? "your allegiance")
                                                        .Replace(" Accept?", $" (asked {RecruitRule.Ago(DateTime.UtcNow - r.At)}) Accept?")))
@@ -322,8 +352,9 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ the swear
 
-        /// <summary>The asker swears to the recruiter who said Yes: that Yes stands for the patron's, so ACE's second
-        /// Yes/No is skipped for this one swear. Distance, the vassal cap, locks, ignore-requests: all still ACE's.</summary>
+        /// <summary>The asker swears in person (retail's Swear: ACE's walk-to, then this) to the recruiter who said Yes:
+        /// that Yes stands for the patron's, so ACE's second Yes/No is skipped for this one swear, and only side by side
+        /// (SIDE_BY_SIDE_M; ACE's walk-to ends within 2 m). The vassal cap, locks, ignore-requests: all still ACE's.</summary>
         [HarmonyPatch(typeof(Player), nameof(Player.SwearAllegiance))]
         static class SwearAccepted
         {
@@ -333,7 +364,10 @@ namespace RevivalGuard
                 {
                     if (confirmed || !success || !On) return;
                     var r = OpenRequestOf(__instance.Guid.Full, out _);
-                    if (r != null && r.State == S.Accepted && r.By == targetGuid) confirmed = true;
+                    if (r == null || r.State != S.Accepted || r.By != targetGuid) return;
+                    var patron = PlayerManager.GetOnlinePlayer(targetGuid);
+                    if (patron != null && __instance.Location != null && patron.Location != null
+                        && __instance.Location.DistanceTo(patron.Location) <= SIDE_BY_SIDE_M) confirmed = true;
                 }
                 catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] Recruiting swear: {e.Message}"); }
             }
@@ -349,6 +383,7 @@ namespace RevivalGuard
                     lock (s_Lock) { Close(r, ours ? E.Swore : E.Withdraw, e, DateTime.UtcNow); e.Requests.Remove(r); }
                     Save();
                     if (ours) Telemetry.Emit("allegfind_sworn", __instance, "");
+                    DirtyDirectory();
                     Mod.Log.Info($"[RevivalGuard] Recruiting: {__instance.Name} swore to {(ours ? r.ByName : "someone else")}; request closed");
                     Push(e, __instance.Guid.Full);
                 }
@@ -364,7 +399,7 @@ namespace RevivalGuard
             double ageDays = p.CreationTimestamp is int c && c > 0 ? (DateTime.UtcNow - DateTimeOffset.FromUnixTimeSeconds(c).UtcDateTime).TotalDays : -1;
             bool hinted = p.QuestManager.HasQuest(AllegianceFinderRule.HINT_FLAG);
             if (hinted || p.PatronId != null) return;
-            int listings = Listings().Count(x => !x.A.Members.ContainsKey(p.Guid));
+            int listings = Directory().Count(x => x.Monarch != (p.MonarchId ?? 0));
             if (!AllegianceFinderRule.HintDue(p.Level ?? 1, ageDays, false, false, BotOrStaff(p), listings)) return;
             p.QuestManager.Stamp(AllegianceFinderRule.HINT_FLAG);
             bool panel = ModChannel.Capable(p.Session);
@@ -401,41 +436,57 @@ namespace RevivalGuard
         {
             var now = DateTime.UtcNow;
             int lvl = p.Level ?? 1;
-            var live = On ? Listings() : new List<Live>();
-            var facts = new Dictionary<uint, (Facts f, string hall)>();
-            foreach (var x in live) facts[x.E.Monarch] = (FactsOf(x.A, x.E.Monarch), HallOf(x.A, x.E.Monarch));
-            var rows = AllegianceFinderRule.Sort(live.Select(x => new AllegianceFinderRule.Row
+            // the directory: every player allegiance (owner 2026-11-25); a listing adds its line and settings
+            var dir = On ? Directory() : new List<Dir>();
+            var listed = On ? Listings().ToDictionary(x => x.E.Monarch) : new Dictionary<uint, Live>();
+            var byKey = dir.ToDictionary(d => d.Monarch);
+            var sorted = AllegianceBalanceRule.Sort(dir.Select(d => new AllegianceBalanceRule.Row
             {
-                Monarch = x.E.Monarch, Name = x.L.Name, Members = x.L.Members, Active = facts[x.E.Monarch].f.Active,
-                LevelMin = x.E.LevelMin, LevelMax = x.E.LevelMax,
-            }), lvl);
-            var byKey = live.ToDictionary(x => x.E.Monarch);
-            var sb = new StringBuilder("{\"v\":1,\"on\":").Append(On ? 1 : 0)
-                .Append(",\"seek\":").Append(p.PatronId == null && !BotOrStaff(p) ? 1 : 0).Append(",\"lvl\":").Append(lvl).Append(",\"rows\":[");
+                Monarch = d.Monarch, Name = d.Name, Members = d.Members, Active = d.Active, Online = d.Online,
+                Fit = listed.TryGetValue(d.Monarch, out var x0) ? AllegianceFinderRule.Fit(lvl, x0.E.LevelMin, x0.E.LevelMax) : 1.0,
+            }));
+            uint mine = p.MonarchId ?? (p.AllegianceNode != null && p.AllegianceNode.IsMonarch && p.AllegianceNode.HasVassals ? p.Guid.Full : 0u);
+            uint sug = AllegianceBalanceRule.Suggested(sorted, mine);
+            var sb = new StringBuilder("{\"v\":2,\"on\":").Append(On ? 1 : 0)
+                .Append(",\"seek\":").Append(p.PatronId == null && !BotOrStaff(p) ? 1 : 0).Append(",\"lvl\":").Append(lvl)
+                .Append(",\"bonus\":").Append(SmallAllegianceBonus.On ? 1 : 0).Append(",\"total\":").Append(sorted.Count).Append(",\"rows\":[");
             int n = 0;
-            foreach (var row in rows)
+            foreach (var row in sorted.Take(DIR_MAX))
             {
-                var x = byKey[row.Monarch];
-                var (f, hall) = facts[row.Monarch];
+                var d = byKey[row.Monarch];
+                listed.TryGetValue(row.Monarch, out var x);
                 if (n++ > 0) sb.Append(',');
-                double fit = AllegianceFinderRule.Fit(lvl, x.E.LevelMin, x.E.LevelMax);
-                sb.Append("{\"m\":").Append(x.E.Monarch).Append(",\"n\":").Append(Q(RecruitRule.Cap(x.L.Name))).Append(",\"mo\":").Append(Q(x.L.Monarch))
-                  .Append(",\"p\":").Append(Q(x.E.Pitch)).Append(",\"lo\":").Append(x.E.LevelMin).Append(",\"hi\":").Append(x.E.LevelMax)
-                  .Append(",\"st\":").Append(Q(x.E.Style)).Append(",\"j\":").Append(Q(x.E.Join)).Append(",\"r\":").Append(x.E.AutoRank)
-                  .Append(",\"h\":").Append(Q(x.L.Hours)).Append(",\"mem\":").Append(x.L.Members).Append(",\"act\":").Append(f.Active)
-                  .Append(",\"on\":").Append(x.L.OnlineNow).Append(",\"avg\":").Append(f.Avg).Append(",\"hall\":").Append(Q(hall))
-                  .Append(",\"meet\":").Append(Q(x.E.Meet)).Append(",\"fit\":").Append(fit >= 1 ? 2 : fit >= 0.5 ? 1 : 0)
-                  .Append(",\"in\":").Append(x.A.Members.ContainsKey(p.Guid) ? 1 : 0).Append('}');
+                string hall = d.A != null ? HallOf(d.A, d.Monarch) : null;
+                var (pu, _) = SmallAllegianceBonus.For(d.Members);
+                sb.Append("{\"m\":").Append(d.Monarch).Append(",\"n\":").Append(Q(RecruitRule.Cap(d.Name))).Append(",\"mo\":").Append(Q(d.M.Name))
+                  .Append(",\"lst\":").Append(x != null ? 1 : 0).Append(",\"mem\":").Append(d.Members).Append(",\"act\":").Append(d.Active)
+                  .Append(",\"on\":").Append(d.Online).Append(",\"avg\":").Append(d.Avg).Append(",\"seen\":").Append((int)Math.Round(d.SeenHours))
+                  .Append(",\"hall\":").Append(Q(hall)).Append(",\"b\":").Append(AllegianceBalanceRule.Percent(pu))
+                  .Append(",\"sug\":").Append(d.Monarch == sug ? 1 : 0).Append(",\"in\":").Append(d.Monarch == mine ? 1 : 0);
+                if (x != null)
+                {
+                    double fit = AllegianceFinderRule.Fit(lvl, x.E.LevelMin, x.E.LevelMax);
+                    sb.Append(",\"p\":").Append(Q(x.E.Pitch)).Append(",\"lo\":").Append(x.E.LevelMin).Append(",\"hi\":").Append(x.E.LevelMax)
+                      .Append(",\"st\":").Append(Q(x.E.Style)).Append(",\"j\":").Append(Q(x.E.Join)).Append(",\"r\":").Append(x.E.AutoRank)
+                      .Append(",\"h\":").Append(Q(x.L.Hours)).Append(",\"meet\":").Append(Q(x.E.Meet)).Append(",\"fit\":").Append(fit >= 1 ? 2 : fit >= 0.5 ? 1 : 0);
+                }
+                sb.Append('}');
             }
             sb.Append(']');
+            AppendMe(sb, p);
 
             var req = OpenRequestOf(p.Guid.Full, out var re);
             if (req != null)
             {
                 var by = req.State == S.Accepted ? PlayerManager.GetOnlinePlayer(req.By) : null;
+                bool spot = MapSpot(by, out float bns, out float bew);
+                long left = req.State == S.Accepted ? Math.Max(0, (long)((req.AnsweredAt ?? req.At).AddHours(AllegianceFinderRule.ACCEPTED_HOURS) - now).TotalSeconds) : 0;
                 sb.Append(",\"req\":{\"m\":").Append(re.Monarch).Append(",\"n\":").Append(Q(RecruitRule.Cap(re.Label ?? ""))).Append(",\"s\":")
                   .Append(Q(req.State.ToString().ToLowerInvariant())).Append(",\"by\":").Append(Q(req.ByName)).Append(",\"g\":").Append(req.By)
-                  .Append(",\"w\":").Append(Q(by != null ? WhereOf(by) : null)).Append(",\"byon\":").Append(by != null ? 1 : 0)
+                  .Append(",\"w\":").Append(Q(by != null ? PlaceOf(by) : null)).Append(",\"byon\":").Append(by != null ? 1 : 0)
+                  .Append(",\"left\":").Append(left);
+                if (spot) sb.Append(",\"ns\":").Append(bns.ToString("0.0", CultureInfo.InvariantCulture)).Append(",\"ew\":").Append(bew.ToString("0.0", CultureInfo.InvariantCulture));
+                sb
                   .Append(",\"ago\":").Append((long)(now - req.At).TotalSeconds).Append('}');
             }
             else
@@ -451,8 +502,8 @@ namespace RevivalGuard
             sb.Append(",\"manage\":").Append(why == RecruitRule.Toggle.Ok ? 1 : 0);
             if (why == RecruitRule.Toggle.Ok)
             {
-                sb.Append(",\"mine\":{\"listed\":").Append(e != null ? 1 : 0).Append(",\"monarch\":").Append(a.Monarch.PlayerGuid == p.Guid ? 1 : 0);
-                if (e != null)
+                sb.Append(",\"mine\":{\"listed\":").Append(e != null && e.Listed ? 1 : 0).Append(",\"monarch\":").Append(a.Monarch.PlayerGuid == p.Guid ? 1 : 0);
+                if (e != null && e.Listed)
                 {
                     List<Request> waiting; lock (s_Lock) waiting = e.Requests.Where(r => AllegianceFinderRule.Open(r.State)).ToList();
                     sb.Append(",\"p\":").Append(Q(e.Pitch)).Append(",\"lo\":").Append(e.LevelMin).Append(",\"hi\":").Append(e.LevelMax)
@@ -491,10 +542,27 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ staff
 
+        /// <summary>@allegiancelist dir and the console's allegiancedir: every allegiance in the directory with its members.</summary>
+        static IEnumerable<string> DirLines()
+        {
+            DirtyDirectory();
+            var dir = Directory();
+            yield return SmallAllegianceBonus.Paid();
+            yield return $"{dir.Count} allegiances in the directory:";
+            foreach (var d in dir.OrderByDescending(x => x.Members))
+                yield return $"{RecruitRule.Cap(d.Name)}: {d.Members} ({d.Online} on, {d.Active} this week, bonus +{AllegianceBalanceRule.Percent(SmallAllegianceBonus.For(d.Members).passup)}%): {string.Join(", ", d.Names.Take(20))}";
+        }
+
+        static void ConsoleDir(Session session, params string[] p)
+        {
+            foreach (var l in DirLines()) { if (session?.Player != null) Say(session.Player, l); else Mod.Log.Info("[RevivalGuard] allegiancedir: " + l); }
+        }
+
         static void StaffList(Session session, params string[] p)
         {
             var me = session?.Player;
             if (me == null) return;
+            if (p != null && p.Length >= 1 && p[0].Equals("dir", StringComparison.OrdinalIgnoreCase)) { foreach (var l in DirLines()) Say(me, l); return; }
             var list = Listings();
             if (p != null && p.Length >= 2 && p[0].Equals("remove", StringComparison.OrdinalIgnoreCase))
             {

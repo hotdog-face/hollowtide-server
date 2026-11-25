@@ -104,6 +104,19 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] {key}: not registered with @modifybool ({e.Message}); read with its default"); }
         }
 
+        /// <summary>RegisterBool for a long (@modifylong) and a double (@modifydouble): SmallAllegianceBonus's numbers.</summary>
+        internal static void RegisterLong(string key, long def, string desc)
+        {
+            try { var l = MonsterAi.Inner(DefaultPropertyManager.DefaultLongProperties); if (!l.ContainsKey(key)) l[key] = new Property<long>(def, desc); }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] {key}: not registered with @modifylong ({e.Message}); read with its default"); }
+        }
+
+        internal static void RegisterDouble(string key, double def, string desc)
+        {
+            try { var f = MonsterAi.Inner(DefaultPropertyManager.DefaultDoubleProperties); if (!f.ContainsKey(key)) f[key] = new Property<double>(def, desc); }
+            catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] {key}: not registered with @modifydouble ({e.Message}); read with its default"); }
+        }
+
         internal static bool On(string key) => PropertyManager.GetBool(key, false).Item;
         internal static long Long(string key, long def) => PropertyManager.GetLong(key, def).Item;
         internal static double Dbl(string key, double def) => PropertyManager.GetDouble(key, def).Item;

@@ -74,6 +74,7 @@ namespace RevivalGuard
             Try(nameof(DressingRoom), DressingRoom.Register);
             Try(nameof(CustomClothing), CustomClothing.Register);   // our ClothingTables 0x1000F000+ (rune-skin suits; rg_custom_clothing, off)
             Try(nameof(LookShowcase), LookShowcase.Register);       // the Staff Base look showcase's effects (rg_look_showcase, off)
+            Try(nameof(LookLabMake), LookLabMake.Register);         // the Look Lab's Make it now: @looklab, admins, one-off items (rg_look_lab_make, off)
             Try(nameof(DiscordBridge), DiscordBridge.Register);
             Try(nameof(DerethChatHost), DerethChatHost.Register);   // the cross-server Dereth channel (off without dereth-chat.json)
             Try(nameof(ItemLink), ItemLink.Register);
@@ -88,6 +89,8 @@ namespace RevivalGuard
             Try(nameof(PasswordRecovery), PasswordRecovery.Register);
             Try(nameof(LfgBoard), LfgBoard.Register);
             Try(nameof(Recruiting), Recruiting.Register);      // /recruit (alias /recruiting): player allegiances that welcome new players, offered at level 10 (rg_recruit, off by default)
+            Try(nameof(SmallAllegianceBonus), SmallAllegianceBonus.Register);   // small allegiances pass up more XP and earn more luminance (rg_small_alleg_bonus, off)
+            Try(nameof(ChessLobby), ChessLobby.Register);      // /chess: the Game Center lobby, temporary boards, records, titles, ladder (rg_chess_lobby, off)
             Try(nameof(Leaderboards), Leaderboards.Register);      // /top: level, XP, luminance, kills, PK, quests (rg_top; Discord post rg_top_discord, on)
             Try(nameof(FeatureBoard), FeatureBoard.Register);
             Try(nameof(ItemLock), ItemLock.Register);
@@ -627,13 +630,38 @@ namespace RevivalGuard
     /// produce hundreds, which is how the retail vendor/trade/give dupes were raced. Non-movement game
     /// actions are capped per session per second; the excess is dropped and counted. Movement and
     /// position messages are exempt (MovementGuard judges those).
+    ///
+    /// DECAL/UTILITYBELT (Discord, Rekah, 2026-11-24: "auto vender makes my client crash", UB "prevRequest=10"). A retail
+    /// client with Decal bursts read-only queries (QueryItemMana for every worn item, IdentifyObject queues): live logged
+    /// Rekah over 30/s five times. Those filled the bucket, so the Sell that followed was dropped unanswered and the
+    /// client's IR_SHOP_EVENT (10) request never cleared (ACCWeenieObject::RecordResponse @0058cab0 only clears on the
+    /// vendor's VendorInfo or an 0xA0). Read-only queries now have their own, larger bucket, and an inventory or shop
+    /// action dropped here is answered like ACE's own busy refusal (0xA0, plus UseDone for buy/sell) so it clears.
     /// </summary>
     [HarmonyPatch(typeof(InboundMessageManager), nameof(InboundMessageManager.HandleGameAction))]
     static class FloodGuard
     {
-        const int PER_SECOND = 30;
-        sealed class Bucket { public long Second; public int Count; }
+        const int PER_SECOND = 30, QUERIES_PER_SECOND = 150;
+        sealed class Bucket { public long Second; public int Count; public int Queries; }
         static readonly ConditionalWeakTable<Session, Bucket> s_Buckets = new ConditionalWeakTable<Session, Bucket>();
+
+        /// <summary>Asks for information only: nothing moves, so no dupe can be raced with it.</summary>
+        internal static bool IsQuery(GameActionType op) => op == GameActionType.IdentifyObject || op == GameActionType.QueryItemMana
+            || op == GameActionType.QueryHealth || op == GameActionType.QueryAge || op == GameActionType.QueryBirth || op == GameActionType.PingRequest;
+
+        /// <summary>Retail's client records these as a pending request (UIAttempt*, gmVendorUI::SendShopEvent) and waits
+        /// for the server's answer; a silent drop leaves it waiting.</summary>
+        internal static bool AwaitsAnswer(GameActionType op) => op == GameActionType.Buy || op == GameActionType.Sell
+            || op == GameActionType.PutItemInContainer || op == GameActionType.GetAndWieldItem || op == GameActionType.DropItem
+            || op == GameActionType.StackableMerge || op == GameActionType.StackableSplitToContainer || op == GameActionType.StackableSplitTo3D
+            || op == GameActionType.StackableSplitToWield || op == GameActionType.GiveObjectRequest;
+
+        static void Refuse(GameActionType op, Session session)
+        {
+            var p = session.Player;
+            session.Network.EnqueueSend(new ACE.Server.Network.GameEvent.Events.GameEventInventoryServerSaveFailed(session, p.Guid.Full));
+            if (op == GameActionType.Buy || op == GameActionType.Sell) p.SendUseDoneEvent(WeenieError.YoureTooBusy);
+        }
 
         static bool Prefix(GameActionType opcode, ClientMessage message, Session session)
         {
@@ -654,12 +682,22 @@ namespace RevivalGuard
             if (!SocialGuard.Allow(opcode, message, session)) return false;
             var b = s_Buckets.GetOrCreateValue(session);
             long sec = DateTime.UtcNow.Ticks / TimeSpan.TicksPerSecond;
+            bool query = IsQuery(opcode);
             lock (b)
             {
-                if (b.Second != sec) { b.Second = sec; b.Count = 0; }
+                if (b.Second != sec) { b.Second = sec; b.Count = 0; b.Queries = 0; }
+                if (query)
+                {
+                    if (++b.Queries <= QUERIES_PER_SECOND) return true;
+                    if (b.Queries == QUERIES_PER_SECOND + 1)
+                        Offences.Add(session.Player, "flood", $"more than {QUERIES_PER_SECOND} queries in one second (last {opcode}); the excess is dropped");
+                    return false;
+                }
                 if (++b.Count <= PER_SECOND) return true;
                 if (b.Count == PER_SECOND + 1)
                     Offences.Add(session.Player, "flood", $"more than {PER_SECOND} game actions in one second (last {opcode}); the excess is dropped");
+                // answer a bounded number, so a real flood cannot turn the refusals into an amplifier
+                if (b.Count <= PER_SECOND * 2 && AwaitsAnswer(opcode)) Refuse(opcode, session);
                 return false;
             }
         }
@@ -692,6 +730,7 @@ namespace RevivalGuard
             "@revivalclient 1", "@questlog", "@rgexpansion 0", "@rgexpansion 1", "@ragdollcorpse 0",
             "@ragdollcorpse 1", "@time", "@pop", "@myquests", "@gps",
             "@features",   // the feature request window asks when it opens and once a minute while open
+            "@recruit board",   // the Allegiance page asks when it comes into view and every 30 s while shown (AcAllegianceFinder)
         };
         const int MAX_AUTO = 16;
 
@@ -723,7 +762,7 @@ namespace RevivalGuard
             if (opcode == GameActionType.Talk && session.AccessLevel >= AccessLevel.Sentinel && text != null
                 && text.TrimStart().StartsWith("@dress ", StringComparison.OrdinalIgnoreCase)) return true;
             // The Decorate panel speaks one @decor line per gesture (Undo pressed three times is the same text three times);
-            // @decor needs Developer and works only on a test shard (Decor.cs).
+            // @decor needs Developer on a test shard and Admin on live (rg_decor_live; Decor.cs DecorAccessRule).
             if (opcode == GameActionType.Talk && session.AccessLevel >= AccessLevel.Developer && text != null
                 && text.TrimStart().StartsWith("@decor ", StringComparison.OrdinalIgnoreCase)) return true;
 

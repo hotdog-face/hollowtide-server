@@ -164,8 +164,10 @@ namespace RevivalGuard
                     // while a festival runs (AzimarTheme), every other returning greeting is the festival's
                     var fest = "greet.fest." + (AzimarThemeRule.FixedTheme(wo.WeenieClassId) ?? AzimarTheme.Current());
                     if (visits > 0 && away < 3 && pools.ContainsKey(fest) && Random.Shared.NextDouble() < 0.5) names = new List<string> { fest };
+                    // a holiday's date (HolidayNpcs, rg_holiday_npcs): most returning greetings are the day's
+                    if (visits > 0 && away < 3 && Holiday(pools, "greet") is string hg) names = new List<string> { hg };
                     var line = Pick(pools, names, id);
-                    return line?.Replace("%visit", Ordinal(visits + 1));
+                    return line?.Replace("%visit", Ordinal(visits + 1)).Replace("{name}", p.Name?.TrimStart('+') ?? "friend");
                 }
                 case "bless":
                 {
@@ -177,11 +179,22 @@ namespace RevivalGuard
                     var names = new List<string> { "idle", "idle.time." + TimeOfDay(hour) };
                     var fest = "idle.fest." + (AzimarThemeRule.FixedTheme(wo.WeenieClassId) ?? AzimarTheme.Current());
                     if (pools.ContainsKey(fest) && Random.Shared.NextDouble() < 0.5) names = new List<string> { fest };
-                    return Pick(pools, names, id);
+                    if (Holiday(pools, "idle") is string hi) names = new List<string> { hi };
+                    return Pick(pools, names, id)?.Replace("{name}", p?.Name?.TrimStart('+') ?? "friend");
                 }
                 default:
                     return Pick(pools, new[] { kind }, id);
             }
+        }
+
+        /// <summary>Today's holiday pool for this kind (added to his pools), on AZIMAR_SHARE of tries; else null.</summary>
+        static string Holiday(Dictionary<string, List<string>> pools, string kind)
+        {
+            var h = HolidayNpcs.Today();
+            if (h == null || !HolidayNpcRule.Lines.TryGetValue($"hol.{h}.azimar.{kind}", out var ls) || Random.Shared.NextDouble() >= HolidayNpcRule.AZIMAR_SHARE) return null;
+            var name = $"hol.{h}.azimar.{kind}";
+            pools[name] = ls.ToList();
+            return name;
         }
 
         /// <summary>The nearest player in range who has not heard an idle line lately, or null when he should stay quiet.</summary>

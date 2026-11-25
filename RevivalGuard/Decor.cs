@@ -23,8 +23,9 @@ namespace RevivalGuard
 {
     /// <summary>
     /// THE WORLD DECORATOR'S SERVER END (docs/proposals/world-decorator.md, owner 2026-11-21). The client's Decorate mode
-    /// (AcDecorMode) sends these; nobody types them. TEST SHARD ONLY: every verb refuses unless the file
-    /// Mods/RevivalGuard/decor/enabled exists, which only the box/M5 test shard has; live never gets it. Edits change the
+    /// (AcDecorMode) sends these; nobody types them. Every verb refuses unless the file Mods/RevivalGuard/decor/enabled exists
+    /// (a test shard: Developer and up) or, on live (owner 2026-11-25), the property rg_decor_live is on (Admins only); one gate,
+    /// DecorAccessRule, before any verb runs. Live never gets the enabled file. Edits change the
     /// running world at once and are kept in Mods/RevivalGuard/decor/&lt;area&gt;.json, the layer that
     /// tools/decor/decor.py turns into a datafix (server rows) and a cell-overlay record (DAT statics). The database is
     /// never written here: a restart puts the test shard's rows back until a datafix is applied.
@@ -45,17 +46,27 @@ namespace RevivalGuard
         static readonly object s_Lock = new object();
         static string Dir => Path.Combine(ModFolder.Path(), "decor");
         static bool Enabled => File.Exists(Path.Combine(Dir, "enabled"));
-        internal static volatile bool On;
+        /// <summary>LIVE (owner 2026-11-25: "Yes, work on live"): with no enabled file, ACE's bool property rg_decor_live switches the
+        /// decorator on, for Admins only (DecorAccessRule). Off by default; its switch is the datafix *-decor-live-on.sql. On live
+        /// the layer under the mod IS the lasting world data (re-applied at every landblock load); Publish records the yes.</summary>
+        internal const string P_LIVE = "rg_decor_live";
+        static volatile bool s_FileOn;
+        static bool LiveSwitch { get { try { return PropertyManager.GetBool(P_LIVE, false).Item; } catch { return false; } } }
+        internal static DecorAccessRule.Mode Mode => DecorAccessRule.ModeOf(s_FileOn, LiveSwitch);
+        internal static bool On => Mode != DecorAccessRule.Mode.Off;
+        internal static bool LiveMode => Mode == DecorAccessRule.Mode.Live;
 
         internal static void Register()
         {
             CommandManager.TryAddCommand(Cmd, "decor", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld,
-                "World decorator (test shard only; sent by the client's Decorate mode).",
+                "World decorator (test shard; live for Admins when rg_decor_live is on; sent by the client's Decorate mode).",
                 "state | move <guid> <pose> | remove <guid> | restore <guid> | add <wcid> <pose> [size] | unadd <id> | static <blk> <i> <model> <pose|gone> | "
                 + "staticadd <id> <model> <pose|gone> [size] | lock <guid|key> on|off | undo | redo | revert | area <id> | newarea | goto [id] | "
-                + "batch <label> <verb args>;<verb args>... | part <id> <i> <n> <text> | kitsave <name> <items> | publish <area> [props rows pieces] | pub");
-            On = Enabled;
-            Mod.Log.Info("[RevivalGuard] Decor: @decor (world decorator, test shard only: " + (Enabled ? "ENABLED here" : "off here") + ")");
+                + "batch <label> <verb args>;<verb args>... | part <id> <i> <n> <text> | kitsave <name> <items> | publish <area> [props rows pieces] | pub | "
+                + "encspawn|encboss|encchest|encset|encmove|encpatrol|encremove ... | enctest now|clear (DecorEncounters.cs)");
+            s_FileOn = Enabled;
+            Mod.Log.Info("[RevivalGuard] Decor: @decor (world decorator: " + (s_FileOn ? "ENABLED here (test shard)"
+                : "off here unless " + P_LIVE + " is on (live, Admins only)") + ")");
         }
 
         // a long batch arrives as several chat lines ("part"), put together before it runs
@@ -63,15 +74,26 @@ namespace RevivalGuard
 
         /// <summary>Verbs that change the layout: each run is ONE undo step (a batch of fifty is one step too).</summary>
         static readonly HashSet<string> s_Editing = new HashSet<string>
-            { "scale", "piecescale", "move", "remove", "restore", "add", "unadd", "static", "staticadd", "batch", "revert", "way" };
+            { "scale", "piecescale", "move", "remove", "restore", "add", "unadd", "static", "staticadd", "batch", "revert", "way",
+              "encspawn", "encboss", "encchest", "encset", "encmove", "encpatrol", "encremove" };
 
         static void Cmd(Session s, params string[] args)
         {
             var me = s?.Player;
             if (me == null) return;
             void Reply(string t) => me.Session?.Network?.EnqueueSend(new GameMessageSystemChat("[Decor] " + t, ChatMessageType.Broadcast));
-            On = Enabled;
-            if (!On) { Reply("Decorating works only on the test shard."); Send(s, new JsonObject { ["k"] = "off" }); return; }
+            s_FileOn = Enabled;
+            var mode = Mode;
+            // ONE GATE FOR EVERY VERB ("part" and the read-only ones too), before anything is parsed or loaded
+            string no = DecorAccessRule.Refuse(mode, (int)s.AccessLevel, args.Length > 0 ? args[0] : "");
+            if (no != null)
+            {
+                Reply(no);
+                Send(s, new JsonObject { ["k"] = mode == DecorAccessRule.Mode.Off ? "off" : "denied", ["why"] = no });
+                if (mode == DecorAccessRule.Mode.Live)
+                    Mod.Log.Info($"[RevivalGuard] Decor: refused {me.Name} ({s.AccessLevel}) @decor {(args.Length > 0 ? args[0] : "")}");
+                return;
+            }
             if (args.Length == 0) { Reply("Use the Decorate button."); return; }
             try
             {
@@ -97,13 +119,13 @@ namespace RevivalGuard
                     if (s_Editing.Contains(verb))
                     {
                         var before = Snapshot();
-                        string label = verb == "batch" ? string.Join(" ", args[1].Split('_')) : verb;
+                        string label = verb == "batch" ? string.Join(" ", args[1].Split('_')) : EncLabel(verb) ?? verb;
                         if (verb == "batch") Batch(s, me, args, Reply);
                         else if (verb == "revert") Revert(me, Reply);
                         else Dispatch(s, me, args, Reply);
                         EndStep(label, before, s_Cur);
                         Save();
-                        if (verb == "revert") SendState(s, me); else SendCounts(s, me);
+                        if (verb == "revert" || verb.StartsWith("enc", StringComparison.Ordinal)) SendState(s, me); else SendCounts(s, me);
                         return;
                     }
                     switch (verb)
@@ -123,6 +145,7 @@ namespace RevivalGuard
                         case "undo": case "redo": UndoRedo(me, verb == "undo", Reply); Save(); SendState(s, me); return;
                         case "lock": Lock(me, args, Reply); Save(); SendState(s, me); return;
                         case "kitsave": KitSave(args, Reply); SendState(s, me); return;
+                        case "enctest": EncTest(me, args, Reply); return;
                         case "area":
                             if (args.Length < 2 || !s_Areas.ContainsKey(args[1])) { Reply("No such area."); return; }
                             s_Active[me.Guid.Full] = args[1];
@@ -153,6 +176,8 @@ namespace RevivalGuard
                 case "static": Static(args, reply); break;
                 case "staticadd": StaticAdd(args, reply); break;
                 case "way": Way(me, args, reply); break;
+                case "encspawn": case "encboss": case "encchest": case "encset": case "encmove": case "encpatrol": case "encremove":
+                    EncDispatch(s, me, args, reply); break;
                 default: reply("Unknown decor verb in a batch: " + args[0]); break;
             }
         }
@@ -320,6 +345,7 @@ namespace RevivalGuard
             lock (s_Lock)
             {
                 Load();
+                if (EncSpawned(p, spawned)) return;
                 if ((p.Id & 0xF0000000u) != 0x70000000u)
                 {
                     if (Get($"s:{p.Generator.Guid.Full:X8}") is JsonObject g && g["spawn"] is JsonObject at)
@@ -342,6 +368,10 @@ namespace RevivalGuard
         static string WhyNot(WorldObject wo)
         {
             if (wo is Player) return "Players can't be decorated.";
+            // saved with players' belongings (ACE writes these to the shard database): moving or removing one would write it
+            if (!IsAdded(wo) && (wo is House || wo is Hook || wo is Storage || wo is SlumLord || ForeverChest.Guids.Contains(wo.Guid.Full)
+                                 || wo.IsStaticThatShouldPersistToShard() || wo.IsDynamicThatShouldPersistToShard()))
+                return $"{wo.Name} is saved with players' things (a house, a hook or a chest that keeps what is put in it): it stays as it is.";
             if (KeyOf(wo, out _) != null) return null;
             if (wo is Creature c && c.Attackable) return $"{wo.Name} is a wandering monster from a spawn point: there is no fixed one to move or remove.";
             if (wo.Generator != null) return $"{wo.Name} is picked at random by a generator, so there is no fixed one to move or remove.";
@@ -1155,6 +1185,7 @@ namespace RevivalGuard
                 Put(key, want, into);
             }
             else if (kind == "way") ReconcileWay(key, cur, want, into);
+            else if (IsEnc(kind)) EncReconcile(me, key, want, into);
             else
             {
                 Del(key);
@@ -1281,6 +1312,7 @@ namespace RevivalGuard
                     return did;
                 }
                 if (kind == "way") return ReapplyWay(key, e);
+                if (IsEnc(kind)) return EncReapply(me, key, e);
                 if (kind == "add" && e["after"] is JsonObject after)
                 {
                     uint g = Hex((string)e["guid"]!);
@@ -1336,6 +1368,25 @@ namespace RevivalGuard
             };
             Directory.CreateDirectory(Path.Combine(PubDir, "requests"));
             Directory.CreateDirectory(Path.Combine(PubDir, "status"));
+            if (LiveMode)
+            {
+                // LIVE: the layer under the mod already is the lasting world data (every landblock load re-applies it), so no
+                // datafix is waited for, and none may be applied (it would add every prop a second time). The request is the
+                // approval record; tools/decor/pull-live.sh copies it (read only) to the box, which builds the package for git
+                // and the client release. A dated copy of the approved layer stays here as the restore point.
+                bool client = N(4) > 0 || ar.Layer["world"] != null;
+                req["target"] = "live-layer";
+                Directory.CreateDirectory(Path.Combine(PubDir, "approved"));
+                string stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+                Write(Path.Combine(PubDir, "approved", $"{id}-{stamp}.json"), req.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+                Write(Path.Combine(PubDir, "requests", id + ".json"), req.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+                Write(Path.Combine(PubDir, "status", id + ".json"), new JsonObject
+                    { ["state"] = "live", ["time"] = when, ["edits_sha"] = sha, ["client_release"] = client }.ToJsonString());
+                Mod.Log.Info($"[RevivalGuard] Decor: publish {id} (live layer) approved in game by {me.Name} ({s.Account}) at {when}");
+                reply($"{req["name"]}: published. It is live now and stays after restarts"
+                      + (client ? "; its map pieces or new ground need a client release." : "."));
+                return;
+            }
             Write(Path.Combine(PubDir, "requests", id + ".json"), req.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
             Write(Path.Combine(PubDir, "status", id + ".json"), new JsonObject { ["state"] = "queued", ["time"] = when, ["edits_sha"] = sha }.ToJsonString());
             Mod.Log.Info($"[RevivalGuard] Decor: publish {id} approved in game by {me.Name} ({s.Account}) at {when}");

@@ -80,6 +80,9 @@ namespace RevivalGuard
             public int OfficerMin { get; set; } = RecruitRule.OFFICER_RANK;
             /// <summary>The allegiance's name when last listed or asked (for lines said when it is not loaded).</summary>
             public string Label { get; set; }
+            /// <summary>False for an allegiance that never listed itself: the entry only holds requests made from the
+            /// directory (Recruiting.Directory.cs) and goes when they do. An old file's entries are listings.</summary>
+            public bool Listed { get; set; } = true;
         }
 
         static readonly object s_Lock = new object(), s_SaveLock = new object();
@@ -99,7 +102,7 @@ namespace RevivalGuard
                 "[join <n> | ask 0x<monarch> | cancel | board | on <line> | off | pitch <text> | levels <lo-hi> | style pk|pve | joinby ask|auto <rank> | officers <1-4> | meet <place> | contact <name> | hours <text>|auto | status]");
             CommandManager.TryAddCommand(Handle, "recruiting", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
                 "The same as /recruit: allegiances that welcome new players.", "[join <n>]");
-            Mod.Log.Info($"[RevivalGuard] Recruiting: {(On ? "ON" : "off")} ({P_ON}), {s_Entries.Count} listed; /recruit");
+            Mod.Log.Info($"[RevivalGuard] Recruiting: {(On ? "ON" : "off")} ({P_ON}), {s_Entries.Values.Count(e => e.Listed)} listed; /recruit");
         }
 
         // ------------------------------------------------------------------ state
@@ -204,6 +207,7 @@ namespace RevivalGuard
             lock (s_Lock) entries = s_Entries.Values.ToList();
             foreach (var e in entries)
             {
+                if (!e.Listed) continue;
                 var m = PlayerManager.FindByGuid(e.Monarch);
                 if (m == null || m.IsDeleted || m.IsPendingDeletion || BotOrStaff(m)) continue;
                 var a = AllegianceManager.GetAllegiance(m);
@@ -253,6 +257,7 @@ namespace RevivalGuard
                     case "": case "list": ShowList(me, Listings(), RecruitRule.LIST_HEAD); return;
                     case "join": case "ask": Ask(me, rest); return;
                     case "cancel": Cancel(me); return;
+                    case "where": case "swear": WhereVerb(me); return;   // swear: an older panel's Join now; no swear at a distance
                     case "on": case "off": case "pitch": case "meet": case "contact": case "hours": case "status":
                     case "levels": case "style": case "joinby": case "officers":
                         Manage(me, verb, rest); SendBoard(me); return;
@@ -274,7 +279,7 @@ namespace RevivalGuard
             {
                 case "status":
                 {
-                    if (e == null) { Say(me, RecruitRule.NotListed(label)); return; }
+                    if (e == null || !e.Listed) { Say(me, RecruitRule.NotListed(label)); return; }
                     var mine = Listings().FirstOrDefault(x => x.E == e);
                     if (mine != null) foreach (var line in RecruitRule.Entry(1, mine.L)) Say(me, line);
                     List<Request> reqs; lock (s_Lock) reqs = e.Requests.ToList();
@@ -282,8 +287,8 @@ namespace RevivalGuard
                     return;
                 }
                 case "off":
-                    if (e == null) { Say(me, RecruitRule.NotListed(label)); return; }
-                    lock (s_Lock) { s_Entries.Remove(key); foreach (var r in e.Requests) Close(r, AllegianceFinderRule.Event.ListingGone, e, DateTime.UtcNow); }
+                    if (e == null || !e.Listed) { Say(me, RecruitRule.NotListed(label)); return; }
+                    lock (s_Lock) { e.Listed = false; e.Pitch = null; }   // requests stand: the directory still lists every allegiance
                     Save();
                     Mod.Log.Info($"[RevivalGuard] Recruiting: {me.Name} took {label} off the list");
                     Say(me, RecruitRule.Unlisted(label));
@@ -297,6 +302,7 @@ namespace RevivalGuard
                     lock (s_Lock)
                     {
                         if (e == null) { e = new Entry { Monarch = key, Contact = me.Guid.Full, Since = DateTime.UtcNow }; s_Entries[key] = e; }
+                        if (!e.Listed) { fresh = true; e.Listed = true; e.Contact = me.Guid.Full; e.Since = DateTime.UtcNow; }
                         e.Pitch = pitch; e.By = me.Name; e.Label = label;
                     }
                     Save();
@@ -306,7 +312,7 @@ namespace RevivalGuard
                     return;
                 }
             }
-            if (e == null) { Say(me, RecruitRule.NotListedYet(label)); return; }
+            if (e == null || !e.Listed) { Say(me, RecruitRule.NotListedYet(label)); return; }
             switch (verb)
             {
                 case "pitch":

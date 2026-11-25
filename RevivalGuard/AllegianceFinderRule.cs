@@ -20,8 +20,9 @@ namespace RevivalGuard
         public const int STALE_DAYS = 14;
         /// <summary>"Active this week": logged in within this many days.</summary>
         public const int ACTIVE_DAYS = 7;
-        /// <summary>A request nobody answered, and an accepted one nobody swore on, end after this long.</summary>
-        public const int PENDING_HOURS = 24, ACCEPTED_HOURS = 24;
+        /// <summary>A request nobody answered ends after PENDING_HOURS; an accepted one nobody swore on in person after
+        /// ACCEPTED_HOURS (owner 2026-11-25: meet and swear in person, "Accepted, meet X to swear" for about an hour).</summary>
+        public const int PENDING_HOURS = 24, ACCEPTED_HOURS = 1;
         /// <summary>The asker's limits: a gap between asks, a day's cap, and a day before asking an allegiance that said no.</summary>
         public const int ASK_GAP_S = 60, ASKS_PER_DAY = 10, DECLINED_WAIT_HOURS = 24;
         /// <summary>The hint: a character in its first week, level 10 or higher, with no patron.</summary>
@@ -224,12 +225,25 @@ namespace RevivalGuard
             $"Request sent to {allegiance}: {told} {(told == 1 ? "recruiter is" : "recruiters are")} on and will answer.";
         public static string SentLater(string allegiance) =>
             $"Nobody from {allegiance} who can accept you is on. Your request waits {PENDING_HOURS} hours; they will be asked when they log in.";
+        // Owner 2026-11-25: "players have to get together and do the swearing into the allegiance in person so the kneeling
+        // animation plays". A Yes only matches the two players; the swear is retail's, side by side (ACE's walk-to and
+        // distance), never at a distance. <where> is DeathLog's place words ("at 42.1N, 33.6E near Holtburg", "in a dungeon").
+        const string HOW = "Stand next to them, select them and press Swear on the Allegiance panel.";
+
         public static string AcceptedLine(string patron, string where) =>
-            $"{patron} accepted you. Meet them{(string.IsNullOrEmpty(where) ? "" : " (" + where + ")")}, select them and press Swear: they will be your patron.";
-        public static string AcceptedToRecruiter(string asker) =>
-            $"You accepted {asker}. When they come to you and press Swear, they become your vassal.";
-        public static string AutoToRecruiter(string asker, string allegiance) =>
-            $"{asker} asked to join {allegiance}, and your listing accepts them: they will come to you to swear.";
+            $"{patron} accepted you. Meet {patron} in person to swear: {(string.IsNullOrEmpty(where) ? patron + " is not on right now" : patron + " is " + where)}. {HOW} This stays open {Hours(ACCEPTED_HOURS)}.";
+        public static string AcceptedToRecruiter(string asker, string where) =>
+            $"You accepted {asker}. Meet {asker} in person: they swear to you standing next to you. {MeetPlace(where)}";
+        public static string AutoToRecruiter(string asker, string allegiance, string where) =>
+            $"{asker} asked to join {allegiance}, and your listing accepts them. Meet {asker} in person: they swear to you standing next to you. {MeetPlace(where)}";
+        static string Hours(int h) => h == 1 ? "1 hour" : h + " hours";
+        /// <summary>The asker's place for the patron, or a line saying the asker is not on.</summary>
+        static string MeetPlace(string askerWhere) => string.IsNullOrEmpty(askerWhere) ? "They are not on right now." : $"They are {askerWhere}.";
+        /// <summary>The "@recruit where" and login reminder for the patron who accepted.</summary>
+        public static string MeetReminderToPatron(string asker, string where) =>
+            $"{asker} is coming to swear to you in person. {MeetPlace(where)}";
+        public static string AcceptedExpiredLine(string patron) =>
+            $"You did not meet {patron} to swear within {Hours(ACCEPTED_HOURS)}, so your request closed. You can ask again.";
         public static string DeclinedLine(string allegiance) => $"{RecruitRule.Cap(allegiance)} declined your request.";
         public static string AnsweredByOther(string asker, string who) => $"{who} already answered {asker}'s request.";
         public static string ExpiredLine(string allegiance) => $"Your request to {allegiance} ran out. You can ask again.";
@@ -243,9 +257,10 @@ namespace RevivalGuard
             foreach (AskRefusal a in Enum.GetValues(typeof(AskRefusal))) yield return Refused(a, "the allegiance of Bo");
             foreach (Problem p in Enum.GetValues(typeof(Problem))) yield return ProblemLine(p);
             yield return SentNow("X", 1); yield return SentNow("X", 2); yield return SentLater("X");
-            yield return AcceptedLine("Bo", "12.3N, 41.2E"); yield return AcceptedToRecruiter("Ann");
-            yield return AutoToRecruiter("Ann", "X"); yield return DeclinedLine("X"); yield return AnsweredByOther("Ann", "Bo");
-            yield return ExpiredLine("X");
+            yield return AcceptedLine("Bo", "at 12.3N, 41.2E near Holtburg"); yield return AcceptedLine("Bo", null);
+            yield return AcceptedToRecruiter("Ann", "at 12.3N, 41.2E"); yield return AcceptedToRecruiter("Ann", null);
+            yield return AutoToRecruiter("Ann", "X", "in a dungeon"); yield return DeclinedLine("X"); yield return AnsweredByOther("Ann", "Bo");
+            yield return ExpiredLine("X"); yield return MeetReminderToPatron("Ann", "at 12.3N, 41.2E"); yield return AcceptedExpiredLine("Bo");
         }
     }
 }

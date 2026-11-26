@@ -39,16 +39,23 @@ namespace RevivalGuard
     /// ANNOUNCEMENTS (FestivalNotices, 2026-10-21): an optional "announceChannelId" (#announcements) takes one-way
     /// posts from the shard, festival starts and ends. The same bot posts there; it needs View Channel and Send
     /// Messages in that channel. Without the field nothing is announced (the General channel never gets them).
+    ///
+    /// PK DEATHS (PkDeathFeed, 2026-11-26): an optional "pkDeathsChannelId" (#pk-deaths) gets one line per PK kill,
+    /// batched in 10 s windows (PkDeathFeedRule). Same bot; View Channel and Send Messages there. No field, no feed.
+    /// TEST SHARDS ONLY: "apiBase" (e.g. "http://127.0.0.1:8471/api/v10") sends every call to a local stub instead of
+    /// discord.com, so a test never reaches the real Discord. Never set it on the live server.
     /// </summary>
     [HarmonyPatch]
     static class DiscordBridge
     {
         const string FILE = "discord-bridge.json";
-        const string API = "https://discord.com/api/v10";
+        const string DISCORD_API = "https://discord.com/api/v10";
+        static string API => string.IsNullOrWhiteSpace(s_Cfg?.apiBase) ? DISCORD_API : s_Cfg.apiBase.Trim().TrimEnd('/');
         const int OUT_MAX = 400, IN_MAX = 240;
         const int POLL_MS = 2000, POST_GAP_MS = 700;   // Discord allows 5 posts in 5 s per channel
 
-        sealed class Config { public string token { get; set; } public string channelId { get; set; } public string announceChannelId { get; set; } }
+        sealed class Config { public string token { get; set; } public string channelId { get; set; } public string announceChannelId { get; set; }
+            public string pkDeathsChannelId { get; set; } public string apiBase { get; set; } }
 
         static Config s_Cfg;
         static HttpClient s_Http;
@@ -66,6 +73,9 @@ namespace RevivalGuard
         static readonly ConcurrentQueue<string> s_Out = new ConcurrentQueue<string>();
         static readonly ConcurrentQueue<string> s_Announce = new ConcurrentQueue<string>();
         static int s_Announced;
+        static readonly PkDeathFeedRule.Batch s_PkBatch = new PkDeathFeedRule.Batch();
+        static string s_PkPending;   // a post refused with 429, sent again before the next window's
+        static int s_PkPosted, s_PkLines;
         static CancellationTokenSource s_Stop;
         static int s_Sent, s_Received;
 
@@ -87,7 +97,9 @@ namespace RevivalGuard
                 s_Stop = new CancellationTokenSource();
                 Task.Run(() => Run(s_Stop.Token));
                 Mod.Log.Info($"[RevivalGuard] DiscordBridge: on, channel {cfg.channelId}"
-                    + (string.IsNullOrWhiteSpace(cfg.announceChannelId) ? "; no announceChannelId, festival posts off" : $", announcements to {cfg.announceChannelId}"));
+                    + (string.IsNullOrWhiteSpace(cfg.announceChannelId) ? "; no announceChannelId, festival posts off" : $", announcements to {cfg.announceChannelId}")
+                    + (string.IsNullOrWhiteSpace(cfg.pkDeathsChannelId) ? "; no pkDeathsChannelId, PK death feed off" : $", PK deaths to {cfg.pkDeathsChannelId}")
+                    + (string.IsNullOrWhiteSpace(cfg.apiBase) ? "" : $"; TEST apiBase {cfg.apiBase}"));
             }
             catch (Exception e) { Mod.Log.Error($"[RevivalGuard] DiscordBridge: off ({e.GetType().Name}: {e.Message})"); s_Cfg = null; }
         }
@@ -174,6 +186,7 @@ namespace RevivalGuard
                 {
                     await PostQueued(stop);
                     await PostAnnouncements(stop);
+                    await PostPkDeaths(stop);
                     if (DateTime.UtcNow >= nextPoll) { nextPoll = DateTime.UtcNow.AddMilliseconds(POLL_MS); await Poll(stop); }
                     if (s_Fails > 0)
                     {
@@ -261,6 +274,33 @@ namespace RevivalGuard
             }
             if (!r.IsSuccessStatusCode) Mod.Log.Warn($"[RevivalGuard] DiscordBridge: announcement refused ({(int)r.StatusCode}); does the bot have Send Messages in {s_Cfg.announceChannelId}? Text: {sb}");
             else { s_Announced++; Mod.Log.Info($"[RevivalGuard] DiscordBridge: announced ({sb.Length} chars)"); }
+        }
+
+        /// <summary>The PK death feed is configured (PkDeathFeed skips its work otherwise).</summary>
+        public static bool PkFeedOn => s_Cfg != null && !string.IsNullOrWhiteSpace(s_Cfg.pkDeathsChannelId);
+
+        /// <summary>Queue one PK kill line (PkDeathFeedRule.Line) for #pk-deaths; it goes out with its 10 s window.</summary>
+        public static bool PkDeath(string line)
+        {
+            if (!PkFeedOn || string.IsNullOrWhiteSpace(line)) return false;
+            lock (s_PkBatch) { s_PkBatch.Add(line, NowS()); s_PkLines++; }
+            return true;
+        }
+
+        static double NowS() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+
+        static async Task PostPkDeaths(CancellationToken stop)
+        {
+            if (!PkFeedOn) return;
+            string post = s_PkPending;
+            if (post == null) lock (s_PkBatch) post = s_PkBatch.Due(NowS());
+            if (post == null) return;
+            s_PkPending = null;
+            var body = JsonSerializer.Serialize(new { content = post, allowed_mentions = new { parse = Array.Empty<string>() }, flags = 4 });
+            using var r = await s_Http.PostAsync($"{API}/channels/{s_Cfg.pkDeathsChannelId.Trim()}/messages", new StringContent(body, Encoding.UTF8, "application/json"), stop);
+            if ((int)r.StatusCode == 429) { s_PkPending = post; await Task.Delay(RetryAfter(await r.Content.ReadAsStringAsync()), stop); return; }
+            if (!r.IsSuccessStatusCode) Mod.Log.Warn($"[RevivalGuard] DiscordBridge: PK death post refused ({(int)r.StatusCode}); does the bot have Send Messages in {s_Cfg.pkDeathsChannelId}?");
+            else s_PkPosted++;
         }
 
         static async Task Poll(CancellationToken stop)
@@ -384,6 +424,7 @@ namespace RevivalGuard
         }
 
         public static string Status() => s_Cfg == null ? "off" : $"on, channel {s_Cfg.channelId}, {s_Sent} posts out, {s_Received} lines in"
-            + (string.IsNullOrWhiteSpace(s_Cfg.announceChannelId) ? ", no announcements channel" : $", {s_Announced} announcements to {s_Cfg.announceChannelId}");
+            + (string.IsNullOrWhiteSpace(s_Cfg.announceChannelId) ? ", no announcements channel" : $", {s_Announced} announcements to {s_Cfg.announceChannelId}")
+            + (PkFeedOn ? $", PK deaths: {s_PkLines} kills in {s_PkPosted} posts to {s_Cfg.pkDeathsChannelId}" : ", no PK deaths channel");
     }
 }

@@ -102,11 +102,13 @@ namespace RevivalGuard
             SignedLootRule.STEEL => MaterialType.Steel, SignedLootRule.IRON => MaterialType.Iron, SignedLootRule.GRANITE => MaterialType.Granite,
             SignedLootRule.MAHOGANY => MaterialType.Mahogany, SignedLootRule.BRASS => MaterialType.Brass,
             SignedLootRule.GREEN_GARNET => MaterialType.GreenGarnet, SignedLootRule.SUNSTONE => MaterialType.Sunstone,
+            SignedLootRule.FIRE_OPAL => MaterialType.FireOpal,
             _ => MaterialType.BlackOpal,
         };
 
-        /// <summary>One tinker exactly as RecipeManager applies it: the mutation script, then the TinkerLog entry.</summary>
-        static bool Tink(WorldObject wo, uint mutation)
+        /// <summary>One tinker exactly as RecipeManager applies it: the mutation script, then the TinkerLog entry.
+        /// Also PvpKit's (the missile pack's launchers).</summary>
+        internal static bool Tink(WorldObject wo, uint mutation)
         {
             var script = MutationCache.GetMutation(mutation);
             if (script == null) return false;

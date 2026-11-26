@@ -13,8 +13,8 @@ namespace RevivalGuard
         internal const int SET0 = 9150;
         /// <summary>Cragstone Guise: the PK Night set (owner 2026-11-25), never a boss drop.</summary>
         internal const int CRAGSTONE = 16;
-        /// <summary>Sets with no fitting boss (the bronze statue skins): quests only, as proposed.</summary>
-        internal static readonly int[] NoBoss = { 8, 9, 10, CRAGSTONE };
+        /// <summary>Sets no creature drops: only Cragstone (the bronze statue skins drop from the Bronze Statues Attack since 2026-11-26).</summary>
+        internal static readonly int[] NoBoss = { CRAGSTONE };
 
         internal static uint Piece(int set, int slot) =>
             set < FIRST_SETS ? PIECE0 + (uint)(10 * set + slot) : MORE0 + (uint)(10 * (set - FIRST_SETS) + slot);
@@ -26,6 +26,10 @@ namespace RevivalGuard
         // Levels and places from the world DB; kills measured in the proposal. Rates (owner-approved 2026-11-25 for the
         // first 7): 25% level 700+, 15% 275-699, 5% under 275. The later sets' bosses are proposed.
         const double HI = 0.25, MID = 0.15, LO = 0.05;
+        /// <summary>The Bronze Statues Attack's living statues (owner 2026-11-26: the bronze skins drop there). Under the 5% band:
+        /// 33 towns' statues respawn every 3.5 hours for 10 days, so a full-band rate would flood a repeating spawn.</summary>
+        internal const double STATUE = 0.02;
+        static readonly int[] Bronze = { 8, 9, 10 };
         static readonly int[] SpectralHost = { 6, 20, 21 }, Bushi = { 6, 22, 23, 24, 25 };
         internal static readonly Dictionary<uint, Boss> Bosses = new()
         {
@@ -61,7 +65,39 @@ namespace RevivalGuard
             [46430] = new("Ronin Ginmura", new[] { 19 }, MID),
             [46426] = new("Ronin Hirachi", new[] { 19 }, MID),
             [70715] = new("General Tarkaris", new[] { 26 }, LO),             // his own skin
+            // the Bronze Statues Attack (SeasonalCalendar "bronzestatues"): the 17 living statue copies of
+            // 2027-03-18-bronze-1-statues.sql (903850-903882, even; the odd ids are their generators)
+            [903850] = new("Bronze Statue", Bronze, STATUE), [903852] = new("Bronze Statue", Bronze, STATUE),
+            [903854] = new("Bronze Statue", Bronze, STATUE), [903856] = new("Bronze Statue", Bronze, STATUE),
+            [903858] = new("Bronze Statue", Bronze, STATUE), [903860] = new("Bronze Statue", Bronze, STATUE),
+            [903862] = new("Bronze Statue", Bronze, STATUE), [903864] = new("Bronze Statue", Bronze, STATUE),
+            [903866] = new("Bronze Statue", Bronze, STATUE), [903868] = new("Bronze Statue", Bronze, STATUE),
+            [903870] = new("Bronze Statue", Bronze, STATUE), [903872] = new("Bronze Statue", Bronze, STATUE),
+            [903874] = new("Bronze Statue", Bronze, STATUE), [903876] = new("Bronze Statue", Bronze, STATUE),
+            [903878] = new("Bronze Statue", Bronze, STATUE), [903880] = new("Bronze Statue", Bronze, STATUE),
+            [903882] = new("Bronze Statue", Bronze, STATUE),
         };
+
+        /// <summary>Keeper credit only (no drop): sets 0, 1, 3 and 4's listed bosses (Hatshepsut, Nephthys, Vvermurgor) are
+        /// friendly quest NPCs in the world DB (Attackable false), so no player can kill them. The keeper's gate is earned
+        /// from these instead (2026-11-26): Hatshepsut's jailer and the Temple's Grand Vizier (Neftet), the Root's two
+        /// Corruptors (level 300).</summary>
+        internal static readonly Dictionary<uint, int[]> SlainCredit = new()
+        {
+            [44098] = new[] { 0 },   // Mu-miyah Slave Master (300), the Temple under Neftet: holds Hatshepsut
+            [44097] = new[] { 1 },   // Mu-miyah Grand Vizier (240), the Temple under Neftet
+            [72189] = new[] { 3 },   // A'nekshen Storm Corruptor (300), Viridian Root
+            [72195] = new[] { 4 },   // A'nekshen Thorn Corruptor (300), Viridian Root
+        };
+
+        /// <summary>The keeper sets (0-6) this kill stamps RuneSkinSlain for: the boss's own sets plus SlainCredit.</summary>
+        internal static IEnumerable<int> SlainSets(uint wcid)
+        {
+            var sets = new List<int>();
+            if (Bosses.TryGetValue(wcid, out var b)) sets.AddRange(b.Sets);
+            if (SlainCredit.TryGetValue(wcid, out var c)) sets.AddRange(c);
+            return sets.Where(s => s < FIRST_SETS).Distinct();
+        }
 
         /// <summary>The chance for this kill: off is 0; a force of 1-100 (rune_skin_drop_force, tests) replaces the table.</summary>
         internal static double Chance(bool on, uint wcid, long forcePercent)

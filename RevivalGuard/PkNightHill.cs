@@ -214,6 +214,23 @@ namespace RevivalGuard
         }
 
         /// <summary>For @pknight gate: the markers now, in a line.</summary>
+        /// <summary>A PK Night round is running and p stands on its hill or within earshot of it (Radius +
+        /// BOARD_LINE_NEAR, the same ring that hears the standings). PkDeathFeed tags such kills "PK Night".</summary>
+        internal static bool NearHill(Player p)
+        {
+            try
+            {
+                if (p?.Location == null) return false;
+                Live live; lock (s_Lock) live = s_State.Live;
+                if (live == null) return false;
+                double now = ACE.Common.Time.GetUnixTime();
+                var spot = SpotNamed(live.SpotKey) ?? SPOTS[0];
+                var centre = Centre(spot, HillIndex(live, spot, now));
+                return centre != null && Dist(p.Location, centre) <= Radius + BOARD_LINE_NEAR;
+            }
+            catch { return false; }
+        }
+
         internal static string MarkerStatus()
         {
             if (s_MarkKey == null) return "PK Night hill markers: none.";

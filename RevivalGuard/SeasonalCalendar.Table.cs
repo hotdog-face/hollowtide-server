@@ -78,16 +78,16 @@ namespace RevivalGuard
             {
                 // OURS, not a retail stopgap (owner 2026-10-28, docs/REVIVAL-PLAN-2026-10-28.md section 4): retail's own
                 // Dec 2000 "Bael'Zharon's Defeat" data (the first-act Chosen of Asheron 8764, the artifacts, the
-                // Sepulcher of the Hopeslayer), run for one week a year. LightbringerEvent gates the Chosen's and the
-                // Herald creatures' generators (datafix 2026-10-28-lightbringer.sql). Overlaps Frostfell's first
-                // days; the rows are a union, so both run.
+                // Sepulcher of the Hopeslayer), run once a year. LightbringerEvent gates the Chosen's and the
+                // Herald creatures' generators (datafix 2026-10-28-lightbringer.sql). Moved from Dec 1-7 to Jan 22-31
+                // (owner 2026-11-26: "Yess move light bringer"), after Shard of the Herald, so it no longer overlaps Frostfell.
                 Key = "lightbringer", Name = "the Lightbringer's Week",
-                StartMonth = 12, StartDay = 1, EndMonth = 12, EndDay = 7,
+                StartMonth = 1, StartDay = 22, EndMonth = 1, EndDay = 31,
                 On  = new[] { "LightbringerEvent" },
                 Announce = "The Chosen of Asheron have returned to Dereth. They seek Isparians brave enough to "
                          + "face the Hopeslayer's shadow once more.",
                 Hint = "Find a Chosen of Asheron near Cragstone, Zaikhal or Hebian-to, and hunt the Herald's beasts on the Direlands summit.",
-                Evidence = "ours: the Dec 2000 Bael'Zharon's Defeat event data (8764, 8777-8782, 8822), Dec 1 to Dec 7",
+                Evidence = "ours: the Dec 2000 Bael'Zharon's Defeat event data (8764, 8777-8782, 8822), Dec 1 to Dec 7 at first, Jan 22 to 31 from 2026-11-26",
             },
             new Festival
             {
@@ -228,7 +228,7 @@ namespace RevivalGuard
                 // The Great Work Crystal, Dec 16 1999 (Sudden Season): wiki "The Great Work Crystal" rev 471967. Its bosses
                 // (4991-4993, 5867, 5891) were in ace_world but placed nowhere. The Announce is retail's town crier rumors.
                 Key = "greatwork", Name = "the Great Work Crystal",
-                StartMonth = 2, StartDay = 2, EndMonth = 2, EndDay = 14,
+                StartMonth = 2, StartDay = 12, EndMonth = 2, EndDay = 21,
                 On  = new[] { "GreatWorkCrystal" },
                 Announce = "Sir Joffre Tremblant's adventuring party has gone missing. The group was last seen heading north "
                          + "from Arwic. Some say the sun has grown slightly dimmer, and that it has brought on the sudden chill.",
@@ -241,7 +241,7 @@ namespace RevivalGuard
                 // Announce is retail's town crier proclamation, shortened to one chat line (300 characters with the
                 // Discord lead); the Falatacot assault is the director's "bur-ritual".
                 Key = "burritual", Name = "the Bur Portal Summoning Ritual",
-                StartMonth = 2, StartDay = 2, EndMonth = 2, EndDay = 8,
+                StartMonth = 3, StartDay = 5, EndMonth = 3, EndDay = 14,
                 On  = new[] { "BurPortalRitual" },
                 Announce = "Prince Borelean Strathelar will try to summon a portal to Bur and find Asheron, held by the vile "
                          + "Falatacot. All of stout heart are asked to help, for the Falatacot will oppose him.",
@@ -256,7 +256,7 @@ namespace RevivalGuard
                 // Yaraq are the director's "prodigal-children". Retail's announcements are not recorded: the Announce is ours.
                 // Shares Feb 9 to 14 with the Great Work Crystal: Rithwic, Stonehold and Yaraq are far from Frore, no dressing.
                 Key = "prodigal", Name = "the Children of the Prodigal Lord",
-                StartMonth = 2, StartDay = 9, EndMonth = 2, EndDay = 15,
+                StartMonth = 5, StartDay = 14, EndMonth = 5, EndDay = 23,
                 On  = new[] { "ProdigalInvestigation" },
                 Announce = "Tailen the Tracker has found the trail of Aerbax's altered creatures, from Rithwic to a hidden laboratory "
                          + "near Stonehold, and Aerbax is testing its Prodigal Children in the desert by Yaraq.",
@@ -270,7 +270,7 @@ namespace RevivalGuard
                 // locked on the island's eastern hilltop past retail's Shadows. The Announce is retail's town crier rumor
                 // in spirit (its words are not recorded). No dressing.
                 Key = "gauntlet", Name = "the Gauntlet",
-                StartMonth = 2, StartDay = 15, EndMonth = 2, EndDay = 21,
+                StartMonth = 6, StartDay = 4, EndMonth = 6, EndDay = 13,
                 On  = new[] { "GauntletTrial" },
                 Announce = "A presence stirs on the Singularity Caul, challenging the bold to outrun the Shadows to a Shadow "
                          + "Stone on the island's far hill.",
@@ -283,7 +283,7 @@ namespace RevivalGuard
                 // and Antius Blackmoor in Yaraq stand for it (row CarloJournal); the pages, the binding and the recipes are in
                 // the world all year. Retail's announcement is not recorded: the Announce is ours. No dressing.
                 Key = "carlo", Name = "Carlo di Cenza's Journal",
-                StartMonth = 2, StartDay = 16, EndMonth = 2, EndDay = 28,
+                StartMonth = 5, StartDay = 14, EndMonth = 6, EndDay = 13,
                 On  = new[] { "CarloJournal" },
                 Announce = "A Viamontian, Carlo di Cenza, has been found wandering in Rithwic, unable to speak sense. Antius "
                          + "Blackmoor waits in Yaraq for any word of where he came from.",
@@ -296,7 +296,7 @@ namespace RevivalGuard
                 // Two director raids, "mhoire-tairla" near Dryreach and "mhoire-pyreoak" near Ayan Baqur; MhoireRisings is
                 // only the Pending switch (nothing hangs on it). The Announce is ours (retail's broadcasts are not recorded).
                 Key = "mhoire", Name = "the House Mhoire Risings",
-                StartMonth = 2, StartDay = 20, EndMonth = 3, EndDay = 6,
+                StartMonth = 9, StartDay = 17, EndMonth = 9, EndDay = 26,
                 On  = new[] { "MhoireRisings" },
                 Announce = "The dead of House Mhoire stir in the Graveyard. Lady Tairla Mhoire and a Corrupted Pyre Oak have been "
                          + "seen walking far from it, near Dryreach and Ayan Baqur.",
@@ -309,7 +309,7 @@ namespace RevivalGuard
                 // window (row DranithMedian): retail's own small Dranith 15272 stands in the Median, with his retail death
                 // broadcast. Retail's announcement is not recorded: the Announce is ours. No dressing.
                 Key = "dranith", Name = "Dranith Menacet in the Convergent Median",
-                StartMonth = 3, StartDay = 1, EndMonth = 3, EndDay = 7,
+                StartMonth = 7, StartDay = 3, EndMonth = 7, EndDay = 4,
                 On  = new[] { "DranithMedian" },
                 Announce = "Dranith Menacet, the hollow son Martine made, has been seen in the Convergent Median, weakened and "
                          + "calling for his father.",
@@ -322,7 +322,7 @@ namespace RevivalGuard
                 // Hebian-To ("hero-knath-hebian", "hero-apostate-hebian"); HeroRaids is only the Pending switch. The Announce
                 // is ours (retail's broadcasts are not recorded). No dressing.
                 Key = "heroraids", Name = "the Hero Token Raids",
-                StartMonth = 3, StartDay = 14, EndMonth = 3, EndDay = 28,
+                StartMonth = 3, StartDay = 19, EndMonth = 3, EndDay = 28,
                 On  = new[] { "HeroRaids" },
                 Announce = "The K'nath and the Apostates are gathering south of Hebian-To. Those who hold the town will be paid in "
                          + "Hero Tokens.",
@@ -336,7 +336,7 @@ namespace RevivalGuard
                 // and drop the player bronze set. Retail's announcement is not recorded: the Announce is ours. No dressing
                 // (the Nullified Statues stay as they are all year).
                 Key = "bronzestatues", Name = "the Bronze Statues Attack",
-                StartMonth = 3, StartDay = 18, EndMonth = 3, EndDay = 31,
+                StartMonth = 4, StartDay = 23, EndMonth = 5, EndDay = 2,
                 On  = new[] { "BronzeStatuesAttack" },
                 Announce = "The bronze statues of Dereth's towns are stirring on their pedestals. Some have already stepped down, "
                          + "and they are not friendly.",
@@ -348,7 +348,7 @@ namespace RevivalGuard
                 // Captain Burnja Attacks the Windmill (Strange Sightings, Apr 2007): wiki rev 443260. One director raid,
                 // "burnja-windmill"; BurnjaRaids is only the Pending switch. The Announce is ours. No dressing.
                 Key = "burnja", Name = "Captain Burnja's Windmill Raids",
-                StartMonth = 3, StartDay = 22, EndMonth = 3, EndDay = 31,
+                StartMonth = 4, StartDay = 9, EndMonth = 4, EndDay = 11,
                 On  = new[] { "BurnjaRaids" },
                 Announce = "Captain Burnja's drudges have been seen with torches near the old windmill outside Cragstone.",
                 Hint = "Captain Burnja raids the windmill near Cragstone (25.0N, 45.5E) a few times a day; his token is for Jarvis Hammerstone.",
@@ -360,7 +360,7 @@ namespace RevivalGuard
                 // (row TthuunRitualAsheron): Asheron at the live Summoning T'thuun quest's site gives retail's first-ritual
                 // rewards to those Captain Tulmada has just paid. The Announce is ours. No dressing.
                 Key = "tthuunritual", Name = "the Summoning Ritual of T'thuun",
-                StartMonth = 3, StartDay = 28, EndMonth = 3, EndDay = 28,
+                StartMonth = 8, StartDay = 15, EndMonth = 8, EndDay = 15,
                 On  = new[] { "TthuunRitualAsheron" },
                 Announce = "Asheron himself has come to the Patriarch's Valley to watch the Summoning Ritual of T'thuun be broken, "
                          + "and to reward those who break it.",
@@ -372,7 +372,7 @@ namespace RevivalGuard
                 // The Burun Raids (Mired Hearts, May 12 to Jun 2 2004): wiki rev 447715. Five director raids ("burun-<town>")
                 // on retail's own Event<Town>Vagrants rows; BurunRaids is only the Pending switch. The Announce is ours.
                 Key = "burunraids", Name = "the Burun Raids",
-                StartMonth = 6, StartDay = 1, EndMonth = 6, EndDay = 14,
+                StartMonth = 8, StartDay = 27, EndMonth = 9, EndDay = 5,
                 On  = new[] { "BurunRaids" },
                 Announce = "Burun raiding parties are coming out of the swamps against Hebian-To, Sawato, Shoushi, Tou-Tou and Yanshi.",
                 Hint = "Burun raids hit Hebian-To, Sawato, Shoushi, Tou-Tou and Yanshi a few times a day; their leaders carry Burun Idols for Aun Laokhe in Arwic.",
@@ -384,7 +384,7 @@ namespace RevivalGuard
                 // "viridian-baishi"; ViridianIncursion is only the Pending switch. Shares Jun 1 to 14 with the Burun Raids (other
                 // towns). The Announce is ours. No dressing.
                 Key = "viridianbaishi", Name = "the Viridian Incursion at Baishi",
-                StartMonth = 6, StartDay = 1, EndMonth = 6, EndDay = 14,
+                StartMonth = 10, StartDay = 15, EndMonth = 10, EndDay = 24,
                 On  = new[] { "ViridianIncursion" },
                 Announce = "The Viridian Rise is stirring. Zerzelikyr, its Elder Gromnie Champion, has been seen in the thorns near Baishi.",
                 Hint = "Zerzelikyr and the Viridian Rise raid a couple of clicks outside Baishi a few times a day; watch for the broadcast.",
@@ -397,7 +397,7 @@ namespace RevivalGuard
                 // AyanBaqurTownsfolk (the twelve humans, put on that row by the datafix; restored when the window ends).
                 // The Announce is ours. No dressing.
                 Key = "virindiayan", Name = "the Virindi of Ayan Baqur",
-                StartMonth = 6, StartDay = 1, EndMonth = 6, EndDay = 14,
+                StartMonth = 7, StartDay = 16, EndMonth = 7, EndDay = 25,
                 On  = new[] { "VirindiAyanBaqur" },
                 Off = new[] { "AyanBaqurTownsfolk" },
                 Announce = "The people of Ayan Baqur are gone, and Virindi stand in their places. Some say the townsfolk were taken "
@@ -411,7 +411,7 @@ namespace RevivalGuard
                 // him, at one of two spots a few times a day (two director entries); the Renegade is a renamed copy of retail's
                 // L69 Virindi Master (owner 2026-11-09). The Announce is ours. No dressing.
                 Key = "martineattacks", Name = "Martine Attacks",
-                StartMonth = 6, StartDay = 1, EndMonth = 6, EndDay = 7,
+                StartMonth = 6, StartDay = 25, EndMonth = 7, EndDay = 4,
                 On  = new[] { "MartineAttacks" },
                 Announce = "Martine has been seen in the wilds, and Virindi Renegades are hunting him.",
                 Hint = "Martine turns up on the Obsidian Plains or Marae Lassel a few times a day; kill the Virindi Renegades and take their tokens to him.",
@@ -422,7 +422,7 @@ namespace RevivalGuard
                 // The Scavenger Hunt (beta, 1999-06-14): wiki rev 475541. A switch row only: ScavengerHunt.cs runs the six
                 // hours (18:00 to midnight) and the heralds' row ScavengerHunt itself. The Announce is ours. No dressing.
                 Key = "scavengerhunt", Name = "the Scavenger Hunt",
-                StartMonth = 6, StartDay = 14, EndMonth = 6, EndDay = 14,
+                StartMonth = 7, StartDay = 31, EndMonth = 7, EndDay = 31,
                 On  = new[] { "ScavengerHuntSeason" },
                 Announce = "The Advocates are restless today. Tonight they will call a Scavenger Hunt for monster trophies.",
                 Hint = "From 6 PM to midnight, bring monster trophies to the Herald of the Advocates in Holtburg, Shoushi or Yaraq; the three best collections are rewarded.",
@@ -435,7 +435,7 @@ namespace RevivalGuard
                 // Cragstone, Zaikhal and Arwic Meeting Halls, a captain in each, Tomo Genza pays and Londigul mends the helms.
                 // Shares November with the Night Club (no dressing on either). The Announce is ours.
                 Key = "meetinghalls", Name = "the Viamontian Invaders of the Meeting Halls",
-                StartMonth = 11, StartDay = 6, EndMonth = 11, EndDay = 15,
+                StartMonth = 11, StartDay = 5, EndMonth = 11, EndDay = 14,
                 On  = new[] { "MeetingHallInvaders" },
                 Announce = "Viamontian strike forces have seized the Meeting Halls of Rithwic, Cragstone, Zaikhal and Arwic. "
                          + "Tomo Genza of the Glenden Wood Militia is paying for their leaders' heads.",

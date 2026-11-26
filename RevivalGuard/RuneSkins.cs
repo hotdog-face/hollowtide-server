@@ -20,7 +20,9 @@ namespace RevivalGuard
     ///   - the set bonus: EquipmentSetId 9150-9177 (not in the DAT's SpellTable) answered with retail item-set spells,
     ///     RuneSkinsRule.Tier, as WardenforgedPlate does for 901.
     ///   - the quests: the theme's creatures carry tokens (RuneSkinsRule.TokenFor, 10%), a set's boss kill stamps
-    ///     RuneSkinSlain<set>; the givers' emotes are data (gen_rune_quests.py, not placed).
+    ///     RuneSkinSlain<set> (also RuneSkinsRule.SlainCredit); the keepers' emotes are data (gen_rune_quests.py), placed
+///     by 2026-11-27-rune-keepers.sql.
+///   - the Bronze Statues Attack's living statues drop the three bronze skins (RuneSkinsRule.STATUE).
     /// The end-game stats themselves are data (2026-11-25-rune-skins-endgame.sql).
     /// </summary>
     static class RuneSkins
@@ -73,8 +75,8 @@ namespace RevivalGuard
                     if (corpse == null || __instance == null || __instance is Player || killer == null || !On) return;
                     if (!(killer.TryGetPetOwnerOrAttacker() is Player player) || Mercenaries.IsMerc(player)) return;
                     Token(__instance, corpse, player);
-                    if (RuneSkinsRule.Bosses.TryGetValue(__instance.WeenieClassId, out var boss))
-                        foreach (var set in boss.Sets) player.QuestManager.Stamp(RuneSkinsRule.SlainQuest(set));   // the quest's gate
+                    foreach (var set in RuneSkinsRule.SlainSets(__instance.WeenieClassId))
+                        player.QuestManager.Stamp(RuneSkinsRule.SlainQuest(set));   // the keeper's gate
                     double chance = RuneSkinsRule.Chance(On, __instance.WeenieClassId, Force);
                     if (chance <= 0) return;
                     var wcid = RuneSkinsRule.Drop(__instance.WeenieClassId, chance, R(), R(), R());

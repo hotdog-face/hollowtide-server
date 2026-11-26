@@ -1636,11 +1636,7 @@
      "Ranges": [
       {
        "Offset": 640,
-       "NumColors": 96
-      },
-      {
-       "Offset": 928,
-       "NumColors": 96
+       "NumColors": 80
       },
       {
        "Offset": 1728,
@@ -1656,12 +1652,8 @@
        "NumColors": 32
       },
       {
-       "Offset": 1024,
-       "NumColors": 64
-      },
-      {
        "Offset": 1488,
-       "NumColors": 96
+       "NumColors": 80
       }
      ],
      "PaletteSet": "0x0F000020"
@@ -1670,7 +1662,7 @@
      "Ranges": [
       {
        "Offset": 1392,
-       "NumColors": 96
+       "NumColors": 48
       }
      ],
      "PaletteSet": "0x0F000B36"
@@ -1679,7 +1671,7 @@
      "Ranges": [
       {
        "Offset": 320,
-       "NumColors": 192
+       "NumColors": 184
       },
       {
        "Offset": 512,

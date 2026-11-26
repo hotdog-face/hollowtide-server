@@ -732,11 +732,7 @@
      "Ranges": [
       {
        "Offset": 1280,
-       "NumColors": 64
-      },
-      {
-       "Offset": 1344,
-       "NumColors": 48
+       "NumColors": 56
       }
      ],
      "PaletteSet": "0x0F00001F"

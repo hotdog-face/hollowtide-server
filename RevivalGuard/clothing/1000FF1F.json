@@ -407,8 +407,192 @@
     {
      "Ranges": [
       {
-       "Offset": 0,
-       "NumColors": 2048
+       "Offset": 32,
+       "NumColors": 8
+      },
+      {
+       "Offset": 48,
+       "NumColors": 16
+      },
+      {
+       "Offset": 72,
+       "NumColors": 8
+      },
+      {
+       "Offset": 96,
+       "NumColors": 16
+      },
+      {
+       "Offset": 136,
+       "NumColors": 8
+      },
+      {
+       "Offset": 168,
+       "NumColors": 8
+      },
+      {
+       "Offset": 192,
+       "NumColors": 8
+      },
+      {
+       "Offset": 232,
+       "NumColors": 8
+      },
+      {
+       "Offset": 256,
+       "NumColors": 16
+      },
+      {
+       "Offset": 296,
+       "NumColors": 8
+      },
+      {
+       "Offset": 312,
+       "NumColors": 8
+      },
+      {
+       "Offset": 368,
+       "NumColors": 8
+      },
+      {
+       "Offset": 424,
+       "NumColors": 8
+      },
+      {
+       "Offset": 440,
+       "NumColors": 8
+      },
+      {
+       "Offset": 472,
+       "NumColors": 8
+      },
+      {
+       "Offset": 520,
+       "NumColors": 8
+      },
+      {
+       "Offset": 536,
+       "NumColors": 8
+      },
+      {
+       "Offset": 552,
+       "NumColors": 8
+      },
+      {
+       "Offset": 648,
+       "NumColors": 8
+      },
+      {
+       "Offset": 712,
+       "NumColors": 8
+      },
+      {
+       "Offset": 776,
+       "NumColors": 8
+      },
+      {
+       "Offset": 808,
+       "NumColors": 8
+      },
+      {
+       "Offset": 872,
+       "NumColors": 8
+      },
+      {
+       "Offset": 952,
+       "NumColors": 8
+      },
+      {
+       "Offset": 984,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1072,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1184,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1256,
+       "NumColors": 16
+      },
+      {
+       "Offset": 1424,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1520,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1544,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1616,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1640,
+       "NumColors": 16
+      },
+      {
+       "Offset": 1688,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1712,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1728,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1752,
+       "NumColors": 16
+      },
+      {
+       "Offset": 1776,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1792,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1808,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1832,
+       "NumColors": 16
+      },
+      {
+       "Offset": 1856,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1904,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1920,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1944,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1960,
+       "NumColors": 24
+      },
+      {
+       "Offset": 2008,
+       "NumColors": 8
       }
      ],
      "PaletteSet": "0x0F0002B2"

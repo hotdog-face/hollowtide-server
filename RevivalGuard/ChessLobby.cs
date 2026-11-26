@@ -53,10 +53,11 @@ namespace RevivalGuard
     /// Client: "/chess lobby" answers on the mod channel ("chess", JSON). State: Chess/records.json beside the dll.
     /// Staff: "/chess temp" lists the temporary boards, "/chess clear" puts them all away.
     /// </summary>
-    public static class ChessLobby
+    public static partial class ChessLobby
     {
         internal const string P_ON = "rg_chess_lobby";
         const uint WCID_BOARD = 14341;
+        const uint BOARD_FX_TABLE = 0x3400001A;
         const double WATCHDOG_S = 30, JOIN_TIMEOUT_S = 60;
 
         internal static bool On { get { try { return PkCommon.On(P_ON); } catch { return false; } } }
@@ -71,8 +72,12 @@ namespace RevivalGuard
             public DateTime? PutAwayAt;
             public bool Ending, Gone;
             public float Lx, Ly; public uint Lb;
+            // the clock (player games, picked in the challenge; ChessLobbyGame.cs): minutes each, ms left, the side running
+            public int Clock; public double[] Left = new double[2]; public int Running = -1; public DateTime RunSince;
+            /// <summary>The human in a game with the computer (White or Black).</summary>
+            public uint Human => White != 0 ? White : Black;
         }
-        sealed class Challenge { public uint From, To; public string FromName, ToName; public DateTime At; }
+        sealed class Challenge { public uint From, To; public string FromName, ToName; public DateTime At; public int Clock; }
         sealed class PlacedBoard { public string Name, Where; public float Ns, Ew; public uint Lb; public float X, Y; }
 
         static readonly object s_Lock = new object();
@@ -197,6 +202,12 @@ namespace RevivalGuard
             string rest = string.Join(" ", args.Skip(1)).Trim();
             try
             {
+                if (verb == "fx")
+                {
+                    if (s.AccessLevel < AccessLevel.Sentinel) { PkCommon.Say(me, "Staff only."); return; }
+                    StaffFx(me, rest);
+                    return;
+                }
                 if (verb == "temp" || verb == "clear")
                 {
                     if (s.AccessLevel < AccessLevel.Sentinel) { PkCommon.Say(me, "Staff only."); return; }
@@ -214,6 +225,9 @@ namespace RevivalGuard
                     case "ai": case "computer": PlayAi(me, rest); Send(me); break;
                     case "challenge": Challenge_(me, rest); Send(me); break;
                     case "cancel": Cancel(me); Send(me); break;
+                    case "rematch": Rematch(me); Send(me); break;
+                    case "watch": WatchCmd(me, rest); break;
+                    case "unwatch": Unwatch(me, true); break;
                     default: PkCommon.Say(me, "/chess ai easy|normal, /chess challenge <name>, /chess cancel. The Game Center icon opens the lobby."); break;
                 }
             }
@@ -262,21 +276,7 @@ namespace RevivalGuard
             var t = MakeBoard(spot, me.Guid.Full, 0, true, lv);
             if (t == null) { Say(me, "The board could not be set here. Try a few steps away."); return; }
             Say(me, R.AiStart(lv == R.NORMAL ? "Normal" : "Easy"));
-            var chain = new ActionChain();
-            chain.AddDelaySeconds(1.0);
-            chain.AddAction(t.Board, () =>
-            {
-                try
-                {
-                    var p = PlayerManager.GetOnlinePlayer(t.White);
-                    if (p == null || t.Board.IsDestroyed) { EndAndPutAway(t, Chess.ChessWinnerEndGame, "left"); return; }
-                    t.Board.ActOnJoin(p);
-                    t.Board.ChessMatch?.AddAi();
-                    Mod.Log.Info($"[RevivalGuard] ChessLobby: {p.Name} plays the computer ({lv}) on 0x{t.Guid:X8}");
-                }
-                catch (Exception e) { Mod.Log.Error($"[RevivalGuard] ChessLobby: AI seat: {e}"); EndAndPutAway(t, Chess.ChessWinnerEndGame, "error"); }
-            });
-            chain.EnqueueChain();
+            Seat(t, 1.0);
         }
 
         static Player FindTarget(Player me, string arg)
@@ -294,6 +294,10 @@ namespace RevivalGuard
 
         static void Challenge_(Player me, string arg)
         {
+            // "0x50000001 c10": the clock the challenger picked (ChessLobbyRule.CLOCKS), last
+            int clock = 0;
+            var words = (arg ?? "").Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (words.Length > 1 && R.ParseClock(words[^1]) >= 0) { clock = R.ParseClock(words[^1]); arg = string.Join(" ", words.Take(words.Length - 1)); }
             var them = FindTarget(me, arg);
             if (them == null) { Say(me, $"No one called {arg} is online."); return; }
             if (them == me) { Say(me, "You cannot challenge yourself. Try the computer."); return; }
@@ -308,8 +312,8 @@ namespace RevivalGuard
                 { Say(me, $"{them.Name} said no just now. Give it a couple of minutes."); return; }
             }
             if (!Near(me, them)) { Say(me, R.FarLine(them.Name, DeathLog.WhereOf(them))); return; }
-            var c = new Challenge { From = me.Guid.Full, To = them.Guid.Full, FromName = me.Name, ToName = them.Name, At = DateTime.UtcNow };
-            if (!them.ConfirmationManager.EnqueueSend(new ChessConfirmation(them.Guid, me.Guid.Full), R.ChallengeQuestion(me.Name, me.Level ?? 1)))
+            var c = new Challenge { From = me.Guid.Full, To = them.Guid.Full, FromName = me.Name, ToName = them.Name, At = DateTime.UtcNow, Clock = clock };
+            if (!them.ConfirmationManager.EnqueueSend(new ChessConfirmation(them.Guid, me.Guid.Full), R.ChallengeQuestion(me.Name, me.Level ?? 1, clock)))
             { Say(me, $"{them.Name} is answering another question. Try again in a moment."); return; }
             lock (s_Lock) s_Challenges[me.Guid.Full] = c;
             Say(me, R.Waiting(them.Name));
@@ -351,23 +355,10 @@ namespace RevivalGuard
             if (spot == null) { Say(me, R.SpotWhy(spotWhy)); Say(them, R.SpotWhy(spotWhy)); return; }
             var t = MakeBoard(spot, me.Guid.Full, them.Guid.Full, false, null);
             if (t == null) { Say(me, "The board could not be set here. Try a few steps away."); Say(them, "The board could not be set here."); return; }
+            t.Clock = c.Clock;
             Say(me, R.Accepted(them.Name));
             Say(them, R.YouAccepted(me.Name));
-            var chain = new ActionChain();
-            chain.AddDelaySeconds(1.0);
-            chain.AddAction(t.Board, () =>
-            {
-                try
-                {
-                    var w = PlayerManager.GetOnlinePlayer(t.White); var b = PlayerManager.GetOnlinePlayer(t.Black);
-                    if (w == null || b == null || t.Board.IsDestroyed) { EndAndPutAway(t, Chess.ChessWinnerEndGame, "left"); return; }
-                    t.Board.ActOnJoin(w);
-                    t.Board.ActOnJoin(b);
-                    Mod.Log.Info($"[RevivalGuard] ChessLobby: {w.Name} (White) v {b.Name} (Black) on 0x{t.Guid:X8}");
-                }
-                catch (Exception e) { Mod.Log.Error($"[RevivalGuard] ChessLobby: seats: {e}"); EndAndPutAway(t, Chess.ChessWinnerEndGame, "error"); }
-            });
-            chain.EnqueueChain();
+            Seat(t, 1.0);
         }
 
         // ------------------------------------------------------------------ the board
@@ -433,6 +424,9 @@ namespace RevivalGuard
             at.PositionZ += 0.45f;
             wo.Location = at;
             wo.TimeToRot = -1;
+            // the board's setup has no effect table, so its exit (ChessLobbyGame.FadeAndDestroy) would play nothing: the
+            // drudge pieces' own table (0x3400001A, ace_world drudgepawn), whose Destroy fades the object out
+            wo.SetProperty(ACE.Entity.Enum.Properties.PropertyDataId.PhysicsEffectTable, BOARD_FX_TABLE);
             var t = new Temp
             {
                 Board = wo, Guid = wo.Guid.Full, White = white, Black = black, Ai = ai, Level = level,
@@ -479,7 +473,7 @@ namespace RevivalGuard
 
         static void Destroy(Temp t)
         {
-            lock (s_Lock) { s_Temps.Remove(t.Guid); t.Gone = true; }
+            lock (s_Lock) { s_Temps.Remove(t.Guid); t.Gone = true; s_PutAway.Add(t.Guid); }
             if (t.Board.IsDestroyed) return;
             var chain = new ActionChain();
             chain.AddAction(t.Board, () =>
@@ -488,7 +482,8 @@ namespace RevivalGuard
                 {
                     var m = t.Board.ChessMatch;
                     if (m != null && m.State != ChessState.Finished) m.Finish(Chess.ChessWinnerEndGame);
-                    if (!t.Board.IsDestroyed) t.Board.Destroy();
+                    // F7 261125-0057: the board goes with an effect everyone near sees, then is removed
+                    if (!t.Board.IsDestroyed) FadeAndDestroy(t.Board);
                     Mod.Log.Info($"[RevivalGuard] ChessLobby: temporary board 0x{t.Guid:X8} put away");
                 }
                 catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] ChessLobby: put away 0x{t.Guid:X8}: {e.Message}"); }
@@ -500,8 +495,10 @@ namespace RevivalGuard
         internal static void Tick()
         {
             var now = DateTime.UtcNow;
+            GameTick(now);   // clocks every world tick (ChessLobbyGame.cs)
             if (now < s_NextTick) return;
             s_NextTick = now.AddSeconds(2);
+            GameTick2(now);
             List<Temp> list;
             lock (s_Lock)
             {
@@ -531,7 +528,8 @@ namespace RevivalGuard
                 if (plies != t.Plies) { t.Plies = plies; t.LastMoveAt = now; }
                 if ((now - t.LastMoveAt).TotalMinutes > R.IDLE_MIN)
                 {
-                    if (t.Ai) { foreach (var g in new[] { t.White }) { var p = PlayerManager.GetOnlinePlayer(g); if (p != null) Say(p, R.IDLE_END); } EndAndPutAway(t, Chess.ChessWinnerEndGame, "idle"); }
+                    lock (s_Lock) s_Why[t.Guid] = "idle";
+                    if (t.Ai) { foreach (var g in new[] { t.Human }) { var p = PlayerManager.GetOnlinePlayer(g); if (p != null) Say(p, R.IDLE_END); } EndAndPutAway(t, Chess.ChessWinnerEndGame, "idle"); }
                     else
                     {
                         var loser = m.Logic.Turn;
@@ -584,7 +582,9 @@ namespace RevivalGuard
             lock (s_Lock) return s_Temps.TryGetValue(g, out var t) ? t : null;
         }
 
-        internal static bool IsTemp(uint guid) { lock (s_Lock) return s_Temps.ContainsKey(guid); }
+        internal static bool IsTemp(uint guid) { lock (s_Lock) return s_Temps.ContainsKey(guid) || s_PutAway.Contains(guid); }
+        /// <summary>Boards put away: still never saved while their exit effect plays (ChessLobbyGame.FadeAndDestroy).</summary>
+        static readonly HashSet<uint> s_PutAway = new HashSet<uint>();
 
         // ------------------------------------------------------------------ Normal: our AI
 
@@ -689,6 +689,7 @@ namespace RevivalGuard
                     var t = TempOf(__instance);
                     bool ai = __instance.Sides.Any(sd => sd != null && sd.IsAi());
                     if (t != null && ai) t_SkipRank = true;
+                    if (On) GameEnding(__instance, winner, t);
                     if (__instance.State == ChessState.InProgress && On && winner != Chess.ChessWinnerEndGame)
                         Record(__instance, winner, ai, t);
                     // the lobby's last line ("...Good luck!") is over with the game
@@ -697,15 +698,17 @@ namespace RevivalGuard
                 catch (Exception e) { Mod.Log.Error($"[RevivalGuard] ChessLobby: recording a finished game: {e}"); }
             }
 
-            static void Postfix(ChessMatch __instance)
+            static void Postfix(ChessMatch __instance, int winner)
             {
                 t_SkipRank = false;
+                t_Fade = false;
                 try
                 {
                     var t = TempOf(__instance);
                     if (t != null) lock (s_Lock) { t.Ending = true; t.PutAwayAt ??= DateTime.UtcNow.AddSeconds(R.PUT_AWAY_S); }
+                    if (On) GameEnded(__instance, winner, t);
                 }
-                catch (Exception) { }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] ChessLobby: after a game: {e.Message}"); }
             }
         }
 
@@ -722,7 +725,7 @@ namespace RevivalGuard
             int plies = m.Log?.Count ?? 0;
             R.Result Res(ChessColor c) => winner == Chess.ChessWinnerStalemate ? R.Result.Draw : winner == (int)c ? R.Result.Win : R.Result.Loss;
             var players = m.Sides.Where(sd => sd != null && !sd.IsAi()).ToList();
-            bool changed = false;
+            bool changed = false, counted = false;
             if (ai)
             {
                 if (plies < 2) return;   // nobody moved: a board set and left is no game
@@ -733,7 +736,7 @@ namespace RevivalGuard
                     if (ip == null) continue;
                     lock (s_Lock) R.AddAi(Rec(sd.PlayerGuid.Full, ip.Name), Res(sd.Color), normal, now);
                     changed = true;
-                    GiveTitles(sd.PlayerGuid.Full);
+                    GiveTitles(sd.PlayerGuid.Full, true);
                 }
             }
             else if (players.Count == 2)
@@ -761,19 +764,24 @@ namespace RevivalGuard
                         int da = R.Delta(ra.Rating, rb.Rating, resA), db = R.Delta(rb.Rating, ra.Rating, resB);
                         R.AddPvp(ra, resA, da, b.PlayerGuid.Full, now);
                         R.AddPvp(rb, resB, db, a.PlayerGuid.Full, now);
-                        changed = true;
+                        changed = counted = true;
                         if (oa != null) PkCommon.Say(oa, R.RatingLine(ra.Rating, da));
                         if (ob != null) PkCommon.Say(ob, R.RatingLine(rb.Rating, db));
                         Mod.Log.Info($"[RevivalGuard] ChessLobby: {pa.Name} {resA} v {pb.Name} {resB} in {plies} plies; ratings {ra.Rating}/{rb.Rating}");
                     }
                 }
-                GiveTitles(a.PlayerGuid.Full); GiveTitles(b.PlayerGuid.Full);
+                if (counted && winner >= 0)
+                {
+                    var (pw, pl) = winner == (int)a.Color ? (pa, pb) : (pb, pa);
+                    News(R.NewsWin(pw.Name, pl.Name, t_Why));
+                }
+                GiveTitles(a.PlayerGuid.Full, true); GiveTitles(b.PlayerGuid.Full, true);
             }
             if (changed) Task.Run(Save);
         }
 
         /// <summary>Titles earned and not yet given, to an online character (at login otherwise).</summary>
-        internal static void GiveTitles(uint guid)
+        internal static void GiveTitles(uint guid, bool news = false)
         {
             var p = PlayerManager.GetOnlinePlayer(guid);
             if (p == null) return;
@@ -782,7 +790,7 @@ namespace RevivalGuard
             if (due.Count == 0) return;
             foreach (var id in due)
             {
-                try { p.AddTitle(id); PkCommon.Say(p, R.TitleLine(R.TitleName(id))); Mod.Log.Info($"[RevivalGuard] ChessLobby: {p.Name} earns {R.TitleName(id)}"); }
+                try { p.AddTitle(id); PkCommon.Say(p, R.TitleLine(R.TitleName(id))); if (news) News(R.NewsTitle(p.Name, R.TitleName(id))); Mod.Log.Info($"[RevivalGuard] ChessLobby: {p.Name} earns {R.TitleName(id)}"); }
                 catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] ChessLobby: title {id} to {p.Name}: {e.Message}"); }
             }
             Task.Run(Save);
@@ -841,7 +849,7 @@ namespace RevivalGuard
             var o = new
             {
                 on = 1, busy = InMatch(me) || HasTemp(me.Guid.Full) ? 1 : 0, near_m = (int)R.NEAR_M, msg = msg ?? "",
-                pending, me = meRec, near = near.Take(20).ToList(), friends, boards, ladder,
+                pending, me = meRec, near = near.Take(20).ToList(), friends, boards, ladder, games = GamesNear(me),
             };
             return JsonSerializer.Serialize(o);
         }

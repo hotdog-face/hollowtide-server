@@ -43,7 +43,7 @@ namespace RevivalGuard
             "state", "info", "infos", "audit", "undo", "redo", "lock", "kitsave", "enctest", "area", "newarea", "goto", "publish", "pub",
             "part", "scale", "piecescale", "move", "remove", "restore", "add", "unadd", "static", "staticadd", "batch", "revert", "way",
             "encspawn", "encboss", "encchest", "encset", "encmove", "encpatrol", "encremove", "newisland", "newdungeon", "worldbin",
-            "dropworld",
+            "dropworld", "bye",
         };
     }
 }

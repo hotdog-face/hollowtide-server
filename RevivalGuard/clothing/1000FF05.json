@@ -407,8 +407,76 @@
     {
      "Ranges": [
       {
-       "Offset": 0,
-       "NumColors": 2048
+       "Offset": 8,
+       "NumColors": 16
+      },
+      {
+       "Offset": 40,
+       "NumColors": 8
+      },
+      {
+       "Offset": 56,
+       "NumColors": 8
+      },
+      {
+       "Offset": 80,
+       "NumColors": 8
+      },
+      {
+       "Offset": 104,
+       "NumColors": 8
+      },
+      {
+       "Offset": 144,
+       "NumColors": 8
+      },
+      {
+       "Offset": 168,
+       "NumColors": 8
+      },
+      {
+       "Offset": 184,
+       "NumColors": 8
+      },
+      {
+       "Offset": 200,
+       "NumColors": 8
+      },
+      {
+       "Offset": 232,
+       "NumColors": 8
+      },
+      {
+       "Offset": 280,
+       "NumColors": 8
+      },
+      {
+       "Offset": 376,
+       "NumColors": 8
+      },
+      {
+       "Offset": 440,
+       "NumColors": 8
+      },
+      {
+       "Offset": 552,
+       "NumColors": 8
+      },
+      {
+       "Offset": 680,
+       "NumColors": 8
+      },
+      {
+       "Offset": 808,
+       "NumColors": 8
+      },
+      {
+       "Offset": 952,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1264,
+       "NumColors": 8
       }
      ],
      "PaletteSet": "0x0F0002B3"

@@ -1299,17 +1299,7 @@
  "ClothingSubPalEffects": {
   "25": {
    "Icon": "0x00000000",
-   "CloSubPalettes": [
-    {
-     "Ranges": [
-      {
-       "Offset": 0,
-       "NumColors": 2048
-      }
-     ],
-     "PaletteSet": "0x0F0002B2"
-    }
-   ]
+   "CloSubPalettes": []
   }
  }
 }

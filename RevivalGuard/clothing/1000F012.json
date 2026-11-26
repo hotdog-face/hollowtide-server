@@ -1491,33 +1491,8 @@
     {
      "Ranges": [
       {
-       "Offset": 512,
-       "NumColors": 64
-      },
-      {
-       "Offset": 576,
-       "NumColors": 64
-      },
-      {
-       "Offset": 320,
-       "NumColors": 192
-      },
-      {
-       "Offset": 736,
-       "NumColors": 32
-      }
-     ],
-     "PaletteSet": "0x0F000B35"
-    },
-    {
-     "Ranges": [
-      {
        "Offset": 0,
-       "NumColors": 192
-      },
-      {
-       "Offset": 192,
-       "NumColors": 64
+       "NumColors": 160
       },
       {
        "Offset": 256,

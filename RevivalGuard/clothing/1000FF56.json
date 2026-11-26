@@ -407,10 +407,6 @@
     {
      "Ranges": [
       {
-       "Offset": 1280,
-       "NumColors": 64
-      },
-      {
        "Offset": 1344,
        "NumColors": 48
       }

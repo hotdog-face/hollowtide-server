@@ -85,9 +85,14 @@ namespace RevivalGuard
                 foreach (var x in ta)
                 {
                     uint a = Hex(x["shows"]), b = Hex(x["becomes"]);
-                    if (a >> 24 != 0x05 || b >> 24 != 0x05 || !DatManager.PortalDat.AllFiles.ContainsKey(b)) return $"Texture 0x{b:X8} is not in the DAT.";
+                    if (a >> 24 != 0x05 || b >> 24 != 0x05 || (!DatManager.PortalDat.AllFiles.ContainsKey(b) && (b & 0xFFF00000u) != 0x05E00000u)) return $"Texture 0x{b:X8} is not in the DAT.";
                     tex[a] = b;
                 }
+            // OUR MATERIALS (client AcSpectral, owner 2026-11-26: Hoshino's spectral lattice and other retail looks): every
+            // surface (or, in "textures", one) shows a self-describing id 0x05E00000-0x05EFFFFF, no file in the DAT; our
+            // client draws it, others keep the surface's own texture
+            uint spectral = r["spectral"]?["texture"] is JsonNode sp ? Hex(sp) : 0u;
+            if (spectral != 0 && (spectral & 0xFFF00000u) != 0x05E00000u) return "Its material is not one this server knows.";
             var bare = new HashSet<uint>();
             if (r["bareParts"] is JsonArray bp) foreach (var x in bp) bare.Add((uint)x.GetValue<int>());
             uint script = r["effect"] is JsonNode fx && fx.GetValue<string>() != "none" ? Hex(fx) : 0u;
@@ -98,9 +103,9 @@ namespace RevivalGuard
             uint setup = weenie.GetProperty(PropertyDataId.Setup) ?? 0;
             uint cb = weenie.GetProperty(PropertyDataId.ClothingBase) ?? 0;
             uint? table = null;
-            if (tex.Count > 0 || bare.Count > 0)
+            if (tex.Count > 0 || bare.Count > 0 || spectral != 0)
             {
-                table = CustomClothing.AddRuntime(id => TableJson(id, setup, cb, tex, bare));
+                table = CustomClothing.AddRuntime(id => TableJson(id, setup, cb, tex, bare, spectral));
                 if (table == null) return "The Look Lab's runtime table range is full (256 looks): package the keepers.";
             }
 
@@ -134,7 +139,7 @@ namespace RevivalGuard
 
         /// <summary>package.py's look_table: the base's retail table (or its setup's parts), what each surface SHOWS replaced,
         /// bare body parts left off every player body, the retail palette templates unchanged.</summary>
-        static string TableJson(uint id, uint setup, uint cb, Dictionary<uint, uint> tex, HashSet<uint> bare)
+        static string TableJson(uint id, uint setup, uint cb, Dictionary<uint, uint> tex, HashSet<uint> bare, uint spectral = 0)
         {
             var retail = cb != 0 ? DatManager.PortalDat.ReadFromDat<ClothingTable>(cb) : null;
             var entries = new Dictionary<uint, List<(uint idx, uint model, Dictionary<uint, uint> tx)>>();
@@ -166,6 +171,7 @@ namespace RevivalGuard
                             uint orig = surf.OrigTextureId;
                             uint shows = tx.TryGetValue(orig, out var t) ? t : orig;
                             uint now = tex.TryGetValue(shows, out var n2) ? n2 : shows;
+                            if (spectral != 0 && (now & 0xFFF00000u) != 0x05E00000u) now = spectral;   // a surface's own material wins
                             if (now != orig) texs.Add(new JsonObject { ["OldTexture"] = H(orig), ["NewTexture"] = H(now) });
                         }
                     }

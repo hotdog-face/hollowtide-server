@@ -88,9 +88,6 @@ namespace RevivalGuard
                          + "face the Hopeslayer's shadow once more.",
                 Hint = "Find a Chosen of Asheron near Cragstone, Zaikhal or Hebian-to, and hunt the Herald's beasts on the Direlands summit.",
                 Evidence = "ours: the Dec 2000 Bael'Zharon's Defeat event data (8764, 8777-8782, 8822), Dec 1 to Dec 7",
-                // Pending keeps it off the players' calendar (export_calendar.py) until the client release on or after
-                // Nov 27 (owner 2026-11-01); the server runs it once 2026-10-28-lightbringer.sql is applied.
-                Pending = true,
             },
             new Festival
             {

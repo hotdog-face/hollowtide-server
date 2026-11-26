@@ -120,7 +120,11 @@ namespace RevivalGuard
                 bool srcHere = player.FindObject(source.Guid.Full, Player.SearchLocations.MyInventory) != null;
                 bool tgtPack = player.FindObject(target.Guid.Full, Player.SearchLocations.MyInventory) != null;
                 bool tgtWorn = !tgtPack && player.FindObject(target.Guid.Full, Player.SearchLocations.MyEquippedItems) != null;
-                if (source.IsSocietyArmor || target.IsSocietyArmor) { Say(player, "Society armor cannot be tailored."); return; }
+                if (source.IsSocietyArmor || target.IsSocietyArmor)
+                {
+                    var soc = source.IsSocietyArmor ? source : target;   // name the piece (owner 2026-11-06; codex job tailor-society-words)
+                    Say(player, $"The {N(soc)} is Society armor and cannot be tailored. Use ordinary armor instead."); return;
+                }
                 if (!srcHere) { Say(player, $"Your {N(source)} must be in your pack to use it."); return; }
                 if (!tgtPack && !tgtWorn) { Say(player, $"The {N(target)} must be in your pack or worn by you to tailor it."); return; }
                 if (tgtWorn && !target.Retained) { Say(player, $"Take off the {N(target)} and put it in your pack to tailor it."); return; }   // tailoring_worn off

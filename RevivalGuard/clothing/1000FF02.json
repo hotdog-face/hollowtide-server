@@ -315,8 +315,116 @@
     {
      "Ranges": [
       {
-       "Offset": 0,
-       "NumColors": 2048
+       "Offset": 8,
+       "NumColors": 24
+      },
+      {
+       "Offset": 40,
+       "NumColors": 40
+      },
+      {
+       "Offset": 112,
+       "NumColors": 8
+      },
+      {
+       "Offset": 128,
+       "NumColors": 16
+      },
+      {
+       "Offset": 176,
+       "NumColors": 8
+      },
+      {
+       "Offset": 192,
+       "NumColors": 8
+      },
+      {
+       "Offset": 216,
+       "NumColors": 8
+      },
+      {
+       "Offset": 264,
+       "NumColors": 16
+      },
+      {
+       "Offset": 288,
+       "NumColors": 16
+      },
+      {
+       "Offset": 368,
+       "NumColors": 8
+      },
+      {
+       "Offset": 400,
+       "NumColors": 8
+      },
+      {
+       "Offset": 424,
+       "NumColors": 8
+      },
+      {
+       "Offset": 472,
+       "NumColors": 8
+      },
+      {
+       "Offset": 560,
+       "NumColors": 8
+      },
+      {
+       "Offset": 584,
+       "NumColors": 8
+      },
+      {
+       "Offset": 712,
+       "NumColors": 8
+      },
+      {
+       "Offset": 872,
+       "NumColors": 8
+      },
+      {
+       "Offset": 928,
+       "NumColors": 8
+      },
+      {
+       "Offset": 984,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1256,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1544,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1576,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1648,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1728,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1760,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1832,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1856,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1920,
+       "NumColors": 8
       }
      ],
      "PaletteSet": "0x0F0002B3"

@@ -3363,8 +3363,164 @@
     {
      "Ranges": [
       {
-       "Offset": 0,
-       "NumColors": 2048
+       "Offset": 8,
+       "NumColors": 16
+      },
+      {
+       "Offset": 32,
+       "NumColors": 32
+      },
+      {
+       "Offset": 72,
+       "NumColors": 16
+      },
+      {
+       "Offset": 96,
+       "NumColors": 16
+      },
+      {
+       "Offset": 136,
+       "NumColors": 16
+      },
+      {
+       "Offset": 160,
+       "NumColors": 16
+      },
+      {
+       "Offset": 184,
+       "NumColors": 32
+      },
+      {
+       "Offset": 232,
+       "NumColors": 8
+      },
+      {
+       "Offset": 248,
+       "NumColors": 8
+      },
+      {
+       "Offset": 264,
+       "NumColors": 8
+      },
+      {
+       "Offset": 280,
+       "NumColors": 8
+      },
+      {
+       "Offset": 296,
+       "NumColors": 8
+      },
+      {
+       "Offset": 312,
+       "NumColors": 8
+      },
+      {
+       "Offset": 368,
+       "NumColors": 24
+      },
+      {
+       "Offset": 424,
+       "NumColors": 24
+      },
+      {
+       "Offset": 456,
+       "NumColors": 24
+      },
+      {
+       "Offset": 552,
+       "NumColors": 8
+      },
+      {
+       "Offset": 576,
+       "NumColors": 8
+      },
+      {
+       "Offset": 680,
+       "NumColors": 16
+      },
+      {
+       "Offset": 712,
+       "NumColors": 8
+      },
+      {
+       "Offset": 800,
+       "NumColors": 24
+      },
+      {
+       "Offset": 872,
+       "NumColors": 8
+      },
+      {
+       "Offset": 928,
+       "NumColors": 80
+      },
+      {
+       "Offset": 1224,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1256,
+       "NumColors": 16
+      },
+      {
+       "Offset": 1336,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1368,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1408,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1544,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1608,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1640,
+       "NumColors": 16
+      },
+      {
+       "Offset": 1712,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1728,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1760,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1784,
+       "NumColors": 16
+      },
+      {
+       "Offset": 1832,
+       "NumColors": 16
+      },
+      {
+       "Offset": 1856,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1896,
+       "NumColors": 8
+      },
+      {
+       "Offset": 1920,
+       "NumColors": 16
+      },
+      {
+       "Offset": 1960,
+       "NumColors": 16
       }
      ],
      "PaletteSet": "0x0F0002B2"

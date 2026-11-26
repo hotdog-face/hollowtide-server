@@ -77,6 +77,7 @@ namespace RevivalGuard
             DerethChatHost.Hello(session);          // the Dereth channel (other servers): the Cross-Server tab and its on/off
             Drinking.Hello(session);                // a character that relogs while drunk keeps its sway
             SendRecalls(session);                   // the lifestone, for the tracker's recall routes
+            ChessLobby.Hello(session);              // the chess lobby's state, so the client never has to ask a shard without it
             WhatsNew.Hello(session);                // last logout, for the client's what's-new card
             AwayMessage.Push(session);              // the away message's state, for both Assistants' boxes (Feature Requests #33)
         }

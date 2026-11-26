@@ -61,7 +61,7 @@ namespace RevivalGuard
             CommandManager.TryAddCommand(Cmd, "decor", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld,
                 "World decorator (test shard; live for Admins when rg_decor_live is on; sent by the client's Decorate mode).",
                 "state | move <guid> <pose> | remove <guid> | restore <guid> | add <wcid> <pose> [size] | unadd <id> | static <blk> <i> <model> <pose|gone> | "
-                + "staticadd <id> <model> <pose|gone> [size] | lock <guid|key> on|off | undo | redo | revert | area <id> | newarea | goto [id] | "
+                + "staticadd <id> <model> <pose|gone> [size] | ground <blk> <i>=<new>:<old>... | lock <guid|key> on|off | undo | redo | revert | area <id> | newarea | goto [id] | "
                 + "batch <label> <verb args>;<verb args>... | part <id> <i> <n> <text> | kitsave <name> <items> | publish <area> [props rows pieces] | pub | "
                 + "encspawn|encboss|encchest|encset|encmove|encpatrol|encremove ... | enctest now|clear (DecorEncounters.cs)");
             s_FileOn = Enabled;
@@ -75,7 +75,7 @@ namespace RevivalGuard
         /// <summary>Verbs that change the layout: each run is ONE undo step (a batch of fifty is one step too).</summary>
         static readonly HashSet<string> s_Editing = new HashSet<string>
             { "scale", "piecescale", "move", "remove", "restore", "add", "unadd", "static", "staticadd", "batch", "revert", "way",
-              "encspawn", "encboss", "encchest", "encset", "encmove", "encpatrol", "encremove" };
+              "encspawn", "encboss", "encchest", "encset", "encmove", "encpatrol", "encremove", "ground" };
 
         static void Cmd(Session s, params string[] args)
         {
@@ -116,6 +116,8 @@ namespace RevivalGuard
                         verb = args[0].ToLowerInvariant();
                     }
                     s_Cur = ActiveOf(me);
+                    if (verb == "bye") { StopDecorating(me); return; }   // Decorate closed (DecorStandIn.cs)
+                    Decorating(me);
                     if (s_Editing.Contains(verb))
                     {
                         var before = Snapshot();
@@ -176,6 +178,7 @@ namespace RevivalGuard
                 case "static": Static(args, reply); break;
                 case "staticadd": StaticAdd(args, reply); break;
                 case "way": Way(me, args, reply); break;
+                case "ground": Ground(args, reply); break;   // DecorGround.cs
                 case "encspawn": case "encboss": case "encchest": case "encset": case "encmove": case "encpatrol": case "encremove":
                     EncDispatch(s, me, args, reply); break;
                 default: reply("Unknown decor verb in a batch: " + args[0]); break;
@@ -368,6 +371,7 @@ namespace RevivalGuard
         static string WhyNot(WorldObject wo)
         {
             if (wo is Player) return "Players can't be decorated.";
+            if (IsStandIn(wo)) return STAND_WHY;
             // saved with players' belongings (ACE writes these to the shard database): moving or removing one would write it
             if (!IsAdded(wo) && (wo is House || wo is Hook || wo is Storage || wo is SlumLord || ForeverChest.Guids.Contains(wo.Guid.Full)
                                  || wo.IsStaticThatShouldPersistToShard() || wo.IsDynamicThatShouldPersistToShard()))
@@ -802,12 +806,13 @@ namespace RevivalGuard
         {
             string key = "n:" + a[1];
             if (Locked(key, reply)) return;
-            if (a[3] == "gone") { Del(key); return; }
+            if (a[3] == "gone") { Del(key); SyncStand(key); return; }
             if (WhyNotCell(Pose(a, 3), reply)) return;
             var e = new JsonObject { ["kind"] = "staticadd", ["model"] = a[2], ["after"] = PoseOf(Pose(a, 3)) };
             if (a.Length > 11) e["scale"] = R(Mathf01(F(a[11])));
             else if (Get(key) is JsonObject old && old["scale"] != null) e["scale"] = old["scale"]!.DeepClone();
             Put(key, e);
+            SyncStand(key);   // what players see of it on live (DecorStandIn.cs)
         }
 
         // ---- helpers ----
@@ -939,7 +944,13 @@ namespace RevivalGuard
                     }
                     s_Areas[id] = ar;
                 }
-                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] Decor: {f} unreadable, left alone: {e.Message}"); }
+                catch (Exception e)
+                {
+                    // set aside, never overwritten: Save writes every area each step, and a fresh holtburg (below) would replace it
+                    string aside = f + ".unreadable-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+                    try { File.Move(f, aside); } catch { }
+                    Mod.Log.Warn($"[RevivalGuard] Decor: {f} unreadable, kept as {Path.GetFileName(aside)}: {e.Message}");
+                }
             }
             if (!s_Areas.ContainsKey(FIRST_AREA))
                 s_Areas[FIRST_AREA] = new Area { Id = FIRST_AREA, Layer = new JsonObject { ["area"] = FIRST_AREA, ["next"] = 1, ["edits"] = new JsonObject() } };
@@ -984,6 +995,7 @@ namespace RevivalGuard
             try
             {
                 if (key.StartsWith("s:")) return (Hex(key.Substring(2)) >> 12) & 0xFFFF;
+                if (key.StartsWith("g:")) return GroundBlock(key);
                 if (key.StartsWith("t:")) { uint w = Hex(key.Split(':')[1]); return w > 0xFFFF ? w >> 16 : w; }   // a room's: its cell
                 if (e?["after"] is JsonObject a) return Hex((string)a["cell"]!) >> 16;
                 if (e?["before"] is JsonObject b) return Hex((string)b["cell"]!) >> 16;
@@ -1190,6 +1202,7 @@ namespace RevivalGuard
             {
                 Del(key);
                 if (want != null) Put(key, want, into);
+                SyncStand(key);
             }
         }
 
@@ -1229,6 +1242,7 @@ namespace RevivalGuard
         static void SendState(Session s, Player me)
         {
             Reapply(me);
+            SyncAllStands();
             Save();
             var edits = new JsonObject();
             var locks = new JsonObject();
@@ -1245,6 +1259,7 @@ namespace RevivalGuard
                 ["active"] = cur.Id, ["undo"] = cur.Undo.Count, ["redo"] = cur.Redo.Count,
                 ["undoLabel"] = cur.Undo.Count > 0 ? cur.Undo[cur.Undo.Count - 1]!["label"]?.DeepClone() : null,
                 ["kits"] = Kits(),
+                ["stands"] = new JsonArray(s_StandGuids.Keys.Select(g => (JsonNode)$"0x{g:X8}").ToArray()),   // DecorStandIn.cs
             });
         }
 
@@ -1312,6 +1327,7 @@ namespace RevivalGuard
                     return did;
                 }
                 if (kind == "way") return ReapplyWay(key, e);
+                if (kind == "staticadd") { SyncStand(key); return false; }   // its stand-in only: the layer is unchanged, no save
                 if (IsEnc(kind)) return EncReapply(me, key, e);
                 if (kind == "add" && e["after"] is JsonObject after)
                 {
@@ -1468,7 +1484,7 @@ namespace RevivalGuard
     {
         static bool Prefix(WorldObject __instance, ref bool __result)
         {
-            if (!Decor.IsAdded(__instance)) return true;
+            if (!Decor.IsAdded(__instance) && !Decor.IsStandIn(__instance)) return true;
             __result = false;
             return false;
         }

@@ -61,6 +61,8 @@ namespace RevivalGuard
             Try(nameof(CharacterSnapshot), CharacterSnapshot.Register);
             Try(nameof(Bestow), Bestow.Register);
             Try(nameof(PkSuit), PkSuit.Register);   // @pksuit [undo]: staff PK-ready suit (owner 2026-11-22)
+            Try(nameof(PvpKit), PvpKit.Register);   // @pvpkit [again]: staff retail end-game PvP kit, rg_pvp_kit (owner 2026-11-25)
+            Try(nameof(AdminKit), AdminKit.Register);   // @adminkit: the admin panel's Ready kit, rg_admin_kit (owner 2026-11-25)
             Try(nameof(SetHeritage), SetHeritage.Register);
             Try(nameof(QuestLog), QuestLog.Register);
             Try(nameof(ModChannel), ModChannel.Register);

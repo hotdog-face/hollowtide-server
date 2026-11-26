@@ -249,5 +249,105 @@ namespace RevivalGuard
         public static string NotCounted(string why) => $"This game does not count on the chess ladder: {why}.";
         public static string RatingLine(int rating, int delta) =>
             $"Your chess ladder rating is now {rating} ({(delta >= 0 ? "+" : "")}{delta}).";
+
+        // ------------------------------------------------------------------ in the game (F7 261125-0055..0058, owner extras)
+
+        /// <summary>Retail's Stalemate button is a draw offer. The computer takes one only when it is behind by this much
+        /// (ACE's EvaluateBoard: a pawn is 10, so three pawns) or neither side can mate.</summary>
+        public const float AI_DRAW_BEHIND = 30f;
+        /// <summary>A draw offer to a player waits this long; after a No (or to the computer) the same side waits this long.</summary>
+        public const int DRAW_WAIT_S = 30, DRAW_RETRY_S = 20;
+        /// <summary>After a game on a temporary board, either side may ask for a rematch this long.</summary>
+        public const int REMATCH_S = 90;
+        /// <summary>Watchers: within this of the board (ACE's own leash for the players is 40 m).</summary>
+        public const float WATCH_M = 40f;
+        /// <summary>General chat news (a win in a player game, a chess title): one line per gap at most, a few waiting.</summary>
+        public const int NEWS_GAP_S = 60, NEWS_QUEUE = 4;
+        public const string NEWS_SENDER = "Chess";
+        /// <summary>The clocks a challenge may pick, in minutes per side (0: none).</summary>
+        public static readonly int[] CLOCKS = { 0, 10, 3 };
+
+        /// <summary>"c10" / "c3" / "c0" at the end of "/chess challenge 0x... c10": the clock, else 0. -1: not a clock word.</summary>
+        public static int ParseClock(string word)
+        {
+            if (string.IsNullOrEmpty(word) || word.Length < 2 || (word[0] != 'c' && word[0] != 'C')) return -1;
+            return int.TryParse(word.Substring(1), out int m) && CLOCKS.Contains(m) ? m : -1;
+        }
+
+        /// <summary>Neither side can ever mate: kings alone, or a king and one bishop or knight against a bare king (FIDE's
+        /// dead positions that matter here). Pieces as (type, colour) in ACE's ChessPieceType: 1 pawn, 2 rook, 3 knight,
+        /// 4 bishop, 5 queen, 6 king.</summary>
+        public static bool Insufficient(IEnumerable<(int type, int color)> pieces)
+        {
+            int[] minors = new int[2];
+            foreach (var (type, color) in pieces)
+            {
+                if (type == 1 || type == 2 || type == 5) return false;
+                if (type == 3 || type == 4) { if (color < 0 || color > 1) return false; minors[color]++; }
+            }
+            return minors[0] + minors[1] <= 1;
+        }
+
+        /// <summary>Does the computer take a draw? Only when it is losing (its own score, ACE's EvaluateBoard from its side)
+        /// or the position is dead.</summary>
+        public static bool AiTakesDraw(float aiScore, bool insufficient) => insufficient || aiScore <= -AI_DRAW_BEHIND;
+
+        /// <summary>A side's clock after <paramref name="elapsedMs"/> of its own time; never below 0.</summary>
+        public static double ClockAfter(double leftMs, double elapsedMs) => Math.Max(0, leftMs - Math.Max(0, elapsedMs));
+        public static bool Flagged(double leftMs, double elapsedMs) => leftMs - elapsedMs <= 0;
+
+        /// <summary>The news queue: may a line go now, given the last one's time.</summary>
+        public static bool NewsDue(DateTime last, DateTime now) => (now - last).TotalSeconds >= NEWS_GAP_S;
+
+        public static string ClockName(int minutes) => minutes <= 0 ? "" : minutes == 3 ? "3 minute blitz clock" : $"{minutes} minute clock";
+
+        public static string ChallengeQuestion(string from, int level, int clock) =>
+            clock <= 0 ? ChallengeQuestion(from, level)
+                       : $"{from} (level {level}) challenges you to a game of chess with a {ClockName(clock)} each. Play now? A board will appear between you.";
+        public static string DrawQuestion(string name) => $"{name} offers a draw. Accept? The game ends as a draw.";
+        public static string DrawOffered(string name) => $"You offer {name} a draw. Waiting for an answer...";
+        public static string DrawDeclined(string name) => $"{name} declines the draw. Play on.";
+        public static string DrawNoAnswer(string name) => $"{name} did not answer your draw offer. Play on.";
+        public const string DRAW_WAITING = "Your draw offer is still waiting for an answer.";
+        public const string DRAW_TOO_SOON = "You offered a draw only just now. Play a little first.";
+        public const string AI_TAKES_DRAW = "The computer accepts your draw offer.";
+        public const string AI_DECLINES_DRAW = "The computer declines your draw offer. Play on.";
+        public const string ALREADY_RESIGNED = "You have already resigned. The game is ending.";
+        public static string RematchQuestion(string name, bool youWhite, int clock) =>
+            $"{name} asks for a rematch: you play {(youWhite ? "White" : "Black")}{(clock > 0 ? ", " + ClockName(clock) + " each" : "")}. Play again?";
+        public static string RematchWaiting(string name) => $"You ask {name} for a rematch. Waiting for an answer...";
+        public const string NO_REMATCH = "There is no game to play again. Start one from the Game Center.";
+        public static string RematchStart(bool youWhite) => $"Rematch. You play {(youWhite ? "White" : "Black")}. Good luck!";
+        public static string AiStart(string level, bool youWhite) => youWhite ? AiStart(level)
+            : $"A board is set beside you. You play Black against the computer ({level}), which moves first. Walk away more than 40 m or resign to end it.";
+        public static string TimeLoss(string name) => $"{name} ran out of time.";
+        public const string WATCH_FAR = "Walk closer to that game to watch it.";
+        public const string WATCH_NONE = "That game has ended.";
+        public static string Watching(string white, string black) => $"You are watching {white} (White) and {black} (Black). Close the Game Center to stop.";
+
+        /// <summary>The finished game in one line, as both players and watchers see it. <paramref name="winner"/>: 0 White,
+        /// 1 Black, -1 drawn, -2 ended with no result. <paramref name="why"/>: "mate", "resign", "time", "idle", "left",
+        /// "agreed", "stalemate" or "".</summary>
+        public static string ResultLine(int winner, string white, string black, string why)
+        {
+            if (winner == -1) return why == "agreed" ? "Draw agreed." : why == "stalemate" ? "Stalemate. The game is a draw." : "The game is a draw.";
+            if (winner < 0) return "The game was ended with no result.";
+            string w = Cap(winner == 0 ? white : black), l = Cap(winner == 0 ? black : white);
+            return why switch
+            {
+                "mate" => $"Checkmate. {w} wins.",
+                "resign" => $"{l} resigns. {w} wins.",
+                "time" => $"{l} ran out of time. {w} wins.",
+                "idle" => $"{l} made no move for {IDLE_MIN} minutes. {w} wins.",
+                "left" => $"{l} left the game. {w} wins.",
+                _ => $"{w} wins.",
+            };
+        }
+
+        static string Cap(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s.Substring(1);
+
+        public static string NewsWin(string winner, string loser, string why) =>
+            why == "mate" ? $"{winner} beat {loser} at chess by checkmate." : $"{winner} beat {loser} at chess.";
+        public static string NewsTitle(string name, string title) => $"{name} has earned the chess title {title}.";
     }
 }

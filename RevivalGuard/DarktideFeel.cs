@@ -57,29 +57,38 @@ namespace RevivalGuard
             OnThisDay.Load();
             var n = Names;
             Mod.Log.Info($"[RevivalGuard] DarktideFeel: loot {(Loot ? "ON" : "off")}, inscriptions {(Inscribe ? "ON" : "off")}, house signs {(Sign ? "ON" : "off")}, on this day {(Day ? "ON" : "off")}; " +
-                         (n == null ? "no server names file: nothing signed" : $"names {n.Darktide.Count} Darktide, {n.Other.Count} other, {n.Tinkers.Count} tinkers, {n.Imbuers.Count} imbuers") +
+                         (n == null ? "no server names file: nothing signed" : $"names {n.Homes.Count} with a house, {n.Darktide.Count} Darktide, {n.Other.Count} other, {n.Tinkers.Count} tinkers, {n.Imbuers.Count} imbuers") +
                          $"; {OnThisDay.Count} dated lines (@darktidefeel)");
         }
 
         // ---------------------------------------------------------------- names (server-only file)
-        sealed class NameLists { public List<string> Darktide = new(), Other = new(), Tinkers = new(), Imbuers = new(); }
+        sealed class NameLists { public List<string> Homes = new(), Darktide = new(), Other = new(), Tinkers = new(), Imbuers = new(); public HashSet<string> All = new(StringComparer.OrdinalIgnoreCase); }
         static NameLists s_Names; static bool s_NamesTried;
+        static DateTime s_NamesStamp, s_NextLook;
         static readonly object s_Lock = new object();
 
         static string NamesPath => Environment.GetEnvironmentVariable("RG_CORPSE_NAMES")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ace", "corpse-capsules", "names.json");
 
+        /// <summary>The server-only names file, read again when it changes on disk (looked at once a minute at most): a new
+        /// names.py run on the host reaches the houses without a restart.</summary>
         static NameLists Names
         {
             get
             {
                 lock (s_Lock)
                 {
-                    if (s_NamesTried) return s_Names;
-                    s_NamesTried = true;
+                    var now = DateTime.UtcNow;
+                    if (s_NamesTried && now < s_NextLook) return s_Names;
+                    s_NextLook = now.AddSeconds(60);
+                    DateTime stamp = default;
+                    try { if (File.Exists(NamesPath)) stamp = File.GetLastWriteTimeUtc(NamesPath); } catch { }
+                    if (s_NamesTried && stamp == s_NamesStamp) return s_Names;
+                    bool again = s_NamesTried;
+                    s_NamesTried = true; s_NamesStamp = stamp;
                     try
                     {
-                        if (!File.Exists(NamesPath)) return null;
+                        if (stamp == default) { s_Names = null; return null; }
                         using var doc = JsonDocument.Parse(File.ReadAllText(NamesPath));
                         var r = doc.RootElement; var n = new NameLists();
                         foreach (var x in r.GetProperty("people").EnumerateArray())
@@ -87,15 +96,20 @@ namespace RevivalGuard
                             var name = x[0].GetString();
                             if (!TimeCapsuleRule.NameOk(name)) continue;
                             ((x[2].GetInt32() & 1) != 0 ? n.Darktide : n.Other).Add(name);
+                            n.All.Add(name);
                         }
                         void Read(string key, List<string> into)
                         {
                             if (r.TryGetProperty(key, out var a)) foreach (var x in a.EnumerateArray()) { var s = x.GetString(); if (TimeCapsuleRule.NameOk(s)) into.Add(s); }
                         }
                         Read("dtTinkers", n.Tinkers); Read("dtImbuers", n.Imbuers);
+                        // dtHomes (names.py add_homes): people his screenshots show with a house; only names also in people
+                        Read("dtHomes", n.Homes);
+                        n.Homes.RemoveAll(h => !n.All.Contains(h));
                         s_Names = n.Darktide.Count + n.Other.Count > 0 ? n : null;
+                        if (again) Mod.Log.Info($"[RevivalGuard] DarktideFeel: names file changed, read again: {(s_Names == null ? "no names" : $"{n.Homes.Count} with a house, {n.Darktide.Count} Darktide, {n.Other.Count} other")}");
                     }
-                    catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] DarktideFeel: names file {NamesPath} not read ({e.Message}); nothing signed"); }
+                    catch (Exception e) { s_Names = null; Mod.Log.Warn($"[RevivalGuard] DarktideFeel: names file {NamesPath} not read ({e.Message}); nothing signed"); }
                     return s_Names;
                 }
             }
@@ -114,8 +128,17 @@ namespace RevivalGuard
         {
             var n = Names;
             if (n == null) return null;
-            var name = HouseSignRule.LastOwner(n.Darktide, n.Other, roll, InUse, TimeCapsuleRule.NameOk);
+            var name = HouseSignRule.LastOwner(n.Homes, n.Darktide, n.Other, roll, InUse, TimeCapsuleRule.NameOk);
             return name == TimeCapsuleRule.FallbackNames[0] ? null : name;
+        }
+
+        /// <summary>A stored last owner is still good: no names file (keep what is there), or a name in the current file
+        /// that no character on this shard has. Else the house gets a fresh name (owner 2026-11-27: the screenshot names).</summary>
+        internal static bool StillGood(string name)
+        {
+            var n = Names;
+            if (n == null) return true;
+            return n.All.Contains(name) && TimeCapsuleRule.NameOk(name) && !InUse(name);
         }
 
         // ---------------------------------------------------------------- signed loot
@@ -207,12 +230,14 @@ namespace RevivalGuard
 
         /// <summary>Puts the last owner's name on an empty capsule house's crystal, or takes ours off. Never touches a
         /// name ACE set (an owned house).</summary>
-        internal static void UpdateSign(House house, bool piecesUp, string owner)
+        /// <param name="real">A real player's house left with his goods inside (TimeCapsule, rg_house_real_capsules): its
+        /// own switch decides, not rg_house_last_owner.</param>
+        internal static void UpdateSign(House house, bool piecesUp, string owner, bool real = false)
         {
             var sl = house?.SlumLord;
             if (sl == null) return;
             bool owned = (house.HouseOwner ?? 0) != 0;
-            bool show = HouseSignRule.Show(Sign, owned, piecesUp, owner);
+            bool show = HouseSignRule.Show(real ? TimeCapsule.RealOn : Sign, owned, piecesUp, owner);
             bool ours = sl.GetProperty(SIGN_SET) ?? false;
             if (show)
             {

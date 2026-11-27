@@ -42,20 +42,20 @@
   "kinds": [
     { "key": "drudge", "group": "drudges", "weight": 6, "sides": ["south", "west"], "bigChance": 0.12,
       "tiers": [
-        { "tier": 1, "wave": [7, 940, 1464], "adds": [192, 193], "leader": 30490, "escort": [192, 1464], "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 0 },
+        { "tier": 1, "wave": [7, 940, 1464], "adds": [192, 193], "leader": 30490, "escort": [192, 1464], "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 10 },
         { "tier": 2, "wave": [1608, 1609], "adds": [7, 940, 193, 192], "leader": 1610, "escort": [1609], "base": 3, "perPlayer": 2, "max": 12, "treasure": 450, "protectBelow": 12 },
         { "tier": 3, "wave": [1610, 24279, 24280], "adds": [1608, 1609], "leader": 24283, "escort": [1610], "base": 3, "perPlayer": 2, "max": 12, "treasure": 448, "protectBelow": 30 },
         { "tier": 4, "wave": [23480, 24278, 24282], "adds": [1610, 24279, 24280], "leader": 22899, "escort": [24282], "base": 3, "perPlayer": 1.5, "max": 10, "treasure": 449, "protectBelow": 50 }
       ] },
     { "key": "mosswart", "group": "mosswarts", "weight": 2, "sides": ["north"],
       "tiers": [
-        { "tier": 1, "wave": [948, 8, 4249], "adds": [948, 4249], "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 0 },
+        { "tier": 1, "wave": [948, 8, 4249], "adds": [948, 4249], "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 10 },
         { "tier": 2, "wave": [211, 1619], "adds": [8, 948, 4249], "leader": 210, "base": 3, "perPlayer": 2, "max": 12, "treasure": 453, "protectBelow": 12 },
         { "tier": 3, "wave": [7102, 27864, 27863], "adds": [211, 1619, 210], "leader": 35141, "base": 3, "perPlayer": 2, "max": 12, "treasure": 450, "protectBelow": 30 }
       ] },
     { "key": "bandit", "group": "bandits", "weight": 2, "sides": ["east"],
       "tiers": [
-        { "tier": 1, "wave": [11499], "adds": [11499], "leader": 11500, "base": 3, "perPlayer": 2, "max": 10, "treasure": 453, "protectBelow": 0 },
+        { "tier": 1, "wave": [11499], "adds": [11499], "leader": 11500, "base": 3, "perPlayer": 2, "max": 10, "treasure": 453, "protectBelow": 10 },
         { "tier": 3, "wave": [187, 188], "adds": [11503, 11500], "base": 3, "perPlayer": 1.5, "max": 10, "treasure": 448, "protectBelow": 30 },
         { "tier": 4, "wave": [187, 188], "adds": [11503], "base": 4, "perPlayer": 2, "max": 12, "treasure": 448, "protectBelow": 50 }
       ] }
@@ -76,26 +76,26 @@
   "themes": [
     { "festival": "fowlplay", "group": "chickens", "weight": 2, "share": 0.4,
       "tiers": [
-        { "tier": 1, "wave": [35499] },
+        { "tier": 1, "wave": [35499], "protectBelow": 10 },
         { "tier": 2, "wave": [911200], "adds": [35499], "group": "turkeys" }
       ] },
     { "festival": "festivalseason", "group": "the walking dead", "share": 0.4,
       "tiers": [
-        { "tier": 1, "wave": [16] },
+        { "tier": 1, "wave": [16], "protectBelow": 10 },
         { "tier": 2, "wave": [950, 32203, 8672], "adds": [16, 950] },
         { "tier": 3, "wave": [34102, 39511, 4217], "adds": [8672, 8673] },
         { "tier": 4, "wave": [73181, 73180, 73179], "adds": [4217, 24320] }
       ] },
     { "festival": "frostfell", "group": "snowmen", "share": 0.4,
       "tiers": [
-        { "tier": 1, "wave": [5766, 70000], "adds": [70000] },
+        { "tier": 1, "wave": [5766, 70000], "adds": [70000], "protectBelow": 10 },
         { "tier": 2, "wave": [28665, 28658], "adds": [70000] },
         { "tier": 3, "wave": [14518, 14517, 14875], "adds": [28665, 28658] },
         { "tier": 4, "wave": [32483, 28838], "adds": [28837] }
       ] },
     { "festival": "spring", "group": "spring's creatures", "share": 0.35,
       "tiers": [
-        { "tier": 1, "wave": [26684, 26687, 26683, 26673] },
+        { "tier": 1, "wave": [26684, 26687, 26683, 26673], "protectBelow": 10 },
         { "tier": 2, "wave": [26678, 26690, 26692, 26677], "adds": [26687, 26683] },
         { "tier": 3, "wave": [32930] },
         { "tier": 4, "wave": [32931, 32929], "adds": [32930] }
@@ -103,14 +103,14 @@
  ,
     { "festival": "meetinghalls", "group": "Viamontian soldiers", "share": 0.4,
       "tiers": [
-        {"tier": 1, "wave": [29418, 29419, 29420, 29421]},
+        {"tier": 1, "wave": [29418, 29419, 29420, 29421], "protectBelow": 10},
         {"tier": 2, "wave": [29363, 29362], "adds": [29418, 29419, 29420]},
         {"tier": 3, "wave": [28651, 28657, 29300, 32768], "adds": [29363, 29362]},
         {"tier": 4, "wave": [28653, 28654, 29301, 28652], "adds": [28651, 28657, 29300]}
       ] },
     { "festival": "carlo", "group": "Viamontian soldiers", "share": 0.4,
       "tiers": [
-        {"tier": 1, "wave": [29418, 29419, 29420, 29421]},
+        {"tier": 1, "wave": [29418, 29419, 29420, 29421], "protectBelow": 10},
         {"tier": 2, "wave": [29363, 29362], "adds": [29418, 29419, 29420]},
         {"tier": 3, "wave": [28651, 28657, 29300, 32768], "adds": [29363, 29362]},
         {"tier": 4, "wave": [28653, 28654, 29301, 28652], "adds": [28651, 28657, 29300]}
@@ -135,14 +135,14 @@
       ] },
     { "festival": "heroraids", "group": "K'nath and Apostates", "share": 0.4,
       "tiers": [
-        {"tier": 1, "wave": [1536, 2569, 2570]},
+        {"tier": 1, "wave": [1536, 2569, 2570], "protectBelow": 10},
         {"tier": 2, "wave": [2571, 2572, 2573], "adds": [1536, 2569, 2570]},
         {"tier": 3, "wave": [29312, 29314, 29315, 29308], "adds": [2571, 2572, 2573]},
         {"tier": 4, "wave": [43083, 43222, 43223], "adds": [29312, 29314, 29315]}
       ] },
     { "festival": "viridianbaishi", "group": "gromnies", "share": 0.4,
       "tiers": [
-        {"tier": 1, "wave": [17, 203, 1611]},
+        {"tier": 1, "wave": [17, 203, 1611], "protectBelow": 10},
         {"tier": 2, "wave": [1612, 1614, 1616, 1615], "adds": [17, 203, 1611]},
         {"tier": 3, "wave": [11527, 11526, 25596, 25599], "adds": [1612, 1614, 1616]},
         {"tier": 4, "wave": [27710, 27711], "adds": [11527, 11526, 25596]}
@@ -155,7 +155,7 @@
       ] },
     { "festival": "burnja", "group": "Burnja's drudges", "share": 0.4,
       "tiers": [
-        {"tier": 1, "wave": [192, 7, 193, 940]},
+        {"tier": 1, "wave": [192, 7, 193, 940], "protectBelow": 10},
         {"tier": 2, "wave": [1608, 1609, 1632], "adds": [192, 7, 193]},
         {"tier": 3, "wave": [1610, 7090, 7089, 24279], "adds": [1608, 1609, 1632]},
         {"tier": 4, "wave": [7091, 10776, 24281, 23480], "adds": [1610, 7090, 7089]}
@@ -174,7 +174,7 @@
       ] },
     { "festival": "gauntlet", "group": "shadows", "share": 0.4,
       "tiers": [
-        {"tier": 1, "wave": [6534, 6535, 1756]},
+        {"tier": 1, "wave": [6534, 6535, 1756], "protectBelow": 10},
         {"tier": 2, "wave": [1756, 1758, 28556, 1989], "adds": [6534, 6535, 1756]},
         {"tier": 3, "wave": [1757, 4253, 4254, 22910], "adds": [1756, 1758, 28556]},
         {"tier": 4, "wave": [23089, 23090, 23562], "adds": [1757, 4253, 4254]}
@@ -191,14 +191,14 @@
       ] },
     { "festival": "tthuun", "group": "Moarsmen and Sclavus", "share": 0.4,
       "tiers": [
-        {"tier": 1, "wave": [27860, 2583]},
+        {"tier": 1, "wave": [27860, 2583], "protectBelow": 10},
         {"tier": 2, "wave": [27859, 2584, 2585, 27854], "adds": [27860, 2583]},
         {"tier": 3, "wave": [27858, 2586, 27853, 7110], "adds": [27859, 2584, 2585]},
         {"tier": 4, "wave": [39145, 31912], "adds": [27858, 2586, 27853]}
       ] },
     { "festival": "shardherald", "group": "Anadil's dead", "share": 0.4,
       "tiers": [
-        {"tier": 1, "wave": [1756]},
+        {"tier": 1, "wave": [1756], "protectBelow": 10},
         {"tier": 2, "wave": [1756, 1758], "adds": [1756]},
         {"tier": 3, "wave": [619, 1757, 4217, 24320], "adds": [1756, 1758]},
         {"tier": 4, "wave": [25809], "adds": [619, 1757, 4217]}

@@ -71,6 +71,7 @@ namespace RevivalGuard
             wo.SetProperty(PropertyBool.Stuck, true);
             wo.TimeToRot = -1;
             if (e["scale"] != null) wo.ObjScale = N(e["scale"]);
+            NoFall(wo);   // a piece on a table or a wall stands where it was put (its template has Gravity)
             wo.Location = PosFrom(after);
             wo.Location.LandblockId = new LandblockId(wo.Location.GetCell());
             // registered before EnterWorld: its first CreateObject already skips the decorators and it is never saved

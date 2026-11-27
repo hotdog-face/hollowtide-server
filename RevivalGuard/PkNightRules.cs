@@ -133,7 +133,11 @@ namespace RevivalGuard
         /// <summary>The rotation, in order from the first run (round 0 = the first). Every one is outdoors and far
         /// from Holtburg (42.1N 33.6E), the arrival town (owner: never near the Holtburg arrival area). Owner 2026-11-20
         /// ("Yes, this Sunday"): the Dark Isle takes round 0 and the Mite Maze moves to the end. Owner 2026-11-23 (every
-        /// other Sunday): the rotation moves one spot per held round, so Dec 6 is Zombie Castle and the Mite Maze round 7 (Feb 28).</summary>
+        /// other Sunday): the rotation moves one spot per held round, so Dec 6 is Zombie Castle. Owner 2026-11-27: Asheron's
+        /// Castle right after Zombie Castle (round 2, Dec 20; the rest one round later, the Mite Maze round 8, Mar 14) and
+        /// Arwic's east lawn at the end (round 9, Mar 28). Owner 2026-11-27, four Darktide recall spots where players fought,
+        /// after it: Aphus Lassel (round 10, Apr 11), Sclavavania (11, Apr 25), the Sanctuary (12, May 9), the Infested Area
+        /// (13, May 23).</summary>
         public static readonly Spot[] SPOTS =
         {
             // the owner's 2017 Darktide footage "PVP at 150 Island": the open sand of the south beach by the lifestone
@@ -145,6 +149,14 @@ namespace RevivalGuard
                        LandNs = 84.5667, LandEw = 58.25, HomeNs = 84.5833, HomeEw = 58.1667, ClearMetres = 300 },
             new Spot { Key = "zombiecastle", Name = "Zombie Castle", Where = "45.2S 39.1E", Ns = -45.2, Ew = 39.1,
                        Near = "the castle ruin in southern Osteth, by the Zombie Castle estates", Levels = "20 and up" },
+            // the open hilltop north of the castle buildings (D59A/D69A, z 340-370 on the atlas walk grid, no NPC or
+            // creature generator on it; the Island's harmless rabbit and chicken gens only). The "Asheron's Castle"
+            // portal (35293, on the Island beside the Eastham portal's landing) sets players down at its south edge
+            // (D59A0039, 72 m from the centre). Asheron, the wardens and the Tower Guardian (level 750, fights only when
+            // attacked) stand in the courtyard 80-110 m south. No event portal: the retail way in is open to all.
+            new Spot { Key = "asheronscastle", Name = "Asheron's Castle", Where = "21.5N 69.3E", Ns = 21.4667, Ew = 69.28,
+                       Near = "the open hilltop north of Asheron's Castle, where the Asheron's Castle portal lands", Levels = "any level",
+                       Way = "From Eastham, take the Asheron's Island portal north-east of town, then the Asheron's Castle portal beside where you land: the hill is just north of the castle." },
             new Spot { Key = "colosseum", Name = "the Colosseum", Where = "11.2S 37.5E", Ns = -11.24, Ew = 37.54,
                        Near = "the old arena on the plains south-east of Tufa", Levels = "any level" },
             new Spot { Key = "empyreanruin", Name = "the Empyrean Ruin", Where = "81.4N 32.9W", Ns = 81.4, Ew = -32.9,
@@ -158,6 +170,41 @@ namespace RevivalGuard
             new Spot { Key = "mitemaze", Name = "the Mite Maze", Where = "41.1N 57.0E", Ns = 41.08, Ew = 57.03,
                        Near = "the snowy valley north of Arwic, by the Mite Maze portal", Levels = "any level",
                        Way = "From Arwic, leave by the west gate and head north." },
+            // the owner's "prominent" east lawn where Darktide fought (PkBattlefieldRules arwiceast, 33.4N 57.2E), moved
+            // 24 m east to keep 67 m from the Risen Shelf portal by the east wall. Open grass outside the walls (C7A9, the
+            // walk grid all walkable for 40 m); 84 m from the east wall, 175 m from the Town Network drop. Arwic's walls
+            // have no east gate: out by the south gate and round.
+            new Spot { Key = "arwiclawn", Name = "Arwic's east lawn", Where = "33.4N 57.3E", Ns = 33.4, Ew = 57.3,
+                       Near = "the open grass just east of Arwic's walls", Levels = "any level",
+                       Way = "From Arwic, leave by the south gate and walk east along the outside of the wall: the lawn is past the east wall." },
+            // DARKTIDE RECALL SPOTS (owner 2026-11-27). Each centre is open ground near where the recall lands, clear of
+            // its NPCs, portals and houses; none has an event portal (the recall, or a normal portal, is the way in).
+            // "Monkey island": Recall Aphus Lassel (spell 2931; the portal gem's "Entrance to Tusker Island") and the Town
+            // Network's Oolutanga's Refuge portal both land in the town at F682 (146, 50), 2.2N 95.4E. The centre is the
+            // open low ground 160 m west, down the hill (z 12 to the town's 58), 100 m or more from anything placed.
+            new Spot { Key = "aphuslassel", Name = "Aphus Lassel", Where = "2.3N 94.7E", Ns = 2.2747, Ew = 94.7403,
+                       Near = "the open low ground west of Aphus Lassel on Tusker Island, below where its recall lands", Levels = "60 and up",
+                       Way = "Cast Recall Aphus Lassel, or take the Town Network portal to Oolutanga's Refuge, then walk about 160 metres west, down the hill out of town." },
+            // "near 21.9S 65.6E" (owner typed 21.95.65.6E; the south reading is the place: nothing lands near 21.9N 65.6E):
+            // the Sclavavania cottage village, where the Sclavavania Portal lands (D164 (77, 19), 21.9S 65.5E). The
+            // centre is the open grass 96 m south, past the last cottages.
+            new Spot { Key = "sclavavania", Name = "Sclavavania", Where = "22.3S 65.5E", Ns = -22.321, Ew = 65.519,
+                       Near = "the open grass just south of the Sclavavania cottages", Levels = "30 and up",
+                       Way = "From Sawato, take the Sclavavania Portal in the ring of settlement portals north-east of town, then walk south out of the cottages." },
+            // "near 82.5S 93.4E": the Cathedral Ruins of Ithaenc, where Sanctuary Recall (spell 2023, the Scroll of
+            // Sanctuary Recall) lands inside the ruin (F418 (37, 49)) beside the Cathedral Ruins Portal's landing. The ruin
+            // is walls and terraces with no open 40 m anywhere, so the centre is the open slope 156 m north-west, below it
+            // (z 47-79 to the ruin's 160-190). Creatures round it are level 70 to 115.
+            new Spot { Key = "sanctuary", Name = "the Sanctuary", Where = "82.1S 92.9E", Ns = -82.0833, Ew = 92.9,
+                       Near = "the open slope north-west of the Cathedral Ruins of Ithaenc, below the Sanctuary", Levels = "80 and up",
+                       Way = "Cast Sanctuary Recall, then leave the ruins and go about 150 metres north-west, down the slope." },
+            // 43.8N 54.9E: Paradox-touched Olthoi Infested Area Recall (spell 4198, the Scroll of 'Infested Area' Recall)
+            // lands at the camp on the ridge, C4B6 (23, 26), beside Ethan Wintermaine and Hisham al-Evv. The centre is
+            // the open ridge 96 m west, every point 100 m or more from the Paradox olthoi generators (level 265) to the
+            // south-east and 74 m or more from the camp's NPCs.
+            new Spot { Key = "infestedarea", Name = "the Infested Area", Where = "43.7N 54.5E", Ns = 43.709, Ew = 54.495,
+                       Near = "the open ridge west of the Paradox-touched Olthoi Infested Area camp", Levels = "100 and up",
+                       Way = "Read a Scroll of 'Infested Area' Recall to land at the camp, then walk about 100 metres west along the ridge." },
         };
 
         // ---------------------------------------------------------------- the event portals (a spot with HasGate)

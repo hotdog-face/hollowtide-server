@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Text;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Server.Entity;
@@ -25,6 +28,12 @@ namespace RevivalGuard
     /// kill, no XP, no corpse, and the next tester finds it whole. A single blow counts at most its 10,000 health (ACE
     /// records what the vital lost). When nobody is testing on it any more, its enchantments (a tester's vulnerabilities
     /// and DoTs) are cleared. Off: ACE as is (the drudge can be killed; 0 XP, no loot). Proven on shard2 2026-11-22.
+    ///
+    /// Every finished run also goes to the event log as dummy_dps (owner 2026-11-27, balance review "measure damage"):
+    /// build (the skill that did most of it: melee, 2h, missile, war, void, life, summon; TargetDummyRule), template (the
+    /// player's specialized combat skills), damage, seconds, damage per second, hits, crits, over time, evaded, resisted,
+    /// biggest, damage by source and the buffed skill. A pet's hits count for its owner (build summon).
+    /// tools/reports/kill_speed_weekly.py tables it per build each week.
     /// </summary>
     public static class TargetDummy
     {
@@ -46,6 +55,8 @@ namespace RevivalGuard
             public int Hits, Crits, Over, Misses, Resists;
             public uint Biggest;
             public bool Pending;
+            public readonly Dictionary<string, long> Src = new Dictionary<string, long>();
+            public readonly Dictionary<string, uint> SkillAt = new Dictionary<string, uint>();   // buffed skill seen per build
         }
 
         static readonly object s_Lock = new object();
@@ -56,6 +67,7 @@ namespace RevivalGuard
         // DamageTarget); an Add with neither is damage over time or a harm spell.
         [ThreadStatic] static bool t_Crit;
         [ThreadStatic] static bool t_Direct;
+        [ThreadStatic] static Skill t_Skill;   // a projectile's school (its caster may have left Magic mode by the time it lands)
 
         static void Refill(Creature c)
         {
@@ -63,10 +75,30 @@ namespace RevivalGuard
             if (c.Health.Current < max) c.Health.Current = max;
         }
 
-        static void Record(Creature dummy, Player p, uint amount, bool crit, bool direct, bool miss = false, bool resist = false)
+        static Skill SkillOf(MagicSchool? school) => school switch
+        {
+            MagicSchool.WarMagic => Skill.WarMagic, MagicSchool.VoidMagic => Skill.VoidMagic, MagicSchool.LifeMagic => Skill.LifeMagic,
+            MagicSchool.CreatureEnchantment => Skill.CreatureEnchantment, MagicSchool.ItemEnchantment => Skill.ItemEnchantment,
+            _ => Skill.None,
+        };
+
+        /// <summary>The build a hit counts for and the buffed skill behind it.</summary>
+        static (string kind, uint skill) KindOf(Player p, Skill skill, bool pet)
+        {
+            try
+            {
+                if (pet) return (TargetDummyRule.SUMMON, p.GetCreatureSkill(Skill.Summoning)?.Current ?? 0);
+                if (skill == Skill.None) skill = p.GetCurrentAttackSkill();
+                return (TargetDummyRule.KindOf(skill.ToString()), p.GetCreatureSkill(skill)?.Current ?? 0);
+            }
+            catch { return (TargetDummyRule.OTHER, 0); }
+        }
+
+        static void Record(Creature dummy, Player p, uint amount, bool crit, bool direct, bool miss = false, bool resist = false, Skill skill = Skill.None, bool pet = false)
         {
             var key = (dummy.Guid.Full, p.Guid.Full);
             var now = DateTime.UtcNow;
+            var (kind, level) = KindOf(p, skill, pet);
             bool schedule = false;
             lock (s_Lock)
             {
@@ -76,6 +108,8 @@ namespace RevivalGuard
                 if (resist) s.Resists++; else if (miss) s.Misses++; else if (direct) s.Hits++; else s.Over++;
                 if (crit) s.Crits++;
                 if (amount > s.Biggest) s.Biggest = amount;
+                s.Src[kind] = (s.Src.TryGetValue(kind, out var had) ? had : 0) + amount;
+                if (!s.SkillAt.TryGetValue(kind, out var lv) || level > lv) s.SkillAt[kind] = level;
                 if (!s.Pending) { s.Pending = true; schedule = true; }
             }
             if (schedule) Check(dummy, p, QUIET_S);
@@ -115,9 +149,38 @@ namespace RevivalGuard
                 try { dummy.EnchantmentManager.RemoveAllEnchantments(); Refill(dummy); }
                 catch (Exception e) { TickGuard.Report("TargetDummy.Reset", e); }
             }
+            try { Log(p, s); } catch (Exception e) { TickGuard.Report("TargetDummy.Log", e); }
             if (p.Session == null || p.IsDestroyed) return;
             foreach (var line in Lines(dummy.Name, s))
                 p.Session.Network.EnqueueSend(new GameMessageSystemChat(line, ChatMessageType.Broadcast));
+        }
+
+        static string F(double d) => d.ToString("0.#", CultureInfo.InvariantCulture);
+
+        /// <summary>The run, to the event log (dummy_dps), for the weekly table.</summary>
+        static void Log(Player p, Run s)
+        {
+            if (s.Total <= 0 && s.Misses == 0 && s.Resists == 0) return;
+            var secs = (s.Last - s.First).TotalSeconds;
+            string build = TargetDummyRule.Dominant(s.Src);
+            var spec = new List<string>(); var trained = new List<string>();
+            try
+            {
+                foreach (var kv in p.Skills)
+                {
+                    if (kv.Value.AdvancementClass == SkillAdvancementClass.Specialized) spec.Add(kv.Key.ToString());
+                    else if (kv.Value.AdvancementClass == SkillAdvancementClass.Trained) trained.Add(kv.Key.ToString());
+                }
+            }
+            catch { }
+            var sb = new StringBuilder();
+            sb.Append(",\"build\":\"").Append(build).Append("\",\"tmpl\":\"").Append(TargetDummyRule.Template(spec, trained)).Append('"')
+              .Append(",\"dmg\":").Append(s.Total).Append(",\"secs\":").Append(F(secs)).Append(",\"dps\":").Append(F(TargetDummyRule.Dps(s.Total, secs)))
+              .Append(",\"hits\":").Append(s.Hits).Append(",\"crits\":").Append(s.Crits).Append(",\"over\":").Append(s.Over)
+              .Append(",\"miss\":").Append(s.Misses).Append(",\"res\":").Append(s.Resists).Append(",\"big\":").Append(s.Biggest)
+              .Append(",\"skill\":").Append(s.SkillAt.TryGetValue(build, out var lv) ? lv : 0)
+              .Append(",\"src\":{").Append(string.Join(",", s.Src.Select(kv => $"\"{kv.Key}\":{kv.Value}"))).Append('}');
+            Telemetry.Emit("dummy_dps", p, sb.ToString());
         }
 
         static string[] Lines(string name, Run s)
@@ -148,7 +211,11 @@ namespace RevivalGuard
                     var c = __instance.Creature;
                     if (!Is(c)) return;
                     Refill(c);
-                    if (amount > 0 && attacker is Player p) Record(c, p, amount, crit, direct);
+                    var skill = t_Skill;
+                    t_Skill = Skill.None;
+                    if (amount == 0) return;
+                    if (attacker is Player p) Record(c, p, amount, crit, direct, skill: skill);
+                    else if (attacker is CombatPet pet && pet.P_PetOwner is Player owner) Record(c, owner, amount, crit, direct, pet: true);
                 }
                 catch (Exception e) { Fail("Add", e); }
             }
@@ -197,12 +264,12 @@ namespace RevivalGuard
         [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.TryResistSpell), new[] { typeof(WorldObject), typeof(Spell), typeof(WorldObject), typeof(bool) })]
         static class Resisted
         {
-            static void Postfix(WorldObject __instance, WorldObject target, bool __result)
+            static void Postfix(WorldObject __instance, WorldObject target, Spell spell, bool __result)
             {
                 try
                 {
                     if (!__result || !(__instance is Player p) || !Is(target)) return;
-                    Record((Creature)target, p, 0, false, true, resist: true);
+                    Record((Creature)target, p, 0, false, true, resist: true, skill: SkillOf(spell?.School));
                 }
                 catch (Exception e) { Fail("Resisted", e); }
             }
@@ -212,7 +279,7 @@ namespace RevivalGuard
         [HarmonyPatch(typeof(SpellProjectile), nameof(SpellProjectile.DamageTarget))]
         static class Bolt
         {
-            static void Prefix(Creature target, bool critical)
+            static void Prefix(SpellProjectile __instance, Creature target, bool critical)
             {
                 try
                 {
@@ -220,11 +287,12 @@ namespace RevivalGuard
                     Refill(target);
                     t_Crit = critical;
                     t_Direct = true;
+                    t_Skill = SkillOf(__instance.Spell?.School);
                 }
                 catch (Exception e) { Fail("DamageTarget", e); }
             }
 
-            static void Postfix() { t_Crit = t_Direct = false; }
+            static void Postfix() { t_Crit = t_Direct = false; t_Skill = Skill.None; }
         }
 
         /// <summary>The last guard: whatever got its health to 0 (a single blow over 10,000), it does not die.</summary>

@@ -15,6 +15,8 @@ namespace RevivalGuard
     ///   * The first gank: a character under 30 killed by another player for the first time gets one note (a notice at
     ///     the top of the screen plus chat lines) once it is out of portal space at its lifestone.
     ///   * The swap coins: at level 30, a character that has not collected its Imbue Swap Coins is told where they are.
+    ///   * Luminance (owner 2026-11-27): at level 200, or at the first login past it, a character without luminance is told
+    ///     where it starts (Nalicana's Test).
     /// Each once per character (a quest stamp). Switch rg_newcomer_notes (default on); off, nothing is said or stamped.
     ///
     /// Hooks: Player.HandlePKDeathBroadcast (ACE's PK-death step, still at the death spot; PkRenown uses it too) marks the
@@ -35,7 +37,7 @@ namespace RevivalGuard
 
         internal static void Register()
         {
-            PkCommon.RegisterBool(P_ON, true, "RevivalGuard NewcomerNotes: the first-gank note to characters under 30 and the Imbue Swap Coin notice at 30 (false: say nothing)");
+            PkCommon.RegisterBool(P_ON, true, "RevivalGuard NewcomerNotes: the first-gank note to characters under 30, the Imbue Swap Coin notice at 30 and the luminance notice at 200 (false: say nothing)");
             Mod.Log.Info($"[RevivalGuard] NewcomerNotes: {(On ? "ON" : "off")} ({P_ON}); first gank under {NewcomerNotesRule.GANK_UNDER}, swap coins at {NewcomerNotesRule.SWAP_LEVEL}");
         }
 
@@ -154,25 +156,56 @@ namespace RevivalGuard
             static void Prefix(Player __instance, out int __state) => __state = __instance.Level ?? 1;
             static void Postfix(Player __instance, int __state)
             {
-                try
-                {
-                    var p = __instance;
-                    if (!On || p?.Session == null) return;
-                    if (!NewcomerNotesRule.SwapNoticeDue(__state, p.Level ?? 1, p.QuestManager.HasQuest(NewcomerNotesRule.SWAP_FLAG),
-                            p.QuestManager.HasQuest(NewcomerNotesRule.SWAP_GIFT_QUEST), Recruiting.BotOrStaff(p) || Mercenaries.IsMerc(p))) return;
-                    p.QuestManager.Stamp(NewcomerNotesRule.SWAP_FLAG);
-                    var chain = new ActionChain();
-                    chain.AddDelaySeconds(8);   // after the level-up lines and the recruit offer
-                    chain.AddAction(p, () =>
-                    {
-                        try { if (PlayerManager.GetOnlinePlayer(p.Guid) == p) PkCommon.Say(p, NewcomerNotesRule.SwapLine()); }
-                        catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] NewcomerNotes swap line: {e.Message}"); }
-                    });
-                    chain.EnqueueChain();
-                    Mod.Log.Info($"[RevivalGuard] NewcomerNotes: swap-coin notice to {p.Name} at level {p.Level}");
-                }
+                try { SwapCheck(__instance, __state); }
                 catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] NewcomerNotes level-up: {e.Message}"); }
+                try { LuminanceCheck(__instance, 10); }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] NewcomerNotes luminance: {e.Message}"); }
             }
+        }
+
+        static void SwapCheck(Player p, int before)
+        {
+            if (!On || p?.Session == null) return;
+            if (!NewcomerNotesRule.SwapNoticeDue(before, p.Level ?? 1, p.QuestManager.HasQuest(NewcomerNotesRule.SWAP_FLAG),
+                    p.QuestManager.HasQuest(NewcomerNotesRule.SWAP_GIFT_QUEST), Recruiting.BotOrStaff(p) || Mercenaries.IsMerc(p))) return;
+            p.QuestManager.Stamp(NewcomerNotesRule.SWAP_FLAG);
+            SayLater(p, 8, NewcomerNotesRule.SwapLine());   // after the level-up lines and the recruit offer
+            Mod.Log.Info($"[RevivalGuard] NewcomerNotes: swap-coin notice to {p.Name} at level {p.Level}");
+        }
+
+        // ------------------------------------------------------------------ luminance at 200
+
+        [HarmonyPatch(typeof(Player), nameof(Player.PlayerEnterWorld))]
+        static class LuminanceAtLogin
+        {
+            static void Postfix(Player __instance)
+            {
+                try { LuminanceCheck(__instance, 12); }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] NewcomerNotes luminance login: {e.Message}"); }
+            }
+        }
+
+        static void LuminanceCheck(Player p, double delayS)
+        {
+            if (!On || p?.Session == null) return;
+            bool open = p.QuestManager.HasQuest(NewcomerNotesRule.LUM_OPEN_QUEST) || (p.MaximumLuminance ?? 0) > 0;
+            if (!NewcomerNotesRule.LuminanceNoticeDue(p.Level ?? 1, p.QuestManager.HasQuest(NewcomerNotesRule.LUM_FLAG), open,
+                    Recruiting.BotOrStaff(p) || Mercenaries.IsMerc(p))) return;
+            p.QuestManager.Stamp(NewcomerNotesRule.LUM_FLAG);
+            SayLater(p, delayS, NewcomerNotesRule.LuminanceLine());
+            Mod.Log.Info($"[RevivalGuard] NewcomerNotes: luminance notice to {p.Name} at level {p.Level}");
+        }
+
+        static void SayLater(Player p, double delayS, string line)
+        {
+            var chain = new ActionChain();
+            chain.AddDelaySeconds(delayS);
+            chain.AddAction(p, () =>
+            {
+                try { if (PlayerManager.GetOnlinePlayer(p.Guid) == p) PkCommon.Say(p, line); }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] NewcomerNotes line: {e.Message}"); }
+            });
+            chain.EnqueueChain();
         }
     }
 }

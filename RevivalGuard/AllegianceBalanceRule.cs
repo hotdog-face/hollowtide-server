@@ -46,6 +46,37 @@ namespace RevivalGuard
         public static long Apply(long amount, double bonus) =>
             amount <= 0 ? amount : (long)Math.Min(long.MaxValue, Apply((ulong)amount, bonus));
 
+        // ------------------------------------------------------------------ accounts, not characters (owner 2026-11-27)
+        // "Alt-proof alleg bonus": an allegiance's size and activity are its distinct ACCOUNTS, so one player's alts do not
+        // make it look bigger or busier, and a main and its alts alone (one account) get no bonus at all; pass-up between
+        // two characters of one account never gets the bonus.
+
+        /// <summary>One member for the count: its account (0 = unknown, then it counts as an account of its own) and
+        /// whether it played this week.</summary>
+        public struct Who { public uint Guid, Account; public bool Active; }
+
+        /// <summary>(distinct accounts, distinct accounts with a member active this week). Unknown accounts count by
+        /// character.</summary>
+        public static (int accounts, int active) Accounts(IEnumerable<Who> members)
+        {
+            var all = new HashSet<ulong>();
+            var act = new HashSet<ulong>();
+            foreach (var m in members ?? Enumerable.Empty<Who>())
+            {
+                ulong key = m.Account != 0 ? m.Account : (1UL << 32) | m.Guid;
+                all.Add(key);
+                if (m.Active) act.Add(key);
+            }
+            return (all.Count, act.Count);
+        }
+
+        /// <summary>Two characters of the same known account.</summary>
+        public static bool SameAccount(uint a, uint b) => a != 0 && a == b;
+
+        /// <summary>The pass-up bonus for one vassal-to-patron pass: none between characters of one account.</summary>
+        public static double PassupFor(double bonus, uint vassalAccount, uint patronAccount) =>
+            SameAccount(vassalAccount, patronAccount) ? 0 : bonus;
+
         /// <summary>The whole percent the panel shows ("+50%").</summary>
         public static int Percent(double bonus) => (int)Math.Round(bonus * 100, MidpointRounding.AwayFromZero);
 

@@ -216,9 +216,11 @@ namespace RevivalGuard
         internal static void OnEnterWorld(WorldObject wo)
         {
             if (!(wo is Creature c) || c is Player || c.Generator == null || c.CurrentLandblock != null || c.Location == null) return;
-            if (!ChampOn || ThreadSafeRandom.Next(0.0f, 1.0f) >= D("rg_champion_chance")) return;
-            if (!Eligible(c)) return;
+            if (!ChampOn) return;
             ushort lb = (ushort)(c.Location.Cell >> 16);
+            // fewer on the Tusker and Stomper grounds, more in under-used dungeons and the champion hunt's (HuntGrounds)
+            if (ThreadSafeRandom.Next(0.0f, 1.0f) >= HuntGrounds.ChampionChance(D("rg_champion_chance"), lb)) return;
+            if (!Eligible(c)) return;
             if (Skipped(lb)) return;
             if (HasChampion(lb) || AliveCount() >= D("rg_champion_max")) { s_SkippedCap++; return; }
             if (Busy(lb)) { s_SkippedBusy++; return; }
@@ -310,6 +312,7 @@ namespace RevivalGuard
             if (!s_Champs.TryGetValue(c, out var ch)) return;
             s_Slain++;
             s_ChampByLb.TryRemove(ch.Lb, out _);
+            HuntGrounds.ChampionSlain(ch.Lb);
             if (killer == null) { Mod.Log.Info($"[RevivalGuard] MonsterFun: champion {ch.Name} died, no player killer"); return; }
             var fs = killer.Fellowship?.FellowshipName;
             string line = string.IsNullOrWhiteSpace(fs)

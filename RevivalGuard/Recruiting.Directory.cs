@@ -32,6 +32,9 @@ namespace RevivalGuard
         {
             public uint Monarch; public IPlayer M; public Allegiance A; public string Name;
             public int Members, Active, Online, Avg; public double SeenHours; public List<string> Names;
+            /// <summary>Distinct accounts, and those with a member on this week (owner 2026-11-27: size and activity are
+            /// accounts, so alts neither crowd nor shrink an allegiance's place or bonus).</summary>
+            public int Accounts, ActiveAccounts;
         }
 
         static List<Dir> s_Dir = new List<Dir>();
@@ -78,8 +81,10 @@ namespace RevivalGuard
                     sum += ip.Level ?? 1;
                 }
                 var a = Loaded(kv.Key);
+                var (accounts, activeAccounts) = SmallAllegianceBonus.Count(all, now);
                 res.Add(new Dir
                 {
+                    Accounts = accounts, ActiveAccounts = activeAccounts,
                     Monarch = kv.Key, M = m, A = a, Name = Mansions.AllegianceLabel(a, m), Members = all.Count, Active = active,
                     Online = online, Avg = (int)Math.Round((double)sum / all.Count), SeenHours = last == null ? -1 : (now - last.Value).TotalHours,
                     Names = all.Select(x => x.Name).ToList(),
@@ -182,7 +187,7 @@ namespace RevivalGuard
             try { perm = (int)p.AllegiancePermissionLevel; } catch { }
             bool locked = false;
             try { locked = a.IsLocked; } catch { }
-            var (pu, lum) = BotOrStaff(a.Monarch?.Player) ? (0.0, 0.0) : SmallAllegianceBonus.For(a.TotalMembers);
+            var (pu, lum) = SmallAllegianceBonus.For(a);   // by accounts; none for a bot's or staff's
             sb.Append(",\"me\":{\"perm\":").Append(perm).Append(",\"name\":").Append(Q(a.AllegianceName))
               .Append(",\"label\":").Append(Q(RecruitRule.Cap(Mansions.AllegianceLabel(a, a.Monarch?.Player))))
               .Append(",\"motd\":").Append(Q(a.AllegianceMotd)).Append(",\"motdBy\":").Append(Q(a.AllegianceMotdSetBy))

@@ -143,7 +143,10 @@
     { "min": 195, "max": 275, "lines": [
       "Folk of your standing keep a round of old doors that open once a day. Walk them all, then hunt between.",
       "They say Diemos waits for those who have won ten times in the Colosseum.",
-      "The Gauntlet is for fellowships, not heroes. Bring friends." ] },
+      "The Gauntlet is for fellowships, not heroes. Bring friends.",
+      "Nalicana in Asheron's Castle wants Battle Lord Gregor's Mnemosyne. Until you bring it, they say, no luminance sticks to you." ] },
+    { "min": 175, "max": 275, "lines": [
+      "The societies are recruiting. Jondor Torgren in Zaikhal sends folk on to the recruiters in Ayan Baqur." ] },
     { "min": 1, "max": 275, "lines": [
       "Rand the Game Hunter pays every day for game brought in, whatever your strength.",
       "The factions keep tasks for any who will take them, and they pay by the day." ] }

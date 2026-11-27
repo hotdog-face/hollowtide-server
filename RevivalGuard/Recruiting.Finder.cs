@@ -442,7 +442,8 @@ namespace RevivalGuard
             var byKey = dir.ToDictionary(d => d.Monarch);
             var sorted = AllegianceBalanceRule.Sort(dir.Select(d => new AllegianceBalanceRule.Row
             {
-                Monarch = d.Monarch, Name = d.Name, Members = d.Members, Active = d.Active, Online = d.Online,
+                // accounts, not characters: a main and its alts count once in the order (owner 2026-11-27)
+                Monarch = d.Monarch, Name = d.Name, Members = d.Accounts, Active = d.ActiveAccounts, Online = d.Online,
                 Fit = listed.TryGetValue(d.Monarch, out var x0) ? AllegianceFinderRule.Fit(lvl, x0.E.LevelMin, x0.E.LevelMax) : 1.0,
             }));
             uint mine = p.MonarchId ?? (p.AllegianceNode != null && p.AllegianceNode.IsMonarch && p.AllegianceNode.HasVassals ? p.Guid.Full : 0u);
@@ -457,7 +458,7 @@ namespace RevivalGuard
                 listed.TryGetValue(row.Monarch, out var x);
                 if (n++ > 0) sb.Append(',');
                 string hall = d.A != null ? HallOf(d.A, d.Monarch) : null;
-                var (pu, _) = SmallAllegianceBonus.For(d.Members);
+                var (pu, _) = SmallAllegianceBonus.For(d.Accounts);
                 sb.Append("{\"m\":").Append(d.Monarch).Append(",\"n\":").Append(Q(RecruitRule.Cap(d.Name))).Append(",\"mo\":").Append(Q(d.M.Name))
                   .Append(",\"lst\":").Append(x != null ? 1 : 0).Append(",\"mem\":").Append(d.Members).Append(",\"act\":").Append(d.Active)
                   .Append(",\"on\":").Append(d.Online).Append(",\"avg\":").Append(d.Avg).Append(",\"seen\":").Append((int)Math.Round(d.SeenHours))
@@ -550,7 +551,7 @@ namespace RevivalGuard
             yield return SmallAllegianceBonus.Paid();
             yield return $"{dir.Count} allegiances in the directory:";
             foreach (var d in dir.OrderByDescending(x => x.Members))
-                yield return $"{RecruitRule.Cap(d.Name)}: {d.Members} ({d.Online} on, {d.Active} this week, bonus +{AllegianceBalanceRule.Percent(SmallAllegianceBonus.For(d.Members).passup)}%): {string.Join(", ", d.Names.Take(20))}";
+                yield return $"{RecruitRule.Cap(d.Name)}: {d.Members} ({d.Accounts} accounts, {d.Online} on, {d.Active} this week on {d.ActiveAccounts} accounts, bonus +{AllegianceBalanceRule.Percent(SmallAllegianceBonus.For(d.Accounts).passup)}%): {string.Join(", ", d.Names.Take(20))}";
         }
 
         static void ConsoleDir(Session session, params string[] p)

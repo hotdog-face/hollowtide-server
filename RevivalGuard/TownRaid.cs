@@ -555,7 +555,12 @@ namespace RevivalGuard
                     if (Tracing) Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} {c.Name} went indoors, sent back to its point");
                 }
                 else if (targets.Count > 0 && c.AttackTarget == null && c.MonsterState != Creature.State.Return && R.InBox(s_Cfg, here.X, here.Y, 0))
-                    March(r, c, here, targets, now);
+                {
+                    // never march on a player this raider may not attack (under its protect level, 11-27 balance audit: tier-1
+                    // raiders walked onto level-1 arrivals at the Holtburg lifestone, then let go only once there)
+                    var mine = targets.Where(p => !Protected(p, c)).ToList();
+                    if (mine.Count > 0) March(r, c, here, mine, now);
+                }
             }
             if (!r.Arrived && alive.Any(c => { if (c.Location == null) return false; var at = Local(c.Location); return R.InBox(s_Cfg, at.X, at.Y, 0); }))
             {

@@ -743,6 +743,7 @@ namespace RevivalGuard
             wo.SetProperty(PropertyBool.Stuck, true);   // as the datafix clones it: nobody picks it up
             wo.TimeToRot = -1;
             if (size.HasValue) wo.ObjScale = size.Value;
+            NoFall(wo);
             wo.Location = new ACE.Entity.Position(pose);
             wo.Location.LandblockId = new LandblockId(wo.Location.GetCell());
             if (!wo.EnterWorld()) { wo.Destroy(); reply($"{wo.Name} could not be placed there."); return null; }
@@ -863,7 +864,26 @@ namespace RevivalGuard
             wo.Location = wo.PhysicsObj.Position.ACEPosition();
             wo.Location.Rotation = pos.Rotation;   // SetPosition keeps the frame's turn, but be exact
             if (prev.Landblock != wo.Location.Landblock) LandblockManager.RelocateObjectForPhysics(wo, true);
+            if (NoFall(wo))
+            {
+                wo.EnqueueBroadcastPhysicsState();
+                // and the whole object again: a client that had it from before a restart's layer was put back (logged in right
+                // there, the block loading under it) kept drawing it fallen on the floor after the SetState alone (box test 11-26)
+                wo.EnqueueBroadcast(new GameMessageUpdateObject(wo));
+            }
             wo.SendUpdatePosition(true);
+            return true;
+        }
+
+        /// <summary>A decorated thing stays where it was put. A retail lamp or painting has Gravity (PhysicsState 0x400), and every
+        /// client, ours (ServerLink.GravitySettle) and retail's, lets such a thing fall to the first floor it can collide with:
+        /// a lamp on a table without physics landed on the ground (owner F7 261126-0025) and a painting hung on a Staff Base wall
+        /// fell to the floor (261126-0026), though the server and the layer kept the height. True = it had Gravity (a placed
+        /// object then needs its physics state sent again).</summary>
+        internal static bool NoFall(WorldObject wo)
+        {
+            if (wo == null || wo is Creature || wo.GravityStatus == false) return false;
+            wo.GravityStatus = false;
             return true;
         }
 

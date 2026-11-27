@@ -35,6 +35,22 @@ namespace RevivalGuard
         public static bool SwapNoticeDue(int before, int now, bool alreadyNoticed, bool hasCoins, bool botOrStaff) =>
             before < SWAP_LEVEL && now >= SWAP_LEVEL && !alreadyNoticed && !hasCoins && !botOrStaff;
 
+        /// <summary>LUMINANCE AT 200 (owner 2026-11-27, balance review: all four players past 200 had none, every luminance
+        /// award lost): one notice at level LUM_LEVEL, or at the first login at or past it, to a character whose luminance
+        /// is not open yet (Nalicana's flag, or a luminance maximum).</summary>
+        public const int LUM_LEVEL = 200;
+        public const string LUM_FLAG = "RgLuminanceNotice";
+        /// <summary>Nalicana stamps it when she takes Battle Lord Gregor's Mnemosyne (quest-guide oracleportalentry).</summary>
+        public const string LUM_OPEN_QUEST = "OracleLuminanceRewardsAccess_1110";
+
+        public static bool LuminanceNoticeDue(int level, bool alreadyNoticed, bool luminanceOpen, bool botOrStaff) =>
+            level >= LUM_LEVEL && !alreadyNoticed && !luminanceOpen && !botOrStaff;
+
+        /// <summary>The luminance notice: retail content, where to go, what is lost until then.</summary>
+        public static string LuminanceLine() =>
+            "You can earn luminance now, but it starts at Nalicana's Test: kill Battle Lord Gregor in the Gurog Ice Cave (84.9N 7.1W) "
+          + "and give his Mnemosyne to Nalicana in Asheron's Castle. Until then every luminance award is lost. The Journal's Where next has it.";
+
         /// <summary>What the server knew at the moment the note is written. Null / negative = unknown or off: that line
         /// is left out rather than guessed.</summary>
         public sealed class Facts

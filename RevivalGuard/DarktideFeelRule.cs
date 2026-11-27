@@ -192,9 +192,21 @@ namespace RevivalGuard
 
         /// <summary>The last owner's name: Darktide people first (the server-only names file), else the chat-corpus
         /// names the notes always used. Same house and vacancy, same name.</summary>
-        public static string LastOwner(IReadOnlyList<string> darktide, IReadOnlyList<string> other, ulong roll, Func<string, bool> inUse, Func<string, bool> ok)
+        public static string LastOwner(IReadOnlyList<string> darktide, IReadOnlyList<string> other, ulong roll, Func<string, bool> inUse, Func<string, bool> ok) =>
+            LastOwner(null, darktide, other, roll, inUse, ok);
+
+        /// <summary>Share of capsule houses whose last owner comes from the home list first (names seen recalling home or on
+        /// an apartment/cottage panel in the owner's retail screenshots): ~35 names over ~330 named houses, so about one
+        /// house each instead of every house drawing from 35.</summary>
+        public const int HOMES_PCT = 10;
+
+        /// <summary>Owner 2026-11-27: the names read from his retail screenshots. <paramref name="homes"/> (people with
+        /// evidence of a house) for HOMES_PCT of houses, then Darktide (his own screenshots), then the rest.</summary>
+        public static string LastOwner(IReadOnlyList<string> homes, IReadOnlyList<string> darktide, IReadOnlyList<string> other, ulong roll, Func<string, bool> inUse, Func<string, bool> ok)
         {
-            foreach (var l in new[] { darktide, other })
+            bool homeFirst = homes != null && homes.Count > 0 && (int)((roll >> 17) % 100) < HOMES_PCT;
+            var order = homeFirst ? new[] { homes, darktide, other } : new[] { darktide, other };
+            foreach (var l in order)
             {
                 if (l == null || l.Count == 0) continue;
                 int start = (int)(roll % (ulong)l.Count);

@@ -109,6 +109,7 @@ namespace RevivalGuard
             Try(nameof(ServerFirsts), ServerFirsts.Register);
             Try(nameof(MonsterAi), MonsterAi.Register);
             Try(nameof(MonsterFun), MonsterFun.Register);
+            Try(nameof(HuntGrounds), HuntGrounds.Register);     // fewer champions on the Tusker/Stomper grounds, more in quiet dungeons, Director champion hunts (rg_hunt_grounds, off)
             Try(nameof(EventDirector), EventDirector.Register);
             Try(nameof(ScavengerHunt), ScavengerHunt.Register);
             Try(nameof(ExtraDeathLines), ExtraDeathLines.Register);

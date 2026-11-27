@@ -110,9 +110,12 @@ namespace RevivalGuard
         // ---- 3. Corrosion VII and Corruption VII ----------------------------------------------------------------
         public const uint YSANNE = 901420;                                    // Riftwatcher Ysanne (nether-rift-trainer.sql)
         public const uint CORROSION_VII = 43284, CORRUPTION_VII = 43292;     // Scroll of Corrosion VII / Corruption VII
-        public static bool IsVoidScroll(uint wcid) => wcid == CORROSION_VII || wcid == CORRUPTION_VII;
+        // Scroll of Nether Blast VII (void parity 2026-11-27): retail's scroll, but no vendor or loot table has it (ACE's
+        // ScrollSpells void list has no Nether Blast); 2026-11-28-void-parity-2-nether-blast-vii.sql adds it to her shop.
+        public const uint NETHER_BLAST_VII = 44625;
+        public static bool IsVoidScroll(uint wcid) => wcid == CORROSION_VII || wcid == CORRUPTION_VII || wcid == NETHER_BLAST_VII;
 
-        /// <summary>Is this purchase refused? Only at Ysanne, only for the two scrolls, only without Void Magic trained.</summary>
+        /// <summary>Is this purchase refused? Only at Ysanne, only for her void scrolls, only without Void Magic trained.</summary>
         public static bool VoidSaleRefused(uint vendorWcid, IEnumerable<uint> itemWcids, bool voidTrained) =>
             vendorWcid == YSANNE && !voidTrained && itemWcids != null && itemWcids.Any(IsVoidScroll);
 

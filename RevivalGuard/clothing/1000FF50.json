@@ -6,42 +6,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -50,42 +30,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -94,42 +54,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -138,42 +78,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -182,42 +102,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -226,42 +126,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -270,42 +150,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -314,42 +174,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -358,42 +198,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -402,42 +222,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -446,42 +246,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -490,42 +270,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -534,42 +294,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -578,42 +318,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -622,42 +342,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -666,42 +366,22 @@
     {
      "Index": 3,
      "ModelId": "0x01003E6F",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 4,
      "ModelId": "0x01003E70",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 7,
      "ModelId": "0x01003E72",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD2",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     },
     {
      "Index": 8,
      "ModelId": "0x01003E73",
-     "CloTextureEffects": [
-      {
-       "OldTexture": "0x05002CD3",
-       "NewTexture": "0x05002D43"
-      }
-     ]
+     "CloTextureEffects": []
     }
    ]
   },
@@ -713,11 +393,11 @@
      "CloTextureEffects": [
       {
        "OldTexture": "0x050003DA",
-       "NewTexture": "0x05002D43"
+       "NewTexture": "0x05002239"
       },
       {
        "OldTexture": "0x05000CC0",
-       "NewTexture": "0x05002D43"
+       "NewTexture": "0x05002239"
       }
      ]
     }

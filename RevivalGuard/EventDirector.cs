@@ -67,6 +67,7 @@ namespace RevivalGuard
             public string Lost, Defeat;            // a stage row that means the players lost, and what is said then (the Present Raids)
             public bool HeldWins;                  // still running at the end of its time = the players held it (the Hero Token raids)
             public string AwayFrom;                // a world boss (WorldBossSchedule name) whose window, anywhere, keeps it from starting
+            public bool Hunt;                      // the champion hunt (HuntGrounds): no rows; its dungeon, words and box are set at the start
             public bool IsFestival => Festivals != null && Festivals.Length > 0;
         }
 
@@ -791,6 +792,16 @@ namespace RevivalGuard
                 Withdraw = "The shadows have withdrawn from Cragstone.",
                 Evidence = "acomensraidcragstonegen (901334) at 0xBC9E; Umbral Herald of Aerbax 901330 L150, Twisted Shadows 32791 L160, Maelstrom Shadows 22909 L100",
             },
+            // The champion hunt (owner 2026-11-27, balance review "unused dungeons"): an hour of champions in one under-used
+            // dungeon of a level band, bands in turn (HuntGroundsRule.Plan). Ours. No rows: existing monsters made champions
+            // (MonsterFun). Behind rg_hunt_grounds; it runs with the rotation off too. Words and place are set at its start.
+            new Entry
+            {
+                Key = "hunt", Title = "Champions Gather", Where = "an under-used dungeon", Levels = "20 to 199",
+                Regions = new[] { "hunt" }, Box = (0, 0, 0, 0), Start = new string[0], Stop = new string[0], Hunt = true, Minutes = 60,
+                Announce = "", Victory = "", Withdraw = "The champions have gone back into the dark.",
+                Evidence = "HuntGrounds.Table.cs (tools/reports/hunt_grounds.py): quiet dungeons from the live event log and ace_world",
+            },
         };
 
         // ---- switches (ordinary ACE server properties; @modifybool / @modifydouble / @modifystring) ----
@@ -829,6 +840,10 @@ namespace RevivalGuard
             [JsonPropertyName("sinceFest")] public int SinceFest { get; set; } = 1000;   // year-round events since the last festival one
             [JsonPropertyName("manual")] public bool Manual { get; set; }   // the current event was started by staff: it runs out even with the rotation off
             [JsonPropertyName("lastRun")] public Dictionary<string, double> LastRun { get; set; } = new Dictionary<string, double>();
+            [JsonPropertyName("huntTurn")] public int HuntTurn { get; set; }     // the champion hunt's next turn (HuntGroundsRule.Plan)
+            [JsonPropertyName("huntLb")] public int HuntLb { get; set; }         // the running hunt's dungeon, its band
+            [JsonPropertyName("huntLo")] public int HuntLo { get; set; }
+            [JsonPropertyName("huntHi")] public int HuntHi { get; set; }
         }
 
         const string STATE_FILE = "EventDirectorState.json";
@@ -871,7 +886,9 @@ namespace RevivalGuard
             : EventDirectorRules.RETIRED.Contains(festival, StringComparer.OrdinalIgnoreCase) && RetiredSwitch;
         /// <summary>The director runs: rg_event_director on, or a self-running festival (Frostfell, T'thuun's Marauders, a
         /// revived retired event) active with its switch on (EventDirectorRules.DirectorOn; then only that festival's own entries).</summary>
-        static bool Running => EventDirectorRules.DirectorOn(Enabled, f => SelfRunSwitch(f) && SeasonalCalendar.IsFestivalActive(f));
+        static bool Running => EventDirectorRules.DirectorOn(Enabled, f => SelfRunSwitch(f) && SeasonalCalendar.IsFestivalActive(f)) || HuntOn;
+        /// <summary>The champion hunt runs (rg_hunt_grounds), with the rotation off too.</summary>
+        static bool HuntOn => HuntGrounds.On;
         const string P_RETIRED = "rg_event_director_retired";
         static bool RetiredSwitch => PropertyManager.GetBool(P_RETIRED, true).Item;
         /// <summary>Which self-running festivals run their own events now (status lines).</summary>
@@ -981,6 +998,7 @@ namespace RevivalGuard
             var cur = Find(s_State.Current);
             if (cur != null && s_State.EndsAt > now + 60)
             {
+                if (cur.Hunt && !ResumeHunt(cur)) { s_State.Current = null; s_State.Manual = false; Save(); return; }
                 StartRows(cur);
                 s_LastSeenAt = now;
                 Mod.Log.Info($"[RevivalGuard] EventDirector: resumed {cur.Key} after the restart, until {Stamp(s_State.EndsAt)}");
@@ -1023,6 +1041,13 @@ namespace RevivalGuard
         /// ignores the season, the skip list and the opt-in switches, never a busy region or a boss's window.</summary>
         static string Blocked(Entry e, Entry ignore, bool manual, double now)
         {
+            if (e.Hunt)
+            {
+                if (!HuntOn && !manual) return $"{HuntGrounds.P_ON} is off";
+                var plan = HuntGroundsRule.Plan(s_State.HuntTurn);
+                if (plan == null) return "no under-used dungeon in the table";
+                if (s_State.Current != e.Key) e.Box = BoxOf(plan.Value.g.Lb);
+            }
             foreach (var ev in e.Start)
             {
                 if (!EventManager.IsEventAvailable(ev)) return $"ace_world.event has no row '{ev}'";
@@ -1035,7 +1060,7 @@ namespace RevivalGuard
             {
                 if (!EventDirectorRules.FestivalOpen(e.Festivals, SeasonalCalendar.IsFestivalActive)) return $"out of season ({FestivalNames(e)} is not on)";
                 if (e.IsFestival && !FestivalsOn) return $"{P_FESTIVALS} is off";
-                if (!EventDirectorRules.EntryAllowed(Enabled, e.Festivals, SelfRunSwitch)) return $"{P_ENABLED} is off (only Frostfell's, T'thuun's Marauders' and the retired events' own events run, {P_FROSTFELL}, {P_TTHUUN}, {P_RETIRED})";
+                if (!(e.Hunt && HuntOn) && !EventDirectorRules.EntryAllowed(Enabled, e.Festivals, SelfRunSwitch)) return $"{P_ENABLED} is off (only Frostfell's, T'thuun's Marauders' and the retired events' own events run, {P_FROSTFELL}, {P_TTHUUN}, {P_RETIRED})";
                 var skip = (PropertyManager.GetString(P_SKIP, "").Item ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 if (skip.Any(s => s.Equals(e.Key, StringComparison.OrdinalIgnoreCase))) return $"listed in {P_SKIP}";
                 if (e.Key.StartsWith("omens-", StringComparison.OrdinalIgnoreCase) && !PropertyManager.GetBool(P_OMENS, false).Item)
@@ -1073,7 +1098,8 @@ namespace RevivalGuard
         {
             var fest = Catalogue.Select(c => c.IsFestival).ToArray();
             var ok = Catalogue.Select(c => c != exclude && Blocked(c, ignore, manual: false, now) == null).ToArray();
-            return EventDirectorRules.Choose(fest, ok, s_State.Rotation, s_State.FestRotation, s_State.SinceFest, FestEvery);
+            // rotation off, hunts on: the hunt is the only year-round entry, so it alternates with a festival's own events
+            return EventDirectorRules.Choose(fest, ok, s_State.Rotation, s_State.FestRotation, s_State.SinceFest, !Enabled && HuntOn ? 1 : FestEvery);
         }
 
         /// <summary>The next entry by the two round robins (EventDirectorRules.Choose), moving the rotation.</summary>
@@ -1100,6 +1126,7 @@ namespace RevivalGuard
 
         static void Begin(Entry e, double now, bool manual)
         {
+            if (e.Hunt && !BeginHunt(e)) { s_State.NextAt = now + 600; Save(); return; }
             StartRows(e);
             s_State.Current = e.Key;
             s_State.Manual = manual;
@@ -1131,7 +1158,7 @@ namespace RevivalGuard
 
             // Ended by the players: every row off for two checks running (the emotes that hand one
             // stage to the next stop one row and start the other within a second or two).
-            if (!cur.Stop.Any(IsOn))
+            if (!cur.Hunt && !cur.Stop.Any(IsOn))
             {
                 // A Present Raid's rows also go off by themselves when the present is destroyed (its death starts
                 // PresentRaidsDead and the reset stopgap stops it all): a loss, not a win (box 2026-10-29: an undefended
@@ -1188,6 +1215,7 @@ namespace RevivalGuard
 
         static void End(Entry cur, double now, string why, bool announce, bool victory)
         {
+            if (cur.Hunt) EndHunt(cur);
             StopRows(cur, now);
             // T'thuun's raids: the waves after the generators' are spawned by TthuunRaids, not a generator; they go too
             if (TthuunRaidsRule.ByKey(cur.Key) != null)
@@ -1287,6 +1315,52 @@ namespace RevivalGuard
             }
             gen.ProcessGeneratorDestructionDirective(GeneratorDestruct.Destroy);
             return n;
+        }
+
+        // ---- the champion hunt (HuntGrounds) ------------------------------------------------------
+
+        static (int, int, int, int) BoxOf(ushort lb) => (lb >> 8, lb & 0xFF, lb >> 8, lb & 0xFF);
+
+        static void SetHuntWords(Entry e, HuntGroundsRule.Ground g, int lo, int hi)
+        {
+            e.Title = HuntGroundsRule.Title(g);
+            e.Where = g.Entrance ?? g.Name;
+            e.Levels = HuntGroundsRule.Levels(lo, hi);
+            e.Announce = HuntGroundsRule.Announce(g, lo, hi);
+            e.Withdraw = HuntGroundsRule.Ended(g, 0);
+            e.Box = BoxOf(g.Lb);
+        }
+
+        /// <summary>This turn's dungeon and band (HuntGroundsRule.Plan); the turn moves on.</summary>
+        static bool BeginHunt(Entry e)
+        {
+            var plan = HuntGroundsRule.Plan(s_State.HuntTurn);
+            if (plan == null) { Mod.Log.Warn("[RevivalGuard] EventDirector: champion hunt has no dungeon; not started"); return false; }
+            var (g, lo, hi) = plan.Value;
+            s_State.HuntTurn = (s_State.HuntTurn + 1) % 100000;
+            s_State.HuntLb = g.Lb; s_State.HuntLo = lo; s_State.HuntHi = hi;
+            SetHuntWords(e, g, lo, hi);
+            HuntGrounds.HuntStarted(g.Lb);
+            Mod.Log.Info($"[RevivalGuard] EventDirector: champion hunt in {g.Name} (0x{g.Lb:X4}, monsters {g.Lo}-{g.Hi}, {g.Hours:0.#} real hunting hours in the log), levels {lo} to {hi}");
+            return true;
+        }
+
+        /// <summary>After a restart: the same dungeon and band again (false: it is no longer in the table).</summary>
+        static bool ResumeHunt(Entry e)
+        {
+            var g = HuntGroundsRule.At((ushort)s_State.HuntLb);
+            if (g == null || g.Kind != HuntGroundsRule.Kind.Quiet || HuntGroundsRule.EndGame(g)) return false;
+            SetHuntWords(e, g, s_State.HuntLo, s_State.HuntHi);
+            HuntGrounds.HuntStarted(g.Lb);
+            return true;
+        }
+
+        static void EndHunt(Entry e)
+        {
+            var g = HuntGroundsRule.At((ushort)s_State.HuntLb);
+            if (g != null) e.Withdraw = HuntGroundsRule.Ended(g, HuntGrounds.Slain);
+            Mod.Log.Info($"[RevivalGuard] EventDirector: champion hunt in {g?.Name ?? "?"} over, {HuntGrounds.Slain} champion(s) slain there");
+            HuntGrounds.HuntEnded();
         }
 
         // ---- persistence ------------------------------------------------------------------------

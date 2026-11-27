@@ -8,7 +8,7 @@ using HarmonyLib;
 namespace RevivalGuard
 {
     /// <summary>
-    /// A HOUSE NOBODY OWNS HAS NO HOOKS OR CHESTS TO USE, NOT EVEN FOR A STAFF CHARACTER (owner,
+    /// A HOUSE NOBODY OWNS HAS NO HOOKS TO USE, NOT EVEN FOR A STAFF CHARACTER (its chests open for staff since 2026-11-27) (owner,
     /// 2026-09-29: "i was using its hooks before it was purchased. is that normal?").
     ///
     /// For a player it already is: ACE's Hook.CheckUseRequirements refuses to open the hook of a house
@@ -48,22 +48,7 @@ namespace RevivalGuard
         }
     }
 
-    [HarmonyPatch(typeof(Storage), nameof(Storage.CheckUseRequirements))]
-    static class UnownedHouseStorage
-    {
-        static void Postfix(Storage __instance, WorldObject activator, ref ActivationResult __result)
-        {
-            try
-            {
-                if (__result == null || !__result.Success || !(activator is Player player) || !player.IgnoreHouseBarriers) return;
-                var root = __instance.House?.RootHouse;
-                if (root == null || (root.HouseOwner ?? 0) != 0) return;
-                // Storage.CheckUseRequirements' own no-permission branch
-                player.Session.Network.EnqueueSend(new GameEventCommunicationTransientString(player.Session, $"You do not have permission to access {__instance.Name}"));
-                __instance.EnqueueBroadcast(new GameMessageSound(__instance.Guid, Sound.OpenFailDueToLock, 1.0f));
-                __result = new ActivationResult(false);
-            }
-            catch (System.Exception e) { Mod.Log.Warn($"[UnownedHouseGuard] storage: {e.Message}"); }
-        }
-    }
+    // Storage: owner 2026-11-27 ("i dont have the ability as staff to open chests at houses any more", F7 261127-0007 at an
+    // unowned apartment; "Yes, let staff open"): a staff character with IgnoreHouseBarriers opens an unowned house's
+    // storage again, as ACE allows. Players are refused by ACE itself; the hooks above stay refused.
 }

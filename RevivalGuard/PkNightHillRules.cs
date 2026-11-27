@@ -29,12 +29,25 @@ namespace RevivalGuard
         {
             ["darkisle"] = new[] { (84.72, 58.42), (84.47, 58.4367), (84.77, 58.07), (84.87, 57.8367) },
             ["zombiecastle"] = new[] { (-45.2, 39.1), (-45.2833, 38.6167), (-45.4833, 38.8167), (-45.35, 39.2833) },
+            // 2026-11-27, same walk grid: the hilltop is a shelf of about 150 x 90 m (z 340-360), so its points loop round
+            // it and their 40 m circles are 84-99% walkable (the west one 49 m from the castle portal's landing; every
+            // point 87 m or more from the Tower Guardian)
+            ["asheronscastle"] = new[] { (21.4667, 69.28), (21.3, 69.48), (21.4, 69.08), (21.5333, 69.48) },
             ["colosseum"] = new[] { (-11.24, 37.54), (-11.3233, 37.0567), (-11.0567, 37.0567), (-11.0567, 37.39) },
             ["empyreanruin"] = new[] { (81.4, -32.9), (81.3167, -33.3833), (81.5833, -33.3833), (81.3167, -33.1167) },
             ["beachfort"] = new[] { (76.0, -49.05), (75.5833, -49.2667), (75.5167, -49.0), (75.85, -48.8667) },
             ["gaerlan"] = new[] { (57.01, 44.79), (56.9267, 44.3067), (57.1933, 44.3067), (56.9267, 44.5733) },
             ["tumerokfort"] = new[] { (-50.7, -81.8), (-50.25, -81.75), (-50.3833, -81.4833), (-50.65, -81.55) },
             ["mitemaze"] = new[] { (41.08, 57.03), (40.9967, 56.5467), (40.73, 56.68), (40.8633, 56.9467) },
+            // 2026-11-27: open grass east of the walls, all four 67 m or more from the Risen Shelf portal and 84 m or more
+            // from the east wall (the south-east one 38 m from the hand-started Omens raid generator)
+            ["arwiclawn"] = new[] { (33.4, 57.3), (33.7333, 57.3667), (33.4667, 57.7), (33.1667, 57.5333) },
+            // the Darktide recall spots (owner 2026-11-27), same walk grid: every 20 m round a point walkable, the 40 m
+            // circle 99-100%, every point 70 m or more from anything placed
+            ["aphuslassel"] = new[] { (2.2747, 94.7403), (2.3413, 94.2737), (2.008, 94.0737), (2.2747, 94.0737) },
+            ["sclavavania"] = new[] { (-22.321, 65.519), (-22.4543, 65.0523), (-22.2543, 64.8523), (-22.521, 64.8523) },
+            ["sanctuary"] = new[] { (-82.0833, 92.9), (-82.0167, 92.5), (-82.4833, 92.5), (-82.2167, 92.6333) },
+            ["infestedarea"] = new[] { (43.709, 54.495), (43.2423, 54.3617), (43.509, 54.3617), (43.309, 54.5617) },
         };
 
         public static (double Ns, double Ew)[] HillPoints(Spot s) =>

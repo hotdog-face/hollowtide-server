@@ -16,38 +16,7 @@ using R = RevivalGuard.WeenieReloadRule;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// @RELOADWEENIE: ONE WEENIE BACK FROM THE DATABASE, WITHOUT `clearcache weenie`.
-    ///
-    /// A content fix (tools/public-shard/apply-live-ovh.sh) used to end with ACE's `clearcache weenie` and
-    /// `clearcache landblock`: every cached weenie and every landblock's instance list dropped, so the next minutes
-    /// re-read thousands of weenies from MySQL as monsters respawn, and the world hitches. Most fixes change a handful
-    /// of wcids. This drops ONE from WorldDatabaseWithEntityCache (ClearCachedWeenie, plus the class-name and
-    /// scroll-by-spell entries that point at it), so the next object made from that wcid reads the database.
-    ///
-    /// WHAT CHANGES AND WHAT DOES NOT. Every live object owns its biota, a full copy of the weenie's properties
-    /// taken when it was made; the cache only feeds the NEXT one. So after the eviction: generator spawns, loot, vendor
-    /// purchases, crafting results and @create get the new values; anything already made keeps the old ones, and
-    /// that includes every copy in a player's pack or worn (online or not) and a vendor's display copy until the
-    /// vendor itself is remade. Those are never replaced here: they are the player's items.
-    ///
-    /// `respawn` also remakes live copies where that is safe (WeenieReloadRule decides): a generator spawn standing
-    /// idle in a loaded landblock, not in combat, not hurt, not mid-emote, not a pet, not held by anyone, whose
-    /// generator would not destroy itself for losing it. It is destroyed and its own generator profile spawns one
-    /// again at once (Enqueue + ProcessQueue, ACE's own spawn path, so position, palette and stack size come from
-    /// the profile as on any respawn). Placed objects without a generator are named, with @reloadblock as the way
-    /// to remake them.
-    ///
-    /// Runs on the world thread from the PlayerManager.Tick postfix, as @reloadblock does (LandblockReload has the
-    /// why): the console runs commands on its own thread, and Destroy and the generator profiles assume the world
-    /// thread. The audit trail records the command itself (AuditTrail's cmd seam) and the result line we post to
-    /// ACE's Audit channel.
-    ///
-    ///   @reloadweenie 12345            drop wcid 12345 from the cache; report its live copies
-    ///   @reloadweenie 12345 respawn    ...and remake the idle generator spawns among them
-    ///
-    /// Admin command feedback is ours, not retail's.
-    /// </summary>
+    /// <summary>@RELOADWEENIE: one weenie back from the database, WITHOUT `clearcache weenie`.</summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class WeenieReload
     {
@@ -88,8 +57,7 @@ namespace RevivalGuard
             if (session == null) Console.WriteLine($"@reloadweenie {wcid}{(respawn ? " respawn" : "")}: queued for the next world tick");
         }
 
-        // A content fix can name dozens of wcids (apply-live-ovh.sh --weenies); each scans every loaded landblock, so
-        // a few per world tick rather than all in one.
+        // A content fix can name dozens of wcids; each scans every loaded landblock, so a few per world tick rather than all in one.
         const int PER_TICK = 8;
 
         static void Postfix()
@@ -164,7 +132,7 @@ namespace RevivalGuard
             };
         }
 
-        /// <summary>Destroy it and have its own profile spawn one at once. True when a new object was made.</summary>
+        /// <summary>Destroy it and have its own profile spawn one at once.</summary>
         static bool RespawnOne(WorldObject wo, uint wcid)
         {
             var profile = ProfileOf(wo);

@@ -9,19 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A SAVED CLOAK IS A REAL CLOAK. Owner, 2026-09-29: "the cloaked command isnt working in admin panel.
-    /// i want to travel through the locked door."
-    ///
-    /// ACE saves CloakStatus (On = 2) with the character but not the physics that make it work (Cloaked,
-    /// Ethereal, NoDraw, no collision reports), and nothing re-applies them at login. So an admin who logged
-    /// out cloaked comes back half-cloaked: solid, blocked by doors. And `@cloak on` then does nothing,
-    /// because both SentinelCommands.HandleCloak and Player.HandleCloak return early when the saved status
-    /// already says On. Two patches:
-    ///   PlayerEnterWorld postfix   a saved On is applied for real on entering the world.
-    ///   HandleCloak prefix         "@cloak on" while the status already reads On re-applies it (the
-    ///                              status is cleared first so ACE's own path runs to the end).
-    /// </summary>
+    /// <summary>A saved cloak is a real cloak.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.PlayerEnterWorld))]
     static class CloakFixOnLogin
     {

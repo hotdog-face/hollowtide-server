@@ -19,31 +19,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE WORLD BOSS SCHEDULE (owner, 2026-09-30: "similar to diablo's where its timed, lets players
-    /// know when its happening, and is shown on the map"). Ours, not retail. Design and the Diablo IV
-    /// research it follows: docs/WORLD-BOSS-SYSTEM.md.
-    ///
-    ///   schedule     every boss rises on a fixed rhythm from an anchor in UTC-5 (Bael'Zharon: every
-    ///                7 hours, so each hour of the day gets one rising a week, as Diablo's 3.5 h does)
-    ///   warnings     world broadcasts at the boss's lead times (30, 10, 2 minutes), then one when he rises
-    ///   window       he stays for his window (30 minutes); unbeaten at its end he withdraws (despawned)
-    ///   rewards      every player in his damage history gets a personal roll from his table, and the
-    ///                first victory of each ISO week (UTC-5) per character adds a bonus roll from the
-    ///                rare end; both go into the pack, and what does not fit waits (@worldboss claim)
-    ///   the map      a "worldboss" message on the mod channel on every change and at hello; our client
-    ///                draws the marker and the countdown on the world map (AcWorldMapHud.WorldBoss.cs).
-    ///                Since 2026-10-01 he stands outdoors and nothing gives a route: chat names only the
-    ///                region (Where), and the marker is the only exact place.
-    ///
-    /// Spawning is still the boss's own generator (900202 for Bael'Zharon): outside a window every
-    /// profile of his is held a day ahead, and when the window opens it is released and the generator
-    /// asked to generate. The generator's own Delay is 7 days (world-boss-schedule.sql), so nothing but
-    /// this schedule, or WorldBoss's 24 h mode, brings him back.
-    ///
-    /// Switch `rg_world_boss_schedule` (default off, tools/gpubox-ace/live-switch.sh). Off, WorldBoss.cs
-    /// runs the old rule: 24 h after his last death.
-    /// </summary>
+    /// <summary>The world boss schedule.</summary>
     static class WorldBossSchedule
     {
         public const string P_ON = "rg_world_boss_schedule";
@@ -61,7 +37,6 @@ namespace RevivalGuard
 
         static uint[] Range(uint a, uint b) { var l = new List<uint>(); for (var i = a; i <= b; i++) l.Add(i); return l.ToArray(); }
 
-        // The held-back items of docs/OBTAINABLE-ITEMS-2026-09-30.md section 5 and the Zefir Charms.
         static readonly uint[] SOUL_CRYSTAL = Range(7998, 8009).Concat(Range(8022, 8030)).Concat(Range(23529, 23531)).ToArray();
         static readonly uint[] ZEFIR = Range(900760, 900768);
         static readonly uint[] KEEPSAKE = { 9173, 9175, 52699, 22556, 22550, 7400 };   // Pack Ursuin, Pack Cow, Wooden Top, Mace Tattoo, Tusker Paws, Heaume of the Inscrutable Mind
@@ -82,11 +57,7 @@ namespace RevivalGuard
             new Tier("Legend", 15, LEGEND),
         };
 
-        // The seasonal bosses (WorldBoss.HARVEST, BITTERFROST, THISTLEDOWN): retail festival treats, costumes and house
-        // pieces only, nothing that fights better than what a level 200 already wears (the masks are armour 10, the
-        // Casting Jack o' Lanterns spell-less orbs, the slippers a Major Sprint). Every house piece here is a retail
-        // weenie with a HookType, not Attuned, not Stuck, not a container (housing_sweep.py's rules; checked in
-        // gen_seasonal_world_bosses.py). Their corpses keep tier 6-7 treasure: the "normal loot" share.
+        // The seasonal bosses: retail festival treats, costumes and house pieces only, nothing that fights better than what a level 200 already wears.
         internal static readonly Tier[] HARVEST_KILL =
         {
             new Tier("Treat", 45, 32208, 32209, 32210, 39111),           // Marshmallow Bat, Marshmallow Pumpkin, Ginger Bread Pumpkin, Rock Candy Knath
@@ -103,7 +74,7 @@ namespace RevivalGuard
         {
             new Tier("Treat", 45, 25781, 5759, 34386),                   // Snow Pie, Fruitcake, Hot Coal (melts his Frozen Presents)
             new Tier("Costume", 25, 32162, 32166, 32167, 32159),         // Snowman Mask, with Hat, with Fez; Penguin Mask
-            new Tier("Trophy", 25, 34407, 34405, 36922, 52576, 52577, 36916, 44773),   // Abominable Pack Snowman, Mr. P. Holiday Pack Doll, Big Wreath, Holiday Garland, Holiday Stocking, Snow Drift, Snowman (wall)
+            new Tier("Trophy", 25, 34407, 34405, 36922, 52576, 52577, 36916, 44773),   // Abominable Pack Snowman, Mr.
             new Tier("Giant", 5, 32184, 32165),                          // Giant Snowman Head (floor trophy), Giant Snowman Mask
         };
         internal static readonly Tier[] BITTERFROST_WEEKLY =
@@ -135,8 +106,7 @@ namespace RevivalGuard
             public double AnnouncedFor;
             public List<int> Announced = new List<int>();
         }
-        /// <summary>Quest/Slain: set for a trophy owed to a character who was offline at the kill (BossTrophies);
-        /// its pickup timer is checked and stamped at delivery, since an offline character has no QuestManager.</summary>
+        /// <summary>Quest/Slain: set for a trophy owed to a character who was offline at the kill</summary>
         internal sealed class Owe { public uint Wcid; public string Why; public string Quest, Slain; }
         sealed class State
         {
@@ -189,8 +159,7 @@ namespace RevivalGuard
         static double AnchorUnix(WorldBoss.Spec s) =>
             (DateTime.SpecifyKind(s.AnchorLocal.AddHours(-UTC_OFFSET_HOURS), DateTimeKind.Utc) - DateTime.UnixEpoch).TotalSeconds;
 
-        /// <summary>The window now open, or the next one: a forced one first, then the rhythm, skipping
-        /// skipped risings and any that would overlap a forced window.</summary>
+        /// <summary>The window now open, or the next one</summary>
         static Ev Next(WorldBoss.Spec s, BossState st, double now)
         {
             if (st.ForcedEnd > now) return new Ev { Start = st.ForcedStart, End = st.ForcedEnd, Lead = st.ForcedLead, Forced = true };
@@ -206,7 +175,6 @@ namespace RevivalGuard
                 if (!InSeason(s, st, start, end, lead))
                 {
                     // out of the festival's dates: jump to its next first day instead of walking a year of windows
-                    // (inside them but switched off by @festival: just the next window)
                     if (!InDates(s, Local(start)))
                     {
                         var first = NextSeasonStart(s, start);
@@ -220,10 +188,7 @@ namespace RevivalGuard
         }
 
         // ------------------------------------------------------------------ the festival gate (seasonal bosses)
-        /// <summary>A window counts for a festival boss only while his festival runs. Whether it RUNS is
-        /// SeasonalCalendar's (IsFestivalActive: the calendar or an admin's @festival on/off), asked for the window
-        /// now open or about to be warned; later windows are predicted from the copy of its dates in the Spec. A
-        /// festival forced on outside its dates gets the next day's windows predicted too.</summary>
+        /// <summary>A window counts for a festival boss only while his festival runs.</summary>
         static bool InSeason(WorldBoss.Spec s, BossState st, double start, double end, double lead)
         {
             if (s.YearRound || st.ActiveStart == start) return true;   // a window he was raised for runs to its end
@@ -253,8 +218,7 @@ namespace RevivalGuard
             return unix;
         }
 
-        /// <summary>For EventDirector: each boss's window, warning lead included, that overlaps [from, to), while the
-        /// schedule is on (off, Bael'Zharon keeps his 24 h rule and nobody else rises: no windows to keep clear).</summary>
+        /// <summary>For EventDirector: each boss's window, warning lead included, that overlaps [from, to), while the schedule is on.</summary>
         internal static List<(string name, ushort lair, double from, double to)> WindowsBetween(double from, double to)
         {
             var list = new List<(string, ushort, double, double)>();
@@ -268,15 +232,12 @@ namespace RevivalGuard
             return list;
         }
 
-        /// <summary>Shown to players and drawn on the map: a year-round boss always; a festival boss while his
-        /// festival runs, while a window of his is open, and for 6 h after one settled (the "defeated" badge).</summary>
+        /// <summary>Shown to players and drawn on the map</summary>
         static bool Visible(WorldBoss.Spec s, BossState st, double now) =>
             s.YearRound || SeasonalCalendar.IsFestivalActive(s.Festival) || st.ActiveStart != 0 || st.ForcedEnd > now
             || st.LastOutcome != null && now - st.LastEnd < 6 * 3600;
 
-        /// <summary>A festival boss's lair has no KeepAlive (a month-long boss should not hold a landblock loaded all
-        /// year): ACE's own flag is held for it while a window is warned or open, so it neither sleeps nor unloads
-        /// under a fight whose players ran back from their lifestone. Released after, unless a real KeepAlive is there.</summary>
+        /// <summary>A festival boss's lair has no KeepAlive</summary>
         static readonly HashSet<string> s_Awake = new HashSet<string>();
         static void KeepAwake(WorldBoss.Spec s, bool want)
         {
@@ -392,7 +353,6 @@ namespace RevivalGuard
             if (WorldBoss.FindAlive(s) != null) return;
             if (s.Wcid == WorldBoss.BAEL && LightbringerScene.BaelOnStage)
             {
-                // never two Bael'Zharons: the Lightbringer week's Cragstone scene has him (only an admin's forced window can meet one)
                 if (!s_SpawnTry.TryGetValue(s.Key, out var held) || now - held >= 60) { s_SpawnTry[s.Key] = now; Mod.Log.Info("[RevivalGuard] WorldBossSchedule: Bael'Zharon waits; the Cragstone scene has him"); }
                 return;
             }
@@ -419,9 +379,7 @@ namespace RevivalGuard
             else Mod.Log.Info($"[RevivalGuard] WorldBossSchedule: released {n} generator profile(s) for {s.Name}");
         }
 
-        /// <summary>Outside a window: every profile of his held a day ahead, and a boss standing
-        /// outside any window (the 24 h rule raised him, an admin made one) sent away once nobody
-        /// is fighting him.</summary>
+        /// <summary>Outside a window: every profile of his held a day ahead</summary>
         static void Hold(WorldBoss.Spec s)
         {
             var until = DateTime.UtcNow.AddDays(1);
@@ -446,8 +404,7 @@ namespace RevivalGuard
             return n;
         }
 
-        /// <summary>For WorldBoss's generator-profile postfix: a profile made while no window is open
-        /// (a restart, a reload) starts held.</summary>
+        /// <summary>For WorldBoss's generator-profile postfix: a profile made while no window is open (a restart, a reload) starts held.</summary>
         internal static bool HoldNewProfile(WorldBoss.Spec s, GeneratorProfile profile)
         {
             if (!On) return false;
@@ -535,9 +492,7 @@ namespace RevivalGuard
             l.Add(new Owe { Wcid = wcid, Why = why, Quest = quest, Slain = slain });
         }
 
-        /// <summary>Personal loot for another boss (BossTrophies): owed to the character, then into the pack
-        /// if online; a full pack keeps it owed for the next login or @worldboss claim. A quest names the pickup
-        /// timer to check and stamp at delivery (the character was offline at the kill).</summary>
+        /// <summary>Personal loot for another boss</summary>
         internal static void Grant(uint guid, uint wcid, string why, string quest = null, string slain = null)
         {
             Load();
@@ -576,8 +531,7 @@ namespace RevivalGuard
                 WorldObject wo = null;
                 try
                 {
-                    // Owed while offline: the pickup timer is checked here, so an alt that hits and logs out
-                    // collects one trophy per timer, not one per kill. Stamped only once it is in the pack.
+                    // Owed while offline: the pickup timer is checked here, so an alt that hits and logs out collects one trophy per timer, not one per kill.
                     if (o.Quest != null && !p.QuestManager.CanSolve(o.Quest))
                     {
                         Say(p, $"You have already taken this reward ({o.Why}) within its time limit, so it is not given again.");
@@ -754,8 +708,7 @@ namespace RevivalGuard
         {
             double now = Now();
             if (!On && verb != "respawn") return $"[WorldBoss] the schedule is off ({P_ON}); only 'respawn' (the 24 h rule's) applies.";
-            // An optional boss key (or the start of a name) right after the verb picks one boss; without one, spawn
-            // and respawn (the admin panel's Bael button) act on the year-round bosses, the rest on every boss in season.
+            // An optional boss key right after the verb picks one boss
             List<WorldBoss.Spec> targets;
             var named = verb == "weeklyreset" || args.Length < 2 ? null : WorldBoss.Bosses.Values.FirstOrDefault(b =>
                 b.Key.Equals(args[1], StringComparison.OrdinalIgnoreCase) || b.Name.StartsWith(args[1], StringComparison.OrdinalIgnoreCase));

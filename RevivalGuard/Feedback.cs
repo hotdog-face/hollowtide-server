@@ -10,21 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THREE QUESTIONS, EACH ASKED ONCE (docs/PLAYER-DATA-PLAN.md phase 2, owner 2026-10-03 "go phase 2").
-    /// At three milestones the developer asks one short question in chat; the player answers with
-    /// `/answer <text>` (the client sends it to the ticket desk as kind "answer", and TicketDesk files it
-    /// with the question it answers) or simply ignores it. Nothing is ever asked twice.
-    ///
-    ///   academy  out of the Training Academy (RecallsDisabled cleared) within the first 20 hours played; never
-    ///            to a character made in town (SkipAcademy)
-    ///   lvl20    level 20 or more
-    ///   10h      10 hours played
-    ///
-    /// At most one question per session, never in the first 3 minutes of one, never to a staff or bot
-    /// account. Who was asked what is ~/ace/reports/feedback/asked.tsv (guid, key, UTC), so a restart
-    /// does not ask again. Not quest flags: QuestLog shows every flag in the client's journal.
-    /// </summary>
+    /// <summary>Three questions, each asked once.</summary>
     static class Feedback
     {
         static readonly string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ace", "reports", "feedback");
@@ -77,8 +63,6 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A character made in town never saw the Training Academy (live 2026-11-02: "never seen the training
-        /// academy"): its academy question is closed at creation, marked "town start" in asked.tsv (not asked).</summary>
         internal static void SkipAcademy(Player p)
         {
             try { MarkAsked(p, "academy", "town start, not asked"); }

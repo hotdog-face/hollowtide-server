@@ -15,19 +15,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// BOSS WARNINGS BEFORE BIG HITS. Ours, not retail. Owner, 2026-09-29: "do the boss shadowfall
-    /// warning before big hits" (the approved boss_shadowfall effect), and of the Unbound Queen, "her
-    /// attacks dont feel like they do much ... something to be afraid of".
-    ///
-    /// Warn() raises boss_shadowfall over a body on every nearby client that reads the mod channel
-    /// ("vfx", AcBossWarning on the client). The Unbound Queen
-    /// gets a telegraphed Brood Slam of her own: she stops, the shadow falls on the
-    /// player she has chosen, and SLAM_DELAY later the spot where they stood is crushed, with
-    /// knockback (Knockback.cs), for anyone still inside SLAM_RADIUS. Moving out avoids it.
-    ///
-    /// Switch `rg_boss_telegraphs`, default OFF (tools/gpubox-ace/live-switch.sh). First-pass tuning.
-    /// </summary>
+    /// <summary>Boss warnings before big HITS.</summary>
     public static class BossWarning
     {
         public const string P_ON = "rg_boss_telegraphs";

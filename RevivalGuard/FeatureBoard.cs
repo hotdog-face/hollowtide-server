@@ -13,31 +13,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE FEATURE REQUEST BOARD (owner 2026-10-22: "a feature request list button that opens a window that allows
-    /// players to write feature requests. then the ones with the most upvotes rise ... id want to pre-populate the
-    /// list"). Ours. The rules are FeatureBoardRules (pure, tested in NetTest); this is the ACE side.
-    ///
-    ///     @features                         the board (our client: the mod channel "features"; retail: chat lines)
-    ///     @features vote &lt;id&gt; up|down|off [n]  one vote per ACCOUNT, up or down (Feature Requests #34; "on" is
-    ///                                       up, as clients before #34 send it); n is the client's counter, so
-    ///                                       a quick up/off/up is never refused by ChatGuard as a repeated line
-    ///     @features add &lt;base64url&gt;         a new request from our client: UTF-8 "title\ntext"
-    ///     @features suggest &lt;title&gt; | &lt;text&gt;  the same, typed (a retail client)
-    ///   staff (Sentinel and up), from the window's staff buttons:
-    ///     @features status &lt;id&gt; open|planned|done|declined, delete &lt;id&gt;, merge &lt;from&gt; &lt;into&gt;, edit &lt;id&gt; &lt;base64url&gt;
-    ///
-    /// The board is one JSON file, ~/ace/reports/features/board.json (REVIVAL_REPORTS_DIR moves it with the reports),
-    /// written whole after every change (tmp + move), so it survives restarts and mod deploys. A shard with no file
-    /// starts from the seed list built into the dll (FeatureRequestsSeed.json). Each new request is also filed as a
-    /// "feature" report beside the tickets (tools/reports/tickets.py --kind feature), where the owner reviews reports.
-    /// Changes are pushed to every connection that looked at the board in the last WATCH_SECONDS.
-    ///
-    /// Drop files (owner 2026-10-24, "make it reflect a changelist ... so its not manual"): about once a minute the
-    /// board reads features/updates/*.json, {"id":14,"status":"done","why":"shipped in 0.1.80"}, written by ship.sh
-    /// and tools/features/*.sh from `Feature Requests #N` in commit messages. FeatureBoardRules.ApplyDrop has the
-    /// limits; each file becomes .applied or .failed (the reason on its first line). No restart needed.
-    /// </summary>
+    /// <summary>The feature request board.</summary>
     public static class FeatureBoard
     {
         const string CHANNEL = "features";
@@ -263,7 +239,6 @@ namespace RevivalGuard
             if (s_Store != null) return;
             if (File.Exists(FilePath))
             {
-                // An unreadable board must not be replaced by the seed: refuse changes until it is fixed by hand.
                 s_Store = JsonSerializer.Deserialize<FeatureBoardRules.Store>(File.ReadAllText(FilePath))
                     ?? throw new InvalidDataException("empty board file");
                 return;

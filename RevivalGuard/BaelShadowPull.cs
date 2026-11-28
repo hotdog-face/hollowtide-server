@@ -9,17 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// BAEL'ZHARON CANNOT BE KILLED FROM A DISTANCE. Ours, not retail. Owner, 2026-09-29: "im able to
-    /// shoot him from far away and he doesnt attack back. thats a ticket for players to simply kill him
-    /// without a fight."
-    ///
-    /// Every hit a creature takes, melee, missile or spell, is written through DamageHistory.Add, so a
-    /// postfix there sees them all. A player (or their arrow or spell) that hits him from beyond
-    /// PULL_RANGE twice inside WINDOW seconds is marked with the boss_shadowfall warning
-    /// (BossWarning.Warn) and, PULL_DELAY later, dragged through the shadow to stand in front of him.
-    /// Up close nothing changes. Rides the rg_boss_telegraphs switch.
-    /// </summary>
+    /// <summary>Bael'zharon cannot be killed from a distance.</summary>
     public static class BaelShadowPull
     {
         const float PULL_RANGE = 22f;
@@ -33,8 +23,7 @@ namespace RevivalGuard
             if (boss == null || boss.WeenieClassId != WorldBoss.BAEL || boss.IsDead || !BossWarning.On) return;
             var p = attacker as Player ?? attacker?.ProjectileSource as Player;
             if (p == null || p.IsDead || p.Location == null || boss.Location == null) return;
-            // Outdoors (since 2026-10-01) a player one landblock over can stand 5 m away: DistanceTo
-            // measures across landblocks, so only a different dungeon counts as far by itself.
+            // Outdoors a player one landblock over can stand 5 m away
             bool otherDungeon = p.Location.Landblock != boss.Location.Landblock && (IsDungeon(boss) || IsDungeon(p));
             bool far = otherDungeon || p.Location.DistanceTo(boss.Location) > PULL_RANGE;
             if (!far) return;
@@ -54,8 +43,7 @@ namespace RevivalGuard
             {
                 if (p.IsDead || boss.IsDead || boss.IsDestroyed || boss.Location == null) return;
                 var to = boss.Location.InFrontOf(2.5f);
-                // Outdoors the 2.5 m can cross into the next 24 m cell or landblock; a cell id of 0
-                // makes ACE's Position work out the right one (Position(uint, ...) calls SetPosition).
+                // Outdoors the 2.5 m can cross into the next 24 m cell or landblock; a cell id of 0 makes ACE's Position work out the right one.
                 if (!boss.Location.Indoors)
                     to = new ACE.Entity.Position(to.LandblockId.Raw & 0xFFFF0000, to.PositionX, to.PositionY, to.PositionZ, 0f, 0f, to.RotationZ, to.RotationW);
                 p.Teleport(to);

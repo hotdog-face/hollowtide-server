@@ -8,24 +8,11 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ECONOMY WATCH: notice what the rules did not stop. Anti-cheat plan item 6 (docs/security/
-    /// ANTI-CHEAT.md): automation (AI agents included) and any exploit nobody has thought of yet show up
-    /// the same way, as coin or experience arriving faster than a person can earn it. Each online
-    /// character's coin and total experience are sampled on its heartbeat (~5 s, on the landblock
-    /// thread, so the reads are safe) and compared with the sample about ten minutes earlier; a gain
-    /// past the limits below is written to ~/ace/reports/economy/&lt;yyyy-MM-dd&gt;.log and the server log
-    /// for staff to look at. Nothing is taken or blocked: a flag is a question, not a verdict.
-    /// Staff accounts are skipped (admin commands create coin and experience on purpose).
-    ///
-    /// The limits are deliberately generous and are ours, not retail's. A dupe or a runaway macro
-    /// clears them by orders of magnitude; tune them from real players' logs.
-    /// </summary>
+    /// <summary>Economy watch: notice what the rules did not stop.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.Heartbeat))]
     static class EconomyWatch
     {
         // The live limits are in tunables.json on the server (Tunables), not in the published source.
-        // These defaults are more lenient than the live ones: a missing file only flags less.
         static double WINDOW_MINUTES => Tunables.D("economy.window_minutes", 10);
         static long COIN_LIMIT => Tunables.L("economy.coin_limit", 1_000_000);          // pyreals gained in one window
         static double XP_LIMIT_FRACTION => Tunables.D("economy.xp_limit_fraction", 4.0); // windows' worth of the next level's cost, below level 126
@@ -37,7 +24,6 @@ namespace RevivalGuard
         static readonly ConditionalWeakTable<Player, History> s_History = new ConditionalWeakTable<Player, History>();
 
         static readonly string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ace", "reports", "economy");
-        // The report file is written off the landblock thread (it used to be a synchronous append every heartbeat).
         static readonly BackgroundAppender s_Writer = new BackgroundAppender(m => Mod.Log.Warn($"[RevivalGuard] economy watch: {m}"));
 
         static void Postfix(Player __instance)

@@ -9,13 +9,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A RESPAWN AT A RAIDED LIFESTONE IS NOT A DEATH LOOP (live 2026-11-22: a level 157 bound at Candeth Keep died 7 times in
-    /// 83 s to the T'thuun wave standing on the stone). For a short window after a death, raid creatures (T'thuun, Holtburg,
-    /// Hero raids) do not pick that player. Hitting a raid creature ends the window at once. Players are never filtered, so
-    /// PK fights stay Darktide; ACE's own lifestone protection is untouched. Switches: rg_raid_respawn_grace (on),
-    /// rg_raid_respawn_grace_s (30).
-    /// </summary>
     static class RaidRespawnGrace
     {
         internal const string P_ON = "rg_raid_respawn_grace", P_SECONDS = "rg_raid_respawn_grace_s";

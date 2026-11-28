@@ -9,24 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ZEFIR PET TRICKS (owner, 2026-10-01: "Pet tricks: use the charm on a summoned pet to make it
-    /// dance, spin or sit, using the Zefir's own animations"). A Zefir Charm (900760-900768,
-    /// tools/gpubox-ace/gen_zefir_pets.py) used ON its owner's summoned pet plays one trick; a plain
-    /// Use still summons or dismisses (ACE's PetDevice.ActOnUse, untouched). Anything else the charm
-    /// is used on gets ACE's own TargetCompatibleWithObject line.
-    ///
-    /// The tricks come from the Zefir motion table 0x09000069 (sweepdata mt/anim, 2026-10-01):
-    /// TurnRight (omega -4 rad/s), SideStepRight (anim 0x03000563) and AttackHigh1 (0x03000182, a
-    /// forward dip). Not used: Dead (0x03000187, sinks to the ground; no way back up in this table,
-    /// and clients treat a Dead forward command as a death pose) and CastSpell (0x0300062C, rears
-    /// back and surges; our client has no clip for it, so its players saw nothing).
-    ///
-    /// Plain motion broadcasts, so every client in range sees them, retail's included. The server's
-    /// own copy of the pet does not move (applyPhysics is off for non-players), so the spin is two
-    /// whole turns and the dance ends where it began. If the pet starts following mid-trick, the
-    /// trick stops sending and the follow wins.
-    /// </summary>
+    /// <summary>Zefir pet tricks.</summary>
     static class ZefirTricks
     {
         internal const uint FirstCharm = 900760, LastCharm = 900768;

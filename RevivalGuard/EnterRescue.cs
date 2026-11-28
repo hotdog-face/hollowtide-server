@@ -7,22 +7,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A PLAYER WHOSE PLACEMENT FAILS IS PLACED SOMEWHERE ELSE, NEVER NOWHERE.
-    ///
-    /// ACE's DoPlayerEnterWorld retries a failed placement at the Sanctuary (the lifestone bind), which
-    /// is the saved Location itself for anyone who logged out beside their lifestone. Measured
-    /// 2026-09-18: "+testing character" bound at the Academy lifestone, relogged, and both the
-    /// placement and the retry failed at 0x86020134 [116.09 -160.00 -6.00] ("couldn't spawn" twice);
-    /// the session carried on with no physics object, LoginComplete and every Use threw
-    /// NullReferenceException, and the character could do nothing. A real player would call it a
-    /// locked-out character.
-    ///
-    /// So when LandblockManager.AddObject fails for a player, this tries, in order, the Sanctuary, the
-    /// LastPortal, the Instantiation (where the character was made) and Holtburg, skipping any within
-    /// 2 m of a spot that already failed; before those, small nudges around the saved spot, and reports success on the first that places. ACE's own
-    /// fallback then never runs.
-    /// </summary>
     [HarmonyPatch(typeof(LandblockManager), nameof(LandblockManager.AddObject))]
     static class EnterRescue
     {
@@ -32,9 +16,7 @@ namespace RevivalGuard
         {
             if (__result || t_Rescuing || !(worldObject is Player p) || p.Location == null) return;
             var tried = new List<Position> { new Position(p.Location) };
-            // Nudges first: a login placement is stricter than a teleport's transition, and a creature
-            // standing on the saved spot (the Academy lifestone room has an Olthoi generator 6 m away)
-            // is enough to refuse it, while a teleport to the very same point succeeds.
+            // Nudges first: a login placement is stricter than a teleport's transition, and a creature standing on the saved spot is enough to refuse it
             var nudges = new List<(string, Position)>();
             foreach (var (dx, dy, dz) in new[] { (0f, 0f, 0.5f), (1.5f, 0f, 0.2f), (-1.5f, 0f, 0.2f), (0f, 1.5f, 0.2f), (0f, -1.5f, 0.2f), (3f, 0f, 0.2f), (-3f, 0f, 0.2f) })
             {

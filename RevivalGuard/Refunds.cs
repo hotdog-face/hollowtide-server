@@ -10,13 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// REFUNDS (owner 2026-11-23: "make it so the gem is in his inventory on next server restart"). A staff refund for an
-    /// item a bug took, without reading or editing anything on live: add a line to LIST and stage the mod. At the named
-    /// character's next login the item goes into their pack, ONCE: the refund's id is kept on the character (DONE, a
-    /// PropertyString of ids), so a relog, a restart or a later stage never gives it again. A pack that cannot take it says
-    /// so and tries again at the next login. Names match the character's name exactly, case aside (staff chars keep '+').
-    /// </summary>
+    /// <summary>Refunds.</summary>
     public static class Refunds
     {
         internal const PropertyString DONE = (PropertyString)29190;   // ours: comma-separated refund ids already given
@@ -26,11 +20,9 @@ namespace RevivalGuard
             public string Id, Character, Why; public uint Wcid; public int Count = 1;
         }
 
-        /// <summary>Each line: the ticket it answers (its id, never reused), who, what, and the line they read.</summary>
+        /// <summary>Each line: the ticket it answers, who, what, and the line they read.</summary>
         internal static readonly Refund[] LIST =
         {
-            // F7 261123-0021: a Rage of Grael used with no weapon wielded was eaten by ACE ("You fail to affect ...").
-            // GemNoEffectGuard keeps such gems from 67efdeb3 on.
             new Refund { Id = "261123-0021", Character = "Chemist", Wcid = 31425,
                          Why = "a Rage of Grael Gem, returned: a bug used yours up. Wield your weapon, then use the gem by itself" },
         };

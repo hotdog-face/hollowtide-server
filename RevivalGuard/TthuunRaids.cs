@@ -22,28 +22,7 @@ using Site = RevivalGuard.TthuunRaidsRule.Site;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// T'THUUN'S MARAUDERS, THE TOWN RAIDS (retail Nov 2008; revived 2026-11-01 for the owner's review, calendar Nov 16 to 29;
-    /// docs/EVENT-TESTS/tthuun-marauders.md). The calendar (SeasonalCalendar "tthuun") puts a Royal Scout and a Falatacot
-    /// pyramid at each of the twelve retail sites for the fortnight (row TthuunMarauders); the Event Director runs one site's
-    /// raid at a time (tthuun-*, its own Director row, 60 min). This file runs the raid itself, rules in TthuunRaidsRule:
-    ///   * WAVES: wave 1 is the site's wave generators (the datafix); when every creature of it is down, the waves after it
-    ///     (four Elites or Executioners, an Inquisitor or Champion, the town's Raid Commander) come one by one at the site's
-    ///     centre. Wave 1's generators are HELD from then on (GeneratorProfile.ProcessQueue), never disabled: ACE's staged
-    ///     event check would turn a disabled generator of a row that is still On back on within 10 s. The last boss down
-    ///     stops the row, and the director ends the event as won (its victory line).
-    ///   * SCALING like the Frostfell raids: each raid creature's health by FrostfellRule.RaiderShare of the defenders near
-    ///     the site when it appears (40% for one, full from six).
-    ///   * STONES: a raid creature's corpse carries its site's Invoking Stone (1 in 3; bosses always), not the Patriarch's
-    ///     Valley mix its retail list names.
-    ///   * ROYAL SCOUTS (904160): retail's lines, retail's stone turn-ins (data), and here the three kill tasks (ACE kill
-    ///     quests on the raiders and marauders, the datafix) and the boss titles.
-    ///   * THE SPARK: a Raid Commander's fall leaves his Spark for 3 minutes; its Use gives a Mana Forge Key (data).
-    ///   * THE KAREB MASK: a raid Raid Commander's corpse carries retail's Kareb Mask 1 time in 10 (owner 2026-11-08).
-    /// Cleanup is the director's (its generators, disabled before their spawn is destroyed) plus EventEnded here for the
-    /// waves spawned by this file. Only loaded landblocks are ever looked at (IfLoaded never loads one).
-    /// Staff: @tthuun [status | reset] (reset: your own kill tasks, flags and wait).
-    /// </summary>
+    /// <summary>T'thuun's marauders, the town raids.</summary>
     static class TthuunRaids
     {
         internal static bool On => SeasonalCalendar.IsFestivalActive(TthuunRaidsRule.FESTIVAL);
@@ -88,6 +67,8 @@ namespace RevivalGuard
             if (site != s_Raid?.Site) s_Raid = site == null ? null : new Raid { Site = site };
             if (s_Raid == null || s_Raid.Won || s_Raid.Spawning) return;
             if (IfLoaded(site.Block) == null) return;   // nobody there: nothing spawns, nothing to watch
+            // Row stopped, no next wave
+            if (ServerManager.ShutdownInitiated || EventManager.GetEventStatus(site.Row) != GameEventState.On) return;
 
             var gens = SiteGenerators(site).ToList();
             if (gens.Count == 0) return;
@@ -109,13 +90,13 @@ namespace RevivalGuard
             var waves = TthuunRaidsRule.Waves(site);
             if (s_Raid.Stage - 1 < waves.Length) { Next(centre, defenders, null); return; }
 
-            // the last boss is down: the raid is won. Stopping the row lets the director end it as won (its victory line).
+            // the last boss is down: the raid is won.
             s_Raid.Won = true;
             Mod.Log.Info($"[RevivalGuard] TthuunRaids: {site.Key} won by {defenders.Count} defender(s)");
             if (EventManager.GetEventStatus(site.Row) == GameEventState.On) EventManager.StopEvent(site.Row, null, null);
         }
 
-        /// <summary>The next wave at the site's centre (its first wave generator).</summary>
+        /// <summary>The next wave at the site's centre.</summary>
         static void Next(WorldObject centre, List<Player> defenders, string line)
         {
             var raid = s_Raid;
@@ -150,16 +131,13 @@ namespace RevivalGuard
             }));
         }
 
-        /// <summary>A Generic object entering the world at a point, scattered as ACE's own generators do (Spawn_Scatter:
-        /// the physics places it on the ground within the radius, retrying when a spot fails).</summary>
+        /// <summary>A Generic object entering the world at a point, scattered as ACE's own generators do.</summary>
         static WorldObject Spawn(uint wcid, ACE.Entity.Position at, float radius)
         {
             var wo = WorldObjectFactory.CreateNewWorldObject(wcid);
             if (wo == null) { Mod.Log.Warn($"[RevivalGuard] TthuunRaids: no weenie {wcid}"); return null; }
             wo.Location = new ACE.Entity.Position(at);
             wo.Location.PositionZ += 0.05f;
-            // never rots: ACE's decay takes any dynamic object with no generator, lifespan or TimeToRot after 5 minutes,
-            // silently (found by the Holtburg raids on the box, 2026-11-16). EventEnded removes the waves.
             wo.TimeToRot = -1;
             if (radius > 0) wo.ScatterPos = new SetPosition(new ACE.Server.Physics.Common.Position(wo.Location), SetPositionFlags.RandomScatter, radius);
             bool ok = wo.EnterWorld();
@@ -212,6 +190,8 @@ namespace RevivalGuard
 
         internal static bool IsRaider(Creature c) => s_Site.TryGetValue(c, out _);
 
+        internal static bool IsWave(WorldObject wo) => wo is Creature c && wo.Generator == null && s_Site.TryGetValue(c, out _);
+
         static IEnumerable<Creature> Spawned(WorldObject gen) =>
             gen.GeneratorProfiles == null ? Enumerable.Empty<Creature>()
             : gen.GeneratorProfiles.SelectMany(p => p.Spawned.Values).Select(i => i.TryGetWorldObject()).OfType<Creature>().Where(c => !c.IsDead && !c.IsDestroyed);
@@ -235,8 +215,7 @@ namespace RevivalGuard
             return !string.IsNullOrEmpty(ge) && raid.Site.Row.Equals(EventManager.GetEventName(ge), StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>EventDirector.End: the waves this file spawned go with the event (alive ones only: corpses are loot; the
-        /// Spark stays its 3 minutes). Only objects still in a loaded landblock are touched.</summary>
+        /// <summary>EventDirector.End: the waves this file spawned go with the event.</summary>
         internal static void EventEnded(string key, bool won)
         {
             var raid = s_Raid;
@@ -265,13 +244,13 @@ namespace RevivalGuard
                 if (mask != null && !corpse.TryAddToInventory(mask)) mask.Destroy();
                 else if (mask != null) Mod.Log.Info($"[RevivalGuard] TthuunRaids: {tag.Site.Key} {c.Name} carried a Kareb Mask");
             }
+            if (c.WeenieClassId == tag.Site.Commander) LookItems.CommanderCorpse(corpse, $"{tag.Site.Key} {c.Name}", s_Rng.NextDouble());
             if (!TthuunRaidsRule.IsBoss(c.WeenieClassId) && s_Rng.NextDouble() >= TthuunRaidsRule.STONE_CHANCE) return;
             var stone = WorldObjectFactory.CreateNewWorldObject(tag.Site.Stone);
             if (stone != null && !corpse.TryAddToInventory(stone)) stone.Destroy();
         }
 
-        /// <summary>Creature.OnDeath: a boss's fall flags everyone who hurt it (the Royal Scouts pay it); a Raid Commander's
-        /// leaves his Spark.</summary>
+        /// <summary>Creature.OnDeath: a boss's fall flags everyone who hurt it; a Raid Commander's leaves his Spark.</summary>
         internal static void OnDeath(Creature c)
         {
             if (!On) return;
@@ -315,8 +294,7 @@ namespace RevivalGuard
 
         // ---- the Royal Scouts ---------------------------------------------------------------------------------------------
 
-        /// <summary>EmoteManager.OnUse of a raid-site Royal Scout (after retail's lines, which the scout's Use emote says):
-        /// the boss titles first, then the kill tasks (TthuunRaidsRule.TaskTalk).</summary>
+        /// <summary>EmoteManager.OnUse of a raid-site Royal Scout: the boss titles first, then the kill tasks.</summary>
         internal static void OnScout(WorldObject scout, Player p)
         {
             if (!On) return;
@@ -348,6 +326,7 @@ namespace RevivalGuard
                 foreach (var f in TthuunRaidsRule.FAMILIES) { qm.Erase(TthuunRaidsRule.KillQuest(f)); qm.Erase(TthuunRaidsRule.PaidQuest(f)); }
                 qm.Stamp(TthuunRaidsRule.TASK_WAIT);
                 AwardTitle(p, TthuunRaidsRule.TITLE_HERO);
+                LookItems.ScoutTaskDone(p);
             }
             lines.AddRange(talk.lines);
             var chain = new ActionChain();
@@ -468,6 +447,16 @@ namespace RevivalGuard
         {
             try { TthuunRaids.OnDeath(__instance); }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] TthuunRaids death: {e.Message}"); }
+        }
+    }
+
+    /// <summary>ACE saves any dynamic creature without a generator on a landblock save; the waves are not world content.</summary>
+    [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.IsDynamicThatShouldPersistToShard))]
+    static class TthuunRaidsNoSave
+    {
+        static void Postfix(WorldObject __instance, ref bool __result)
+        {
+            if (__result && TthuunRaids.IsWave(__instance)) __result = false;
         }
     }
 

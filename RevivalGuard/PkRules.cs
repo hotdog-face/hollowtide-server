@@ -5,16 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE PK LADDER'S RULES, PURE C# (no ACE types) so NetTest runs them (tools/nettest/PkRulesCase.cs): the
-    /// honour check on plain facts, the scoring of one kill into a ledger, and the re-judge of a whole season.
-    /// PkCommon.Judge and PkRenown.Score feed these from the live Player objects.
-    ///
-    /// Owner 2026-10-22: the newcomer line is level 15 (was 30), and the Hollow Company mercenaries are "players
-    /// only": a kill of or by one never earns renown or infamy and is no kill and no death on the ladder. The
-    /// season so far is judged again under those rules (Rejudge), once, the first time the ladder is used after
-    /// the deploy (RULES).
-    /// </summary>
+    /// <summary>The PK ladder's rules, PURE C# so NetTest runs them</summary>
     internal static partial class PkCommon
     {
         internal const long DEFAULT_MIN_LEVEL = 15;
@@ -48,7 +39,7 @@ namespace RevivalGuard
         {
             var j = new Judgement { Attackers = Math.Max(1, attackers) };
             if (f.NoKiller) { j.Verdict = Verdict.NotCounted; j.Why = "no killer"; return j; }
-            // PLAYERS ONLY (owner 2026-10-22): the mercenaries are disclosed bots, so neither side of their fights counts.
+            // Players only: the mercenaries are disclosed bots, so neither side of their fights counts.
             if (f.KillerMerc || f.VictimMerc) { j.Verdict = Verdict.NotCounted; j.Why = WHY_MERC; return j; }
             if (f.SameAccount) { j.Verdict = Verdict.NotCounted; j.Why = "two characters of one account"; return j; }
             if (f.SameAddress) { j.Verdict = Verdict.NotCounted; j.Why = "two characters on one connection"; return j; }
@@ -64,8 +55,7 @@ namespace RevivalGuard
 
             j.Verdict = Verdict.Honourable;
             j.Weight = 1.0 / (1 + priorKills);
-            // A GANK SQUAD SHARES ONE KILL: two on one is a fair fight's worth, more than two
-            // divides it (the 2006 dev chat: "fewer battles that are more epic", not ten on one).
+            // A GANK squad shares one kill: two on one is a fair fight's worth, more than two divides it.
             if (j.Attackers > 2) j.Weight *= 2.0 / j.Attackers;
             return j;
         }
@@ -77,8 +67,6 @@ namespace RevivalGuard
     {
         internal const int WANTED_AT = 5, KILL_LOG_KEEP = 2000;
         internal const long INFAMY_FADE = 86400;
-        /// <summary>The ledger's rules version. 2 = newcomer line 15 and mercenaries never counted (2026-10-22).
-        /// A ledger saved under an older version is judged again once (EnsureRejudged).</summary>
         internal const int RULES = 2;
 
         // ACE.Entity.Enum.CharacterTitle values (checked against the enum at startup, PkRenown.CheckTitleIds).
@@ -107,7 +95,7 @@ namespace RevivalGuard
             public bool Counts { get; set; }    // counts toward the repeat rule
             public int Points { get; set; }
             public string Why { get; set; }
-            public int KL { get; set; }         // killer's level at the kill (0 = not recorded: kills before 2026-10-22)
+            public int KL { get; set; }         // killer's level at the kill
             public int VL { get; set; }         // victim's level at the kill
         }
 
@@ -119,8 +107,7 @@ namespace RevivalGuard
             public long RejudgedAt { get; set; }
             public Dictionary<uint, Rec> Chars { get; set; } = new Dictionary<uint, Rec>();
             public List<KillEntry> Kills { get; set; } = new List<KillEntry>();
-            /// <summary>Characters taken off the ladder by @pkladder remove, and when: a re-judge skips their kills
-            /// up to then. A guid in Kills with no record at all was removed before this was kept.</summary>
+            /// <summary>Characters taken off the ladder by @pkladder remove, and when: a re-judge skips their kills up to then.</summary>
             public Dictionary<uint, long> Removed { get; set; } = new Dictionary<uint, long>();
         }
 
@@ -131,8 +118,6 @@ namespace RevivalGuard
             public string KillerName, VictimName, KillerOf = "";
             public int KillerLevel, VictimLevel;     // 0 = unknown
             public long At;
-            // A re-judged kill whose levels were never recorded keeps the points it was given, moved by the change
-            // in its bonuses (a victim's streak that was built on mercenaries is gone).
             public int? FixedPoints;
             public double OldBonus;
             public bool ExactPoints;                 // the old season replayed: its stored points, as they were
@@ -173,8 +158,7 @@ namespace RevivalGuard
             return s.Kills.Count(k => k.Counts && k.Killer == killer && k.Victim == victim && k.At >= since && k.At <= now);
         }
 
-        /// <summary>Score one judged kill into the ledger: renown, streaks, infamy, titles, and the kill log entry.
-        /// The caller holds the ledger lock, and says the lines and grants the titles afterwards.</summary>
+        /// <summary>Score one judged kill into the ledger: renown, streaks, infamy, titles, and the kill log entry.</summary>
         internal static Outcome Apply(State s, KillIn k, PkCommon.Judgement j)
         {
             var o = new Outcome();
@@ -182,8 +166,6 @@ namespace RevivalGuard
             bool merc = j.Verdict == PkCommon.Verdict.NotCounted && j.Why == PkCommon.WHY_MERC;
             if (merc)
             {
-                // No record is made for either side: a mercenary is never on the ladder, and a player's streak,
-                // deaths and infamy are untouched by one.
                 o.KillerLines.Add($"That kill earns no renown: {j.Why}.");
                 o.Entry = new KillEntry { At = now, Killer = k.Killer, Victim = k.Victim, Why = j.Why, KL = k.KillerLevel, VL = k.VictimLevel };
                 s.Kills.Add(o.Entry);
@@ -271,8 +253,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ the re-judge
 
-        /// <summary>What the re-judge may ask the world: is this character a mercenary (by account), and its level
-        /// today (the fallback for a kill whose killer level was never recorded). Either may answer null.</summary>
+        /// <summary>What the re-judge may ask the world: is this character a mercenary (by account), and its level today.</summary>
         internal interface IWorld
         {
             bool? IsMerc(uint guid);
@@ -294,17 +275,7 @@ namespace RevivalGuard
             { "no killer", "two characters of one account", "two characters on one connection", "an ally" };
         static readonly uint[] LADDER_TITLES = { T_DUELIST, T_BLOODLETTER, T_GLADIATOR, T_KINGSLAYER, T_MURDERER };
 
-        /// <summary>
-        /// THE SEASON JUDGED AGAIN under today's rules, from the kill log. Each kill's levels come from what was
-        /// recorded with it (KL/VL, kept since 2026-10-22), else from its stored reason ("a newcomer (level 20)" has
-        /// the victim's; "far beneath" both), else the killer's level today (LevelsFromToday). A kill that was
-        /// honourable and has no levels stays honourable at its old points, moved only by changed bonuses. Kills
-        /// refused for the account, the connection or an ally stay refused (the address is not stored), and the
-        /// kills of characters taken off the ladder stay off it.
-        /// TITLES: the ladder's titles are what the new judging earns. A title the old ledger had and the new
-        /// judging does not give is KEPT, unless the old judging only gave it because of mercenary kills (the old
-        /// season replayed with and without them); bounty and season titles are always kept.
-        /// </summary>
+        /// <summary>The season judged again under today's rules, from the kill log.</summary>
         internal static RejudgeResult Rejudge(State old, IWorld world, long minLevel, double ratio, double repeatHours, long now)
         {
             var res = new RejudgeResult();
@@ -321,8 +292,7 @@ namespace RevivalGuard
 
             var kills = old.Kills.OrderBy(k => k.At).ToList();
 
-            // The old judging replayed (stored verdicts and points), with and without the mercenary kills: which
-            // titles only the mercenaries gave, and each old honourable kill's bonus.
+            // The old judging replayed, with and without the mercenary kills
             var oldBonus = new Dictionary<KillEntry, double>();
             var withMercs = Replay(kills, k => !Dropped(k), oldBonus);
             var noMercs = Replay(kills, k => !Dropped(k) && !IsMerc(k.Killer) && !IsMerc(k.Victim), null);
@@ -367,8 +337,6 @@ namespace RevivalGuard
                     }
                     else if (oldVerdict == PkCommon.Verdict.Honourable || PkCommon.IsRepeat(k.Why))
                     {
-                        // levels never recorded: an honourable kill is honourable still (today's rules only add
-                        // refusals for mercenaries), but the repeat rule is counted again
                         if (prior >= 3) j = new PkCommon.Judgement { Verdict = PkCommon.Verdict.NotCounted, Why = $"killed by you {prior} times already today" };
                         else j = new PkCommon.Judgement { Verdict = PkCommon.Verdict.Honourable, Weight = 1.0 / (1 + prior) };
                         input.FixedPoints = k.Points > 0 ? k.Points : 10;
@@ -408,7 +376,7 @@ namespace RevivalGuard
                     foreach (var t in n.Titles.Where(t => !r.Titles.Contains(t)).ToList())
                     {
                         res.Granted.Add((kv.Key, r.Name, t));
-                        if (!n.PendingTitles.Contains(t)) n.PendingTitles.Add(t);   // handed over at the next login (or now, if online)
+                        if (!n.PendingTitles.Contains(t)) n.PendingTitles.Add(t);   // handed over at the next login
                     }
             }
             // a character first seen in the kill log with no old record cannot happen (Apply always made both)

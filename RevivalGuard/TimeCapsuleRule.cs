@@ -4,15 +4,7 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// HOUSE TIME CAPSULES, the pure part (no ACE types, so NetTest runs it: tools/nettest/TimeCapsuleCase.cs).
-    /// Ours, not retail (owner 2026-10-29): retail houses kept whatever the last owner left, and buying an old house
-    /// could turn up things you could no longer get. Some empty houses here look like a real player lived there and
-    /// stopped paying rent: hooks mostly full (furniture where it belongs, the owner's theme pieces, pack clutter hung
-    /// when packs were full), a stuffed storage chest, sometimes a note signed by a retail player. Lived-in houses
-    /// cluster: some neighbourhoods are busy, and neighbours may be one owner's or friends' houses.
-    /// Data: tools/house-capsules/themes.py -> TimeCapsuleThemes.cs (generated) and docs/HOUSE-TIME-CAPSULES.md.
-    /// </summary>
+    /// <summary>House time capsules, the pure part (no ACE types, so NetTest runs it: tools/nettest/TimeCapsuleCase.cs).</summary>
     static partial class TimeCapsuleRule
     {
         internal enum Tier { Common, Uncommon, Rare }
@@ -24,10 +16,9 @@ namespace RevivalGuard
         internal const long MIN_VACANT = 7 * DAY;
         /// <summary>One chest find per account in this window (apartments have no 30-day purchase cooldown).</summary>
         internal const long ACCOUNT_WINDOW = 30 * DAY;
-        internal const int COMMON_PCT = 78, UNCOMMON_PCT = 21;   // rare = the rest (1%: a house holds ~30 things now)
+        internal const int COMMON_PCT = 78, UNCOMMON_PCT = 21;   // rare = the rest
         internal const int NOTE_PCT = 40;
-        /// <summary>Neighbourhoods (landblocks): this share is "lived-in", where hits are HOOD_HI times likelier;
-        /// elsewhere HOOD_LO times. 0.35 x 2.0 + 0.65 x 0.4615 = 1, so each house size keeps its overall chance.</summary>
+        /// <summary>Neighbourhoods: this share is "lived-in", where hits are HOOD_HI times likelier</summary>
         internal const int HOOD_PCT = 35;
         internal const double HOOD_HI = 2.0, HOOD_LO = 0.4615;
         /// <summary>In a lived-in neighbourhood, this share of house groups is one owner's (same theme and signer).</summary>
@@ -106,8 +97,6 @@ namespace RevivalGuard
 
         internal static bool HangNow(bool owned, bool alreadyHung, bool eligible, bool hit) => !owned && !alreadyHung && eligible && hit;
 
-        /// <summary>Whether a purchase finds the chest stash. vacantSince 0 = never owned (or released before tracking):
-        /// eligible. existingItems: what storage and hooks already hold of a real owner's.</summary>
         internal static bool Eligible(long now, long vacantSince, int existingItems, long lastAccountFind, bool exempt, out string why)
         {
             if (existingItems > 0) { why = $"storage or hooks already hold {existingItems} item(s) (the last owner's own)"; return false; }
@@ -123,9 +112,6 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>Neighbourhood and owner group of a house, from its guid alone (stable across vacancies). Houses of a
-        /// settlement are numbered in a row (cottages one apart, apartments about six apart), so a group is 3 houses
-        /// in a row or about 4 apartments of one wing.</summary>
         internal static (bool livedIn, bool shared, ulong groupKey) Hood(uint houseGuid, int houseType)
         {
             uint lb = (houseGuid >> 12) & 0xFFFF;
@@ -136,8 +122,7 @@ namespace RevivalGuard
             return (livedIn, shared, groupKey);
         }
 
-        /// <summary>The same house and vacancy always roll the same stash (a restart or @capsule info agrees with
-        /// the purchase). vacancyKey is the vacancy's start (0 for a never-owned house).</summary>
+        /// <summary>The same house and vacancy always roll the same stash. vacancyKey is the vacancy's start.</summary>
         internal static Stash Roll(uint houseGuid, long vacancyKey, int houseType)
         {
             var fixedStash = FixedStash(houseGuid, houseType);
@@ -164,8 +149,7 @@ namespace RevivalGuard
             return stash;
         }
 
-        /// <summary>The chest (theme items, a matched core when the theme has one, then pack clutter) and the theme's
-        /// own hook pieces.</summary>
+        /// <summary>The chest (theme items, a matched core when the theme has one, then pack clutter) and the theme's own hook pieces.</summary>
         static void Fill(Stash stash, ref ulong s, int houseType)
         {
             var theme = stash.Theme;
@@ -195,9 +179,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>One item of the theme: a tier roll (falling back to the next tier down when the theme has none, or
-        /// for a common roll with no commons, an uncommon), then an entry of that tier not used yet. Null on a duplicate.
-        /// fits: only entries whose HookType shares a bit with it (0 = any).</summary>
+        /// <summary>One item of the theme: a tier roll, then an entry of that tier not used yet.</summary>
         static Pick Draw(Theme theme, ref ulong s, HashSet<uint> used, bool hookOnly, int fits = 0, bool allowRare = true)
         {
             int pct = (int)(Next(ref s) % 100);
@@ -226,11 +208,7 @@ namespace RevivalGuard
             return p;
         }
 
-        /// <summary>Which item goes on which free hook (owner 2026-10-29: "players would fill all or most hooks",
-        /// "decorate like a real house", "random items on the hooks too"). hookTypes: the house's free hooks in a
-        /// stable order; usable: how many more ACE allows. Fills 70-100% of that (a hand-authored house at least 80%):
-        /// the theme's pieces first (yard and roof first for what can stand outside), then for each remaining hook,
-        /// by its kind, household furniture, pack clutter or more of the theme. Returns (hook index, item).</summary>
+        /// <summary>Which item goes on which free hook. hookTypes</summary>
         internal static List<(int hook, Pick pick)> PlanHooks(Stash stash, IReadOnlyList<int> hookTypes, int usable)
         {
             var plan = new List<(int, Pick)>();
@@ -312,9 +290,6 @@ namespace RevivalGuard
 
         // ---- hand-authored houses: always these pieces and this note, then furnished like any lived-in house ----
 
-        /// <summary>Owner 2026-10-29: "add a house in new canthalo that used to be owned by a player named xanzabar."
-        /// New Cannthalo (66.5N 57.6E, landblock C7D2, the Olthoi Brood Hive settlement), the north cottage.
-        /// "xanzabar's is the lower limit of what a house would be decorated like": his pieces, then filled like the rest.</summary>
         internal const uint XANZABAR_HOUSE = 0x7C7D21A4;
 
         internal static readonly Theme Xanzabar = new Theme("xanzabar", "Xanzabar's cottage", 0, new uint[0][],
@@ -368,16 +343,15 @@ namespace RevivalGuard
             return st;
         }
 
-        // ---- the previous owner's name (owner 2026-10-29: real retail player names from our captures) ----
+        // ---- the previous owner's name ----
 
-        /// <summary>Crude or joke names from the capture corpus that should never sign a note in someone's house.</summary>
         static readonly string[] s_Crude =
         {
             "chlamyd", "cawk", "bawl", "notsee", "wun-hung", "pregnant", "wench", "stoner", "freaky", "schtupp", "hentai", "xxx",
             "sniffer", "fuck", "shit", "dick", "cock", "penis", "porn", "nazi", "hitler", "rape", "fag", "cum ", "boob", "tits",
         };
 
-        /// <summary>A name fit to sign a note: letters, spaces and ' - . only, 3-30 characters, not crude, not staff (+).</summary>
+        /// <summary>A name fit to sign a note: letters, spaces and ' -. only, 3-30 characters, not crude, not staff (+).</summary>
         internal static bool NameOk(string n)
         {
             if (string.IsNullOrWhiteSpace(n) || n.Length < 3 || n.Length > 30 || n.StartsWith("+")) return false;
@@ -386,7 +360,7 @@ namespace RevivalGuard
             return !s_Crude.Any(l.Contains);
         }
 
-        /// <summary>Used when the retail names list is missing on the host (it never ships in git).</summary>
+        /// <summary>Used when the retail names list is missing on the host.</summary>
         internal static readonly string[] FallbackNames = { "a previous owner" };
 
         /// <summary>The name for this stash: walks the list from the roll, skipping names inUse says are taken here.</summary>

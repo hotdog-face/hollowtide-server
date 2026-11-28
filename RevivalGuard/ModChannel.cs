@@ -10,24 +10,7 @@ using ACE.Server.Network.GameMessages.Messages;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ONE STRUCTURED CHANNEL FROM THIS MOD TO OUR CLIENT (docs/MODERNIZATION-IDEAS-2026-09-25.md,
-    /// "Data between the server mod and the client travels as tagged chat lines"). Ours.
-    ///
-    /// Until now each feature that needed data on the client (the journal's @questlog) answered in
-    /// chat lines starting with a control character the client hid. Chat is throttled, logged, and
-    /// capped in length; every new feature (the looking-for-group board next) would have added
-    /// another tag. This is a game message of its own, opcode 0x52474D31 ("RGM1", far outside
-    /// retail's range), carrying a channel name and a UTF-8 payload of any length (ACE fragments
-    /// it like any other message):
-    ///
-    ///     u32 opcode | u16 channel length | channel (ASCII) | u32 payload length | payload (UTF-8)
-    ///
-    /// A retail client must never receive it, so it is sent only to a CONNECTION that asked for it:
-    /// our client sends "@revivalclient 1" each time it enters the world, and the answer is a
-    /// "hello" on the channel. The mark lives on the Session object (a new login is a new Session),
-    /// so a character that later logs in with a retail client is not sent anything it cannot read.
-    /// </summary>
+    /// <summary>One structured channel from this mod to our client.</summary>
     public static class ModChannel
     {
         public const uint OPCODE = 0x52474D31;
@@ -40,10 +23,10 @@ namespace RevivalGuard
         {
             CommandManager.TryAddCommand(Hello, "revivalclient", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
                 "Our client announces that it reads the mod channel.", "<channel version> [client version] [os] [system language]");
-            // Features that exist only on this channel register with it. Both are off by default
-            // (rg_expansion_motions, rg_nether_rift): docs/NEW-ANIMATIONS.md.
+            // Features that exist only on this channel register with it.
             ExpansionMotions.Register();
             NetherRift.Register();
+            ExperimentalSpells.Register();   // drafts, off by default (rg_experimental_spells)
             ShopsFor.Register();   // the supply run's "which shop sells it" (on, our client only)
             CommandManager.TryAddCommand(AskRecalls, "recalls", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
                 "Our client asks for its lifestone and portal ties again (answered on the mod channel).", "");
@@ -54,10 +37,6 @@ namespace RevivalGuard
             if (session?.Player == null) return;
             int v = 1;
             if (parameters != null && parameters.Length > 0) int.TryParse(parameters[0], out v);
-            // THE CLIENT'S OWN VERSION (from 0.1.68; owner 2026-10-19: "the client tells the server its version so very old
-            // clients can be turned away later"): "@revivalclient 1 0.1.68 mac English" (the last word: the computer's language,
-            // Unity's SystemLanguage, for the localization question). Older clients send the channel version
-            // only, so an empty Client means older than 0.1.68. Recorded as a "client" event (Telemetry) once per hello.
             string client = parameters != null && parameters.Length > 1 ? Clean(parameters[1]) : "";
             string os = parameters != null && parameters.Length > 2 ? Clean(parameters[2]) : "";
             string lang = parameters != null && parameters.Length > 3 ? Clean(parameters[3]) : "";
@@ -77,17 +56,12 @@ namespace RevivalGuard
             DerethChatHost.Hello(session);          // the Dereth channel (other servers): the Cross-Server tab and its on/off
             Drinking.Hello(session);                // a character that relogs while drunk keeps its sway
             SendRecalls(session);                   // the lifestone, for the tracker's recall routes
-            ChessLobby.Hello(session);              // the chess lobby's state, so the client never has to ask a shard without it
+            ChessLobby.Hello(session);
             WhatsNew.Hello(session);                // last logout, for the client's what's-new card
             AwayMessage.Push(session);              // the away message's state, for both Assistants' boxes (Feature Requests #33)
         }
 
-        /// <summary>"recalls": the character's lifestone as map coordinates (F7 261023-0031: a character that never
-        /// used /ls was routed 3 km on foot, its lifestone 10 m from the portal). ACE sends the client no recall
-        /// destinations; a new character's Sanctuary is where it was made. Outdoor lifestones only (the route data's
-        /// surface places). Also both portal ties, t1/t2 (F7 261120-0003: the client's guessed secondary tie went stale;
-        /// ACE never sends LinkedPortalOne/TwoDID): null for none, else {"w":portal wcid,"d":[ns,ew,"lb hex if indoors"]},
-        /// the portal's Destination as a tie recall lands. "@recalls" asks again (the client, after a new tie).</summary>
+        /// <summary>"recalls": the character's lifestone as map coordinates.</summary>
         internal static void SendRecalls(Session session)
         {
             var p = session?.Player;
@@ -129,7 +103,7 @@ namespace RevivalGuard
 
         static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, System.DateTime> s_RecallsAsked = new();
 
-        /// <summary>"@recalls": our client asks for "recalls" again (a tie just changed). Our client only; one per 2 s.</summary>
+        /// <summary>"@recalls": our client asks for "recalls" again (a tie just changed).</summary>
         static void AskRecalls(Session session, params string[] parameters)
         {
             var p = session?.Player;
@@ -141,17 +115,10 @@ namespace RevivalGuard
             SendRecalls(session);
         }
 
-        /// <summary>The client version this connection announced ("" for a client older than 0.1.68, or one that has not
-        /// said hello). For a later minimum-version gate.</summary>
         public static string ClientVersion(Session session) =>
             session != null && s_Capable.TryGetValue(session, out var m) ? m.Client : "";
 
-        // THE MINIMUM CLIENT (owner 2026-10-19: "so very old clients can be turned away later"). OFF until set:
-        //   rg_min_client          a version such as "0.1.68"; a client that reports a lower one is told to update and
-        //                          disconnected. Empty (the default) = off.
-        //   rg_min_client_strict   true: also turn away our clients too old to report a version (before 0.1.68).
-        // Live ACE string/bool properties, so the owner's admin panel can change them without a restart. Staff are never
-        // turned away. Retail clients never say hello and are not affected.
+        // The minimum client.
         internal const string P_MIN_CLIENT = "rg_min_client", P_MIN_STRICT = "rg_min_client_strict";
         const string UPDATE_WHERE = "lumpybutt33.itch.io/hollowtide (or play at hollowtide.org)";
 
@@ -171,8 +138,6 @@ namespace RevivalGuard
             catch (System.Exception e) { Mod.Log.Error("[RevivalGuard] min client gate: " + e.Message); return false; }
         }
 
-        /// <summary>"0.1.9" against "0.1.10": numeric parts left to right, a missing part is 0 (as the client's
-        /// AcUpdateCheck.Compare).</summary>
         internal static int CompareVersions(string a, string b)
         {
             var pa = (a ?? "").Split('.'); var pb = (b ?? "").Split('.');

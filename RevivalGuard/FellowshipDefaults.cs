@@ -5,16 +5,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// FELLOWSHIP INVITES ARE ACCEPTED BY DEFAULT (owner 2026-10-16: "make automatically accept fellowship requests an option
-    /// thats on by default for all players").
-    ///
-    /// ACE's CharacterOptions1.Default carries IgnoreFellowshipRequests, so a new character silently ignored every invite,
-    /// and AutoAcceptFellowRequest is off. For a new character (ACE's CharacterOptions1Default being set at creation) and
-    /// once for every existing character (the next time it enters the world, remembered by a quest stamp), this turns
-    /// "Automatically Accept Fellowship Requests" on and "Ignore Fellowship Requests" off. Both stay on the Options page
-    /// as before, so a player who changes them afterwards keeps their choice.
-    /// </summary>
+    /// <summary>Fellowship invites are accepted by default.</summary>
     static class FellowshipDefaults
     {
         const string STAMP = "RevivalGuardFellowAutoAccept1";

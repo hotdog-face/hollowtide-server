@@ -10,35 +10,13 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A DELETED PATRON LEAVES NO ORPHANED VASSALS (ticket 261107-0006, Ah-Mule-Ee: "trying to chain a trade mule ...
-    /// getting an error that I've already sworn allegiance").
-    ///
-    /// ACE frees a deleted character's vassals in AllegianceManager.DoHandlePlayerDelete ("vassals now become monarchs"),
-    /// but it looks the character up in PlayerManager first, and this shard's char_delete_instant_teardown drops the
-    /// character from PlayerManager straight after queueing that work, so it prints "couldn't find player guid" and does
-    /// nothing (the same gap HouseRelease closes for houses). The vassals keep a patron that no longer exists, the
-    /// allegiance tree breaks at that link, and ACE's loop check (IsPledgable: "2 players can't swear to each other")
-    /// no longer sees the chain.
-    ///
-    /// The live case: on 2026-10-31 Fletch the Alchemule swore to Ah-Mule-Ee (0x50000456), sworn to Yasir, sworn to the
-    /// monarch Tomoki. That Ah-Mule-Ee was deleted about 2026-11-03 and Fletch kept it as patron. A new Ah-Mule-Ee
-    /// (0x5000049F) swore to Fletch on 11-03, and on 11-06 Tomoki, the monarch, swore to Fletch too: a loop through the
-    /// deleted character. On 11-07 the new Ah-Mule-Ee tried to swear to Fletch again; ACE's "You've already sworn
-    /// allegiance." was true (its patron already was Fletch), but the broken tree could not show it.
-    ///
-    /// Two patches: DoHandlePlayerDelete, when the character is already gone, frees its vassals by the guid (every player
-    /// whose PatronId is it); and at start-up every player whose patron does not exist is freed the same way, which
-    /// repairs the live allegiance above (Fletch becomes monarch of Tomoki, Yasir and the new Ah-Mule-Ee, as the patron
-    /// links say) and any other orphan. Each free mirrors ACE's own steps. Rule: AllegianceOrphanRule (nettest).
-    /// Switch: rg_allegiance_orphans.
-    /// </summary>
+    /// <summary>A deleted patron leaves no orphaned vassals.</summary>
     static class AllegianceOrphans
     {
         const string P_ON = "rg_allegiance_orphans";
         internal static bool On => PropertyManager.GetBool(P_ON, true).Item;
 
-        /// <summary>Every player whose patron is gone, freed. World thread.</summary>
+        /// <summary>Every player whose patron is gone, freed.</summary>
         internal static int Sweep(string why)
         {
             var all = PlayerManager.GetAllPlayers();
@@ -47,14 +25,13 @@ namespace RevivalGuard
             return orphans.Count;
         }
 
-        /// <summary>The vassals of a character that is already gone from PlayerManager, freed. World thread.</summary>
+        /// <summary>The vassals of a character that is already gone from PlayerManager, freed.</summary>
         internal static void FreeVassalsOf(uint deadGuid, string why)
         {
             foreach (var v in PlayerManager.GetAllPlayers().Where(p => p.PatronId == deadGuid).ToList()) Free(v, why);
         }
 
-        /// <summary>ACE's DoHandlePlayerDelete for one vassal: no patron, no monarch; everyone under it takes it as monarch;
-        /// the old allegiance's cache goes and both are rebuilt, loaded, checked for no allegiance, saved.</summary>
+        /// <summary>ACE's DoHandlePlayerDelete for one vassal</summary>
         static void Free(IPlayer vassal, string why)
         {
             if (vassal == null) return;
@@ -101,10 +78,6 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] AllegianceOrphans on delete: {e.Message}"); return true; }
         }
 
-        /// <summary>LIVE CRASH 2026-11-14 04:09 UTC: a character delete ran the stock path, GetAllegiance built an
-        /// allegiance whose monarch character no longer exists, BuildOfficers threw a NullReferenceException on the world
-        /// thread and the whole server went down. A delete that throws is logged, its vassals are freed by guid, and the
-        /// world goes on.</summary>
         static Exception Finalizer(Exception __exception, uint playerGuid)
         {
             if (__exception == null) return null;
@@ -115,9 +88,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>An allegiance node whose character is gone (a monarch or member deleted under this shard's instant
-    /// teardown) has no Player; stock BuildOfficers dereferences it and throws on the world thread (live crash
-    /// 2026-11-14 04:09 UTC). Same result as stock, skipping nodes with no character.</summary>
+    /// <summary>An allegiance node whose character is gone has no Player</summary>
     [HarmonyPatch(typeof(Allegiance), nameof(Allegiance.BuildOfficers))]
     static class AllegianceOfficersNullSafe
     {

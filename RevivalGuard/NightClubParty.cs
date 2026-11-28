@@ -20,26 +20,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE NIGHT CLUB HAS A POINT (owner 2026-10-28, all four ideas approved, plus dancing creatures). Before this the
-    /// attendant's teleport counted the night and there was nothing to do inside. Now, while the Night Club or the
-    /// Anniversary runs:
-    ///   * DANCE FOR YOUR NIGHT: a night counts for Night Club Regular (counter NightClubNights, FestivalGoals.cs) only
-    ///     after about a minute of dancing inside the club (landblock 0x8A04). Told on arrival, at 20 and 40 s, and when
-    ///     it counts. The attendants no longer stamp anything (tools/gpubox-ace/gen_festival_goals.py section 8).
-    ///   * NIGHTLY PRIZE: each counted night (one per 20 h, NightClubTonight) gives a retail Anniversary Sparkler, any
-    ///     colour. The third night still pays the Anniversary Balloons, now in the club (pack full: any attendant).
-    ///   * A DJ WHO CALLS DANCES: the Night Club DJ (902630, tools/gpubox-ace/gen_nightclub_party.py) names a dance every
-    ///     CALL_S while anyone is inside. Everyone who does it within WINDOW_S gets the party buff: more creature XP for
-    ///     an hour. No stacking: a new buff replaces the old one only if it is at least as big.
-    ///   * CROWD BONUS: BASE plus PER_DANCER for each other dancer on the same call (distinct accounts, so one account's
-    ///     characters count once; not addresses, which every browser player shares through the web gateway), at most CAP.
-    ///   * THE FLOOR DANCES: retail's own drudge and tusker dancers in the floor play their default animation (client,
-    ///     AcStaticAnim.cs); the Night Club Revelers (902631-902634) hold the drudge dance, break into a one-shot now and
-    ///     then, and join each call. The DJ (902630) is invisible, on the drudge DJ's spot, and only speaks.
-    /// Staff: @nightclub [status | call [dance] | newnight | reset] (the last two on yourself, for testing). Dances arrive as the MoveToState our client and retail's send: a held
-    /// pose is the forward command (*dance* = DrudgeDanceState), a one-shot is in the command list.
-    /// </summary>
+    /// <summary>The night club HAS a point.</summary>
     static class NightClubParty
     {
         internal const ushort CLUB = 0x8A04;
@@ -132,11 +113,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>
-        /// THE EMOTE TEXT COUNTS TOO. A client that already holds the drudge dance (it held it through a teleport) sends no
-        /// new MoveToState when *dance* is typed again, only the SoulEmote text (box test 2026-10-28: night 2 never counted).
-        /// The text is the DAT ChatPoseTable's onlookers' line ("%p" as his or her), so it maps back to the motion.
-        /// </summary>
+        /// <summary>The emote text counts too.</summary>
         internal static void OnSoulEmote(Player p, string text)
         {
             if (string.IsNullOrEmpty(text) || !InClub(p) || !SoulText().TryGetValue(Norm(text), out var c)) return;
@@ -365,14 +342,7 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] NightClubParty: {p.Name} got the party buff {pct:P0} for 1 h (shown as {spell?.Name ?? "nothing"}, effect {fx})");
         }
 
-        // ---- the buff in the spell effects list ---------------------------------------------------------------------
-        // PARTY BUFF ON THE EFFECTS LIST (owner 2026-11-06: make the award obvious). Retail's own XP enchantment,
-        // Augmented Understanding (the trinket spell, category TrinketXPRaising), is put on the player with the player as
-        // caster, its value set to the buff's size and its time to the buff's time left. It is display only: the XP
-        // still comes from NightClubPartyXp (creature kills only), and NightClubPartyXpBonus keeps this entry out of
-        // ACE's trinket XP bonus, so a real Augmented Understanding trinket works exactly as before. II for +5%,
-        // III for +6% and up. Enchantment timers run only while online and the buff runs on the clock, so Sync (every
-        // 10 s, and at login) puts the entry back after a death, retimes it after a logout, and takes it off at the end.
+        // the buff in the spell effects list
 
         static readonly uint[] SHOW_SPELLS = { 5153, 5154, 5137 };      // Augmented Understanding I, II, III
         static uint ShowSpell(double pct) => pct >= 0.06 - 1e-9 ? 5137u : 5154u;
@@ -486,9 +456,7 @@ namespace RevivalGuard
         static IEnumerable<WorldObject> Find(Player anyone, Func<WorldObject, bool> pred) =>
             anyone?.CurrentLandblock?.GetAllWorldObjectsForDiagnostics().Where(o => o != null && pred(o)) ?? Enumerable.Empty<WorldObject>();
 
-        /// <summary>To each player in the club, as the DJ's speech. Not a broadcast from the DJ: the DJ is invisible (the
-        /// drudge DJ in the floor is the one you see, owner 261029-0005), and ACE broadcasts only to players who know
-        /// the object, which nobody does (box 2026-10-29: the calls never arrived).</summary>
+        /// <summary>To each player in the club, as the DJ's speech.</summary>
         static void Speak(WorldObject dj, List<Player> inside, string text)
         {
             foreach (var p in inside)
@@ -516,7 +484,6 @@ namespace RevivalGuard
             var inside = PlayerManager.GetAllOnline().Where(InClub).ToList();
             if (verb == "newnight" || verb == "reset")
             {
-                // testing: newnight forgets tonight (the next minute of dancing counts another night); reset clears it all
                 var qm = me?.QuestManager;
                 if (qm == null) return;
                 qm.Erase(TONIGHT);
@@ -609,8 +576,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>ACE's trinket XP bonus (EnchantmentManager.GetXPBonus: the strongest TrinketXPRaising enchantment) without
-    /// the party buff's effects-list entry, which is display only (NightClubParty.Show). Same code as ACE's otherwise.</summary>
+    /// <summary>ACE's trinket XP bonus without the party buff's effects-list entry, which is display only.</summary>
     [HarmonyPatch(typeof(EnchantmentManager), nameof(EnchantmentManager.GetXPBonus))]
     static class NightClubPartyXpBonus
     {

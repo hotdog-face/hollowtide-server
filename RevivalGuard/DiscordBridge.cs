@@ -19,32 +19,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE DISCORD BRIDGE (docs/CHAT-IMPROVEMENTS-01.md piece 6, ours): the in-game General channel and one Discord
-    /// channel, mirrored both ways, so friends can talk to the game from their phone.
-    ///
-    ///   Out: every line said on General (TurbineChatHandler.LogTurbineChat runs once per line actually sent) is
-    ///        posted to the Discord channel as "**Name**: text". Mercenaries' lines never leave.
-    ///   In:  the bot reads the channel every few seconds; each new message from a person (not a bot, not ours)
-    ///        is spoken on General in game as "Name (Discord)", to everyone who listens to General.
-    ///
-    /// One Discord bot does both (REST only, no gateway): POST and GET /channels/{id}/messages with "Bot <token>".
-    /// The bot needs the Message Content intent and, in that channel, View Channel, Send Messages and Read Message
-    /// History. Mentions never ping (allowed_mentions parse none); lines are capped in length; at most one post every
-    /// 1.2 s (lines in between are joined) and 429s are honoured.
-    ///
-    /// CONFIG: discord-bridge.json beside the mod, {"token": "...", "channelId": "..."}. No file, no bridge. The file
-    /// is never published (the public source takes only the .cs files).
-    ///
-    /// ANNOUNCEMENTS (FestivalNotices, 2026-10-21): an optional "announceChannelId" (#announcements) takes one-way
-    /// posts from the shard, festival starts and ends. The same bot posts there; it needs View Channel and Send
-    /// Messages in that channel. Without the field nothing is announced (the General channel never gets them).
-    ///
-    /// PK DEATHS (PkDeathFeed, 2026-11-26): an optional "pkDeathsChannelId" (#pk-deaths) gets one line per PK kill,
-    /// batched in 10 s windows (PkDeathFeedRule). Same bot; View Channel and Send Messages there. No field, no feed.
-    /// TEST SHARDS ONLY: "apiBase" (e.g. "http://127.0.0.1:8471/api/v10") sends every call to a local stub instead of
-    /// discord.com, so a test never reaches the real Discord. Never set it on the live server.
-    /// </summary>
+    /// <summary>The discord bridge: the in-game General channel and one Discord channel, mirrored both ways</summary>
     [HarmonyPatch]
     static class DiscordBridge
     {
@@ -60,15 +35,11 @@ namespace RevivalGuard
         static Config s_Cfg;
         static HttpClient s_Http;
         static string s_BotId, s_LastId, s_GuildId, s_OwnerId;
-        // false until the channel's newest message is known: the first poll then only records where it stands, so a
-        // failed startup never replays the channel's last 20 messages into General
         static bool s_Seeded;
         // Discord unreachable: the first failure is said, then once per 10 minutes with how many there were
         static int s_Fails, s_FailsSinceLog;
         static DateTime s_FailLoggedAt;
-        // THE SERVER NICKNAME, not the account name (owner 2026-10-14: the bridge showed his account name in game, not
-        // his nickname on the server). A REST message carries no member, so each author's nickname is looked up once
-        // and kept 10 minutes.
+        // The server nickname, not the account name.
         static readonly Dictionary<string, (string nick, DateTime at)> s_Nicks = new Dictionary<string, (string, DateTime)>();
         static readonly ConcurrentQueue<string> s_Out = new ConcurrentQueue<string>();
         static readonly ConcurrentQueue<string> s_Announce = new ConcurrentQueue<string>();
@@ -157,7 +128,6 @@ namespace RevivalGuard
                         using var doc = JsonDocument.Parse(await ch.Content.ReadAsStringAsync());
                         if (doc.RootElement.TryGetProperty("guild_id", out var gid)) s_GuildId = gid.GetString();
                     }
-                // THE SERVER'S OWNER is the one Discord member allowed to appear under a protected name (NameGuard)
                 if (s_GuildId != null)
                     using (var gr = await s_Http.GetAsync($"{API}/guilds/{s_GuildId}", stop))
                         if (gr.IsSuccessStatusCode)
@@ -165,7 +135,6 @@ namespace RevivalGuard
                             using var doc = JsonDocument.Parse(await gr.Content.ReadAsStringAsync());
                             if (doc.RootElement.TryGetProperty("owner_id", out var oid)) s_OwnerId = oid.GetString();
                         }
-                // start from the channel's newest message, so a restart never replays the backlog into the game
                 using (var last = await s_Http.GetAsync($"{API}/channels/{s_Cfg.channelId}/messages?limit=1", stop))
                 {
                     if (last.IsSuccessStatusCode)
@@ -215,14 +184,12 @@ namespace RevivalGuard
         {
             if (s_Out.IsEmpty) return;
             var sb = new StringBuilder();
-            // one reader, so the line peeked is the line taken; a long post (Leaderboards) never pushes one past Discord's 2000
             while (sb.Length < 1600 && s_Out.TryPeek(out var next) && (sb.Length == 0 || sb.Length + next.Length < 1950))
             {
                 s_Out.TryDequeue(out var line);
                 if (sb.Length > 0) sb.Append('\n');
                 sb.Append(line);
             }
-            // flags 4 = SUPPRESS_EMBEDS (Fable audit 2026-10-19, item 5): a link typed in game posts as plain text, never a preview
             var body = JsonSerializer.Serialize(new { content = sb.ToString(), allowed_mentions = new { parse = Array.Empty<string>() }, flags = 4 });
             using var r = await s_Http.PostAsync($"{API}/channels/{s_Cfg.channelId}/messages", new StringContent(body, Encoding.UTF8, "application/json"), stop);
             if ((int)r.StatusCode == 429) { await Task.Delay(RetryAfter(await r.Content.ReadAsStringAsync()), stop); return; }
@@ -230,10 +197,7 @@ namespace RevivalGuard
             else s_Sent++;
         }
 
-        /// <summary>
-        /// Queue one post from the shard itself for the General channel (Leaderboards' daily post, off unless the owner turns
-        /// it on: the bot posts only to #general). False when there is no bridge.
-        /// </summary>
+        /// <summary>Queue one post from the shard itself for the General channel.</summary>
         public static bool PostGeneral(string text)
         {
             if (s_Cfg == null || string.IsNullOrWhiteSpace(text)) return false;
@@ -241,10 +205,7 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>
-        /// Queue a post for the announcements channel (Discord markdown allowed, mentions never ping). False when
-        /// there is no bridge or no announceChannelId; the caller logs the text instead.
-        /// </summary>
+        /// <summary>Queue a post for the announcements channel.</summary>
         public static bool Announce(string text)
         {
             if (s_Cfg == null || string.IsNullOrWhiteSpace(s_Cfg.announceChannelId) || string.IsNullOrWhiteSpace(text)) return false;
@@ -255,7 +216,7 @@ namespace RevivalGuard
         static async Task PostAnnouncements(CancellationToken stop)
         {
             if (s_Announce.IsEmpty || s_Cfg == null) return;
-            // several at once (Festival Season ends as the Anniversary and the Night Club begin) go as one post
+            // several at once go as one post
             var sb = new StringBuilder();
             while (sb.Length < 1600 && s_Announce.TryPeek(out var next) && (sb.Length == 0 || sb.Length + next.Length < 1950))
             {
@@ -332,8 +293,6 @@ namespace RevivalGuard
                 string text = m.TryGetProperty("content", out var c) ? c.GetString() ?? "" : "";
                 if (m.TryGetProperty("attachments", out var at) && at.GetArrayLength() > 0) text = (text + " [picture]").Trim();
                 if (!bot && aid != s_BotId) who = await Nick(aid, stop) ?? who;
-                // NO ONE BUT THE OWNER UNDER THE OWNER'S NAME (owner 2026-10-16, impersonation): a nickname that looks
-                // like a protected name falls back to the Discord username, and to "Discord user" if that does too
                 if (!bot && aid != s_OwnerId && NameGuard.IsLookalike(who))
                 {
                     string un = author.TryGetProperty("username", out var u) ? u.GetString() : null;
@@ -388,7 +347,6 @@ namespace RevivalGuard
             catch { return 5000; }
         }
 
-        /// <summary>One line, printable, capped: a Discord message can be many lines and emoji the game font lacks.</summary>
         static string Clean(string s, int max)
         {
             var sb = new StringBuilder();

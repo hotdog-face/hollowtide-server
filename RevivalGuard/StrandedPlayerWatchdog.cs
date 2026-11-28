@@ -5,17 +5,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A PLAYER IN NO LANDBLOCK IS RELOGGED (the net under LandblockUnloadGuard, ticket 261109-0037).
-    ///
-    /// An online player whose CurrentLandblock is null and who is neither teleporting nor logging out is ticked by
-    /// nothing: their action queue never runs (no UseDone, IsBusy never clears: "You're too busy!" for every use), their
-    /// positions are never read, and their physics body was destroyed by the unload that dropped them. Rocket sat like
-    /// that until he relogged by hand. A relog is the remedy proven to clear it (TeleportCompleteRescue), and ACE's own
-    /// logout path needs no landblock (LogOut_Final goes straight to FinalizeLogout). Only a player seen in a landblock
-    /// earlier this session counts, so a login that never placed is not looped. Runs on PlayerManager.Tick (TeleportWatchdog
-    /// says why not Heartbeat). Switch: rg_stranded_watchdog; stranded.seconds (default 15).
-    /// </summary>
+    /// <summary>A player in no landblock is relogged.</summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class StrandedPlayerWatchdog
     {

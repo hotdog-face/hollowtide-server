@@ -11,28 +11,14 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE BORG'S OFF SWITCH (docs/proposals/the-borg.md; owner rule: an admin panel button, no typed commands). The Borg
-    /// are the disclosed bot guild (tools/borg/borg.py) on the Hollow Company's allowlisted accounts (Mercenaries.IsMerc).
-    /// Switch: the file borg-off beside the dll (no file = ON, so the mercs and Borg that run today keep running): "@borg off" logs every bot out within
-    /// a second and keeps them out (a bot that logs in while it is off is logged out again two seconds after it enters the
-    /// world); "@borg on" lets them back; "@borg" or "@borg status" says which, and who is in. Persisted by ACE's property
-    /// folder, so a restart keeps it. Sentinel and up (the admin panel's switch runs it).
-    ///
-    /// The brains need no change: a Borg logged out by the server sits at character select, its brain finds it there and
-    /// tries again later; while the switch is off every try ends the same way.
-    /// </summary>
+    /// <summary>The borg's off switch.</summary>
     public static class BorgSwitch
     {
-        // A FILE, NOT AN ACE PROPERTY (shard2 test 2026-11-08: "rg_borg" set off by @borg was back on after a restart; ACE's
-        // property table did not keep a key it does not define). borg-off beside the dll = off; no file = on.
         static string OffFile => System.IO.Path.Combine(ModFolder.Path(), "borg-off");
 
         public static bool On => !System.IO.File.Exists(OffFile);
 
-        /// <summary>THE ONE BORG CHECK (BorgRule): an allowlisted shard account AND a name ending " of Borg". The Hollow
-        /// Company's mercs share those accounts and stay out of the Borg rules (not "of Borg"); a player's "X of Borg" is
-        /// never one (M5 test 2026-11-19).</summary>
+        /// <summary>The one borg check (BorgRule): an allowlisted shard account and a name ending " of Borg".</summary>
         public static bool IsBorg(Player p) => p != null && BorgRule.IsBorg(Mercenaries.IsMerc(p), p.Name);
 
         /// <summary>By account name, for a character that may be offline.</summary>
@@ -94,9 +80,6 @@ namespace RevivalGuard
         internal static void Boot(Player p, string why)
         {
             Mod.Log.Info($"[RevivalGuard] Borg: logging out {p.Name} ({why})");
-            // A WHOLE DISCONNECT, NOT A LOGOFF (shard2 test 2026-11-08): after LogOffPlayer the bot's client went on
-            // thinking it was in the world. Booted, the client is told why and its re-login is refused at the login request
-            // (AccountCreationCap's prefix asks RefuseLogin) for as long as the switch is off.
             if (p.Session != null) p.Session.Terminate(SessionTerminationReason.AccountBooted, new GameMessageBootAccount(" because the Borg are switched off"));
             else p.LogOut();
         }

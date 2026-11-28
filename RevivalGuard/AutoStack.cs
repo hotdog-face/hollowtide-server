@@ -9,24 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// NEW STACKS JOIN THE ONES YOU ALREADY CARRY (owner, 2026-09-25: "items need to auto stack as
-    /// well"). Ours: retail merged only when you dropped one stack onto another
-    /// (ItemHolder::AttemptMerge, decompile ~385060), and ACE never merges on its own, so every
-    /// purchase, reward, pickup and the change from a broken note arrived as a separate stack.
-    ///
-    /// Covered: anything created into the pack (vendor purchases, quest and emote gives, note
-    /// change, admin creates) and anything picked up from outside your possessions (the ground, a
-    /// corpse, a chest). NOT covered on purpose: moving or splitting a stack you already carry,
-    /// since a split is deliberate and merging it back would undo it.
-    ///
-    /// The merge is ACE's own HandleActionStackableMerge, a moment later so the client has seen the
-    /// new stack first. The new stack pours into the fullest stack of the same kind that has room,
-    /// then the next, until it is empty or everything is full.
-    ///
-    /// Our client's "Auto-stack items in packs" option off (Feature Requests #16) sends "@rgautostack 0": that
-    /// SESSION gets no merges (a new login is a new session; the client says it again). Default on.
-    /// </summary>
+    /// <summary>New stacks join the ONES you already carry.</summary>
     public static class AutoStack
     {
         static readonly ConditionalWeakTable<Session, object> s_Off = new ConditionalWeakTable<Session, object>();

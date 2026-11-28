@@ -4,14 +4,7 @@ using ACE.DatLoader;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE ONE LIST of spells this shard adds or newly makes obtainable (owner 2026-10-20: "any new spells made need to be
-    /// added to my an admin character spellbook to test"). @testspells / @voidtest (AdminVoid) teaches all of them.
-    ///   Ours: every id at or above OURS_FROM that is in the loaded spell table (e.g. Nether Rift 60001, put there by
-    ///     NetherRift.Inject) is taught with no edit here; teaching goes through LearnSpellWithNetworking, so a spell
-    ///     with its own learn hook (NetherRift: a quest flag, never the spellbook) keeps it.
-    ///   Retail spells we newly make obtainable: add a row to UNLOCKED when you unlock one (ids from ace_world.spell).
-    /// </summary>
+    /// <summary>The one list of spells this shard adds or newly makes obtainable.</summary>
     static class ShardSpells
     {
         internal const uint OURS_FROM = 60000;

@@ -8,16 +8,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// OWNER-APPROVED EXTRA DEATH LINES (2026-10-20, "i like all the new death lines. add them all.";
-    /// docs/DIVERGENCES.md). Appended to ACE's retail lists in Strings at mod load, never replacing them.
-    /// {0} = victim, {1} = killer, as in Strings.cs.
-    ///
-    /// Strings.GetDeathMessage picks ThreadSafeRandom.Next(0, Count - 1) (inclusive), so appended lines
-    /// mix in by themselves, Critical included. PKCritical does not: Creature.GetDeathMessage always takes
-    /// Strings.PKCritical[0], so the prefix below handles only that case (a player killed by a player's
-    /// critical) with a random pick, and leaves every other case to ACE.
-    /// </summary>
     public static class ExtraDeathLines
     {
         static bool added;
@@ -88,7 +78,6 @@ namespace RevivalGuard
                     M("{0} is slain so hard their patron feels the experience loss!",
                       "You are slain by {1} so hard your patron feels the experience loss!",
                       "{0} is slain by {1} so hard their patron feels the experience loss!"));
-                // Wildcards, owner 2026-10-20: "all the new death lines are approved. please add them."
                 var wild = new[] {
                     M("You hit {0} so hard they soil their armor on the way down!",
                       "{1} hits you so hard you soil your armor on the way down!",
@@ -135,10 +124,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// A random PKCritical line instead of always [0]. Mirrors Creature.GetDeathMessage for that one case
-    /// (same early-out, same killer notification); any other case, or an error, runs ACE's own.
-    /// </summary>
+    /// <summary>A random PKCritical line instead of always [0].</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.GetDeathMessage))]
     public static class ExtraDeathLines_PkCritical
     {

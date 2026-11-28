@@ -9,22 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// TAILORING KITS, INTERMEDIATES AND REDUCTION TOOLS ON WORN GEAR (owner 2026-10-20, "Tailoring kits"; audit
-    /// docs/findings/accuracy-2026-10-20/items-interactions.md #10). ACE's Tailoring.VerifyUseRequirements searches the
-    /// pack only. The retail client sends a contained-target use for anything the player owns, worn included
-    /// (ItemHolder::TargetCompatibleWithObject @00587520), but no retail server verdict is on record, so this is ours
-    /// (docs/DIVERGENCES.md). The layering tools are ArmorLayering's; Aetheria, core plating and pet devices are not
-    /// tailoring tools and keep ACE's refusals. Retained and society armour are still refused, as ACE does.
-    ///   - kit on a worn piece: the piece comes off and is used up (ACE's Finalize could not consume a worn item: the
-    ///     kit and the target both stayed and the intermediate was made anyway); the result is made first, so a full
-    ///     pack refuses before anything is spent;
-    ///   - intermediate onto a worn piece: the new look goes to everyone at once (UpdateObject + ObjDescEvent, as ACE's
-    ///     RecipeManager does for a worn dye);
-    ///   - reduction tool on a worn piece: the piece now covers less, so it is re-slotted to the reduced slots
-    ///     (WieldObject) and the look re-sent.
-    ///   @modifybool tailoring_worn false   ACE's rule (pack only)
-    /// </summary>
+    /// <summary>Tailoring KITS, intermediates and reduction tools on worn gear.</summary>
     static class WornTailoring
     {
         internal const string P_ON = "tailoring_worn";
@@ -99,8 +84,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A kit on a worn piece: make the intermediate first, then use up the kit and take the piece off and
-        /// destroy it (ACE's TryConsumeFromInventoryWithNetworking only looks in the pack).</summary>
+        /// <summary>A kit on a worn piece: make the intermediate first, then use up the kit and take the piece off and destroy it.</summary>
         [HarmonyPatch]
         static class TakeLookOffWorn
         {
@@ -136,8 +120,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>An intermediate onto a worn piece (armour or a wielded weapon): everyone sees the new look now.
-        /// The source being gone is the sign it worked (a refusal keeps it).</summary>
+        /// <summary>An intermediate onto a worn piece (armour or a wielded weapon): everyone sees the new look now.</summary>
         [HarmonyPatch]
         static class ApplyArmor
         {

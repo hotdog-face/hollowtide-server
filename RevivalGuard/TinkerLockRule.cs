@@ -10,12 +10,7 @@ namespace RevivalGuard
 
         public enum Bind { None, Target, Result }
 
-        /// <summary>What one recipe_mods_i_i_d row locks to the player who applies the recipe. ACE's ModifyInstanceID
-        /// writes ModifyInstanceIDRuleSet(prop, sourceMod, ...) = sourceMod's guid for AllowedWielder: on CopyFromSourceToTarget
-        /// sourceMod is the player only when the row's source is Player (0); on CopyFromSourceToResult ACE passes the player
-        /// whatever the row says (RecipeManager.cs "// ??"). AllowedActivator (31) is left out on purpose: ACE never refuses
-        /// anything on it (only the appraisal flag reads it), so warning for its 400 recipes would warn of a lock that is not
-        /// there.</summary>
+        /// <summary>What one recipe_mods_i_i_d row locks to the player who applies the recipe.</summary>
         public static Bind Row(int stat, int op, int source)
         {
             if (stat != ALLOWED_WIELDER) return Bind.None;
@@ -24,7 +19,7 @@ namespace RevivalGuard
             return Bind.None;
         }
 
-        /// <summary>The question before the recipe runs (owner 2026-11-20: "so its more clear to players how it works").</summary>
+        /// <summary>The question before the recipe runs.</summary>
         public static string Ask(string locked, string who, string source) =>
             $"This locks the {locked} to {who}: only {who} will be able to wield it, and it can't be undone. Apply the {source}?";
 
@@ -35,15 +30,13 @@ namespace RevivalGuard
         /// <summary>After No (or no answer): nothing was used or changed.</summary>
         public static string Declined(string target, string source) => $"You keep the {source}. The {target} is unchanged.";
 
-        /// <summary>Who an existing lock names: the online or offline character's name, else the item's CraftsmanName (the
-        /// binding recipes copy it from the player), else a plain phrase.</summary>
+        /// <summary>Who an existing lock names: the online or offline character's name, else the item's CraftsmanName, else a plain phrase.</summary>
         public static string OwnerName(string byGuid, string craftsman) =>
             !string.IsNullOrEmpty(byGuid) ? byGuid : !string.IsNullOrEmpty(craftsman) ? craftsman : "another character";
 
-        // ---- @unlockwield (owner 2026-11-20, "Staff command, next restart") ----
+        // ---- @unlockwield ----
 
-        /// <summary>The ways "<character> <item name>" can be read: split at a comma if there is one, else every word break,
-        /// longest character name first (names and items both have spaces).</summary>
+        /// <summary>The ways " " can be read: split at a comma if there is one, else every word break, longest character name first.</summary>
         public static System.Collections.Generic.List<(string who, string item)> Splits(string[] words)
         {
             var list = new System.Collections.Generic.List<(string, string)>();
@@ -56,8 +49,7 @@ namespace RevivalGuard
             return list;
         }
 
-        /// <summary>The items a query names: "0x&lt;guid&gt;" that guid; else every exact name (any case); else every name
-        /// containing the query.</summary>
+        /// <summary>The items a query names: "0x&lt;guid&gt;" that guid; else every exact name; else every name containing the query.</summary>
         public static System.Collections.Generic.List<int> Pick(System.Collections.Generic.IReadOnlyList<(uint guid, string name)> items, string query)
         {
             var hits = new System.Collections.Generic.List<int>();

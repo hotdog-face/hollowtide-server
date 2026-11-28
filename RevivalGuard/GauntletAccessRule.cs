@@ -6,9 +6,7 @@ namespace RevivalGuard
         /// <summary>The one line all three Gauntlet Arena portals (53025, 53249, 53250) send for every refusal.</summary>
         public const string AceRefusal = "You do not have access to this arena.";
 
-        /// <summary>An arena portal's society and the fellowship quest stamps its Use emote checks
-        /// (GauntletArena1XX@ValidateAccess, then GauntletArena2XX), set when the society's Master of the Gauntlet
-        /// takes a ticket (StampFellowQuest, 3600 s timer).</summary>
+        /// <summary>An arena portal's society and the fellowship quest stamps its Use emote checks</summary>
         public sealed class Arena
         {
             public readonly uint Wcid; public readonly string Society, Code;
@@ -31,13 +29,7 @@ namespace RevivalGuard
             return null;
         }
 
-        /// <summary>The reason a player was refused, in the order the arena and the Master check it. Null keeps ACE's
-        /// line (a live stamp means the refusal was not about access).</summary>
-        /// <param name="inFellowship">the arena checks the FELLOWSHIP's stamp, so no fellowship is always a refusal</param>
-        /// <param name="stampLive">this society's arena stamp is on the fellowship and inside its hour</param>
-        /// <param name="stampExpired">the stamp is on the fellowship but its hour is over</param>
-        /// <param name="otherSociety">another society's live arena stamp on the fellowship, or null</param>
-        /// <param name="member">the player has this society's membership flag (needed to hand in a full ticket)</param>
+        /// <summary>The reason a player was refused, in the order the arena and the Master check it.</summary>
         public static string Reason(Arena a, bool inFellowship, bool stampLive, bool stampExpired, string otherSociety, bool member)
         {
             if (a == null || stampLive) return null;

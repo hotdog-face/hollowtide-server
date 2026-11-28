@@ -4,15 +4,7 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The target dummy's build words, pure (no ACE types; tools/nettest compiles it by path, TargetDummyCase.cs). Owner
-    /// 2026-11-27, balance review "measure damage": every dummy run goes to the event log by build (dummy_dps), so
-    /// tools/reports/kill_speed_weekly.py can table damage per second per build and balance calls have numbers.
-    ///
-    ///   A hit's build is the skill that made it (ACE's Skill names): melee (heavy, light, finesse and the retired weapon
-    ///   skills), 2h, missile, war, void, life, summon (a pet's hit, counted for its owner), other. The run's build is the
-    ///   one that did the most damage; the template is the player's specialized combat skills (trained when none).
-    /// </summary>
+    /// <summary>The target dummy's build words, pure (no ACE types; tools/nettest compiles it by path, TargetDummyCase.cs).</summary>
     public static class TargetDummyRule
     {
         public const string MELEE = "melee", TWO_HANDED = "2h", MISSILE = "missile", WAR = "war", VOID = "void", LIFE = "life",
@@ -44,8 +36,7 @@ namespace RevivalGuard
                 .ThenBy(kv => Array.IndexOf(order, kv.Key) < 0 ? 99 : Array.IndexOf(order, kv.Key)).Select(kv => kv.Key).FirstOrDefault() ?? OTHER;
         }
 
-        /// <summary>The template: the distinct kinds of the specialized combat skills, or of the trained ones when none is
-        /// specialized, in a fixed order joined with "+" ("2h+war"); "none" with neither.</summary>
+        /// <summary>The template: the distinct kinds of the specialized combat skills, or of the trained ones when none is specialized</summary>
         public static string Template(IEnumerable<string> specialized, IEnumerable<string> trained)
         {
             var order = new[] { MELEE, TWO_HANDED, MISSILE, WAR, VOID, LIFE, SUMMON };

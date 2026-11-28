@@ -8,14 +8,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// COSTUME CASTERS AS A RARE WORLD DROP (owner 2026-11-24: "i want to make sure players have a way to get them in
-    /// game" ... "Yes, add a source"). The second way to the 13 approved casters besides the festival-goal prizes
-    /// (FestivalCostumePrizes, untouched): a creature of level 20+ a player kills may carry one in its corpse, any day of
-    /// the year. One roll per kill, the joke drops' shape (JokeScrollRewards); rate, level and pool are
-    /// SeasonalSourcesRule 2b, checked by tools/nettest. rg_costume_caster_drops turns it on (default OFF);
-    /// rg_costume_caster_rate (default 1) multiplies the chance, for tests.
-    /// </summary>
+    /// <summary>Costume casters as a rare world drop.</summary>
     [HarmonyPatch]
     static class CostumeCasterDrops
     {

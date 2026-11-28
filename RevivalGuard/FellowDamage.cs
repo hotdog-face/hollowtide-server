@@ -5,24 +5,13 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// YOUR FELLOWS' DAMAGE, FOR THE FLOATING NUMBERS (owner, 2026-09-25: "I think seeing damage done
-    /// by your fellowship would be an amazing addition"). Ours. ACE tells only the attacker about a
-    /// hit (GameEventAttackerNotification), so a client has no way to see anyone else's numbers.
-    ///
-    /// Every damage a creature records passes through DamageHistory.Add: melee, missiles, war spells
-    /// and damage over time alike. When the attacker is a player in a fellowship, each other member
-    /// whose client reads the mod channel, and who is within 60 m of the target, gets "fdmg":
-    /// {"a":attacker,"t":target,"n":amount,"k":damageType}. Only damage to non-players is shared.
-    /// Retail clients never receive it.
-    /// </summary>
+    /// <summary>Your fellows' damage, for the floating numbers.</summary>
     [HarmonyPatch(typeof(DamageHistory), nameof(DamageHistory.Add))]
     static class FellowDamage
     {
         const float RANGE = 60f;
 
-        // Runs on landblock threads, where an escaped exception stops the world loop: the fellowship's member
-        // dictionary is ACE's plain Dictionary and can change under this walk when a fellow joins or drops.
+        // Runs on landblock threads, where an escaped exception stops the world loop
         static void Postfix(DamageHistory __instance, WorldObject attacker, DamageType damageType, uint amount)
         {
             try { Share(__instance, attacker, damageType, amount); }

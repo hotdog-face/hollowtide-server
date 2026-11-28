@@ -4,17 +4,9 @@ using System.Globalization;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// DARKTIDE SEASON 1, THE PURE HALF (no ACE types; tools/nettest compiles it by path with PkNightRules.cs, PkSeasonCase).
-    /// Owner 2026-11-21 ("yes all 1-5", docs/findings/pk-server-plan-2026-11-21.md move 1): a dated PK season. It opens
-    /// with PK Night on a Sunday at 7 PM Pacific with a fresh renown ladder, runs a number of PK Nights (every other Sunday,
-    /// owner 2026-11-23), each closing a round, and ends when the last PK Night's round ends: the leader is Warlord of Dereth,
-    /// second and third Gladiator Champion (PkRenown.EndSeason). PkSeason.cs runs it on the world loop.
-    /// </summary>
+    /// <summary>Darktide season 1, the pure half (no ACE types; tools/nettest compiles it by path with PkNightRules.cs, PkSeasonCase).</summary>
     public static class PkSeasonRules
     {
-        /// <summary>The proposal (owner confirms date and name): opens with PK Night on Sunday 2026-12-06, 7 PM PST
-        /// (Mon 12-07 03:00 UTC), five PK Nights (Dec 6, Dec 20, Jan 3, Jan 17, Jan 31), the last Sunday 2027-01-31.</summary>
         public static readonly DateTime PROPOSED_SUNDAY = new DateTime(2026, 12, 6, 0, 0, 0, DateTimeKind.Unspecified);
         public const int PROPOSED_ROUNDS = 5;
         public const string PROPOSED_NAME = "Darktide Season 1", PROPOSED_NEXT = "Darktide Season 2";
@@ -35,8 +27,7 @@ namespace RevivalGuard
         public static long Unix(DateTime utc) => new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeSeconds();
         public static DateTime Utc(long unix) => DateTimeOffset.FromUnixTimeSeconds(unix).UtcDateTime;
 
-        /// <summary>A season opening with PK Night on `sunday` (a Pacific date, a PK Night Sunday) and ending when its
-        /// `rounds`th PK Night is over (the first and last included).</summary>
+        /// <summary>A season opening with PK Night on `sunday` and ending when its `rounds`th PK Night is over.</summary>
         public static Schedule Plan(DateTime sunday, int rounds, string name, string next)
         {
             if (!PkNight.IsNightSunday(sunday)) throw new ArgumentException("the season opens on a PK Night Sunday (every other Sunday from Nov 22)");
@@ -52,8 +43,7 @@ namespace RevivalGuard
 
         public enum Step { None, Start, End, Notice }
 
-        /// <summary>What is due now: the opening, the end, or one announcement (its key in `notice`, to be added to
-        /// Said once told). A notice missed while the server was down is skipped, never told late.</summary>
+        /// <summary>What is due now: the opening, the end, or one announcement (its key in `notice`, to be added to Said once told).</summary>
         public static Step Due(Schedule s, long now, out string notice)
         {
             notice = null;
@@ -73,13 +63,11 @@ namespace RevivalGuard
 
         static bool Window(Schedule s, string key, long now, long from, long until) => now >= from && now < until && !s.Said.Contains(key);
 
-        /// <summary>The season's PK Nights, the first and last included (from its dates, so a plan saved before
-        /// 2026-11-23 as "8 weeks" from Dec 6 reads as its 5).</summary>
+        /// <summary>The season's PK Nights, the first and last included.</summary>
         public static int Rounds(Schedule s) => (int)Math.Round((s.EndAt - s.StartAt) / (double)INTERVAL) + 1;
-        /// <summary>Which PK Night of the season a moment falls in or after, 1-based (the opening PK Night is the first).</summary>
+        /// <summary>Which PK Night of the season a moment falls in or after, 1-based.</summary>
         public static int RoundOf(Schedule s, long now) => (int)Math.Max(1, Math.Min(Rounds(s), (now - s.StartAt) / INTERVAL + 1));
 
-        /// <summary>"Sunday, Dec 6 at 7 PM Pacific" for the PK Night that opens or closes the season.</summary>
         public static string NightWords(long startOrEnd, bool isEnd)
         {
             var utc = isEnd ? Utc(startOrEnd).AddMinutes(-PkNight.ROUND_MINUTES) : Utc(startOrEnd);

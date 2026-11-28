@@ -11,37 +11,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE BOUNTY BOARD (docs/PK-EXPANSION.md, idea 3). Ours; retail never had one. Off until
-    /// `pk_bounty_enabled` is true.
-    ///
-    /// A player puts pyreals on a player killer's head. The pyreals leave the poster's pack at once
-    /// (escrow); the shard keeps pk_bounty_fee of them (10%, a pyreal sink), and the rest is paid to
-    /// whoever makes an HONOURABLE kill of the target (PkCommon.Judge: not an ally, not the same
-    /// account or connection, not a newcomer or someone far beneath the killer, not the third kill
-    /// of the day). The poster's own account can never collect its own posting.
-    ///
-    /// WHAT KEEPS IT FROM BEING A GRIEFING TOOL OR A MONEY PUMP:
-    ///   * only PKs of pk_bounty_min_target_level (50) and up can be targeted, never an NPK, never an
-    ///     ally, never your own account;
-    ///   * the total on one head is capped (pk_bounty_max_amount), one posting per poster per head;
-    ///   * after a bounty is paid, nobody can post on that head for a day;
-    ///   * a bounty that stands pk_bounty_days (7) unclaimed returns half of what was escrowed to the
-    ///     poster; a cancelled one likewise: so posting and pulling costs money every time;
-    ///   * the target is told a bounty stands on them, never by whom.
-    /// Collusion (a friend "kills" the target and splits the money) is the classic failure; the
-    /// honour check shuts out the same account, connection, allegiance and fellowship, and what is
-    /// left costs the colluders a PK death's item drop every time, while the poster, not the shard,
-    /// is the one paying.
-    ///
-    /// Payouts are made in trade notes and pyreals into the pack; anything that does not fit waits
-    /// as money owed until `@bounty collect`.
-    ///
-    ///     @bounty                          the board (our client: the PK board's Bounties tab)
-    ///     @bounty post <name> <pyreals>    post, or add to your posting
-    ///     @bounty cancel <name>            withdraw yours (half comes back)
-    ///     @bounty collect                  take what you are owed
-    /// </summary>
+    /// <summary>The bounty board (docs/PK-EXPANSION.md, idea 3).</summary>
     internal static class PkBounty
     {
         internal const string P_MIN_TARGET = "pk_bounty_min_target_level", P_MIN_AMOUNT = "pk_bounty_min_amount",
@@ -80,8 +50,7 @@ namespace RevivalGuard
             public List<Event> Recent { get; set; } = new List<Event>();
         }
 
-        /// <summary>One finished bounty for the board's Recent list: a claim, an expiry or a
-        /// withdrawal. Kept in bounties.json beside the ledger, the last RECENT_KEEP.</summary>
+        /// <summary>One finished bounty for the board's Recent list: a claim, an expiry or a withdrawal.</summary>
         internal sealed class Event
         {
             public long At { get; set; }
@@ -173,8 +142,7 @@ namespace RevivalGuard
             lock (s_Lock)
                 if (s_State.Cooldown.TryGetValue(tg, out var cool) && now < cool)
                 { PkCommon.Say(p, $"A bounty on {target.Name} was paid recently. No new bounty can be posted on them for {Math.Max(1, (cool - now + 3599) / 3600)} more hours."); return; }
-            // A PK in the respite after a death reads as NPK for a few minutes (ACE PK_DeathTick);
-            // they are still a player killer for the board.
+            // A PK in the respite after a death reads as NPK for a few minutes (ACE PK_DeathTick); they are still a player killer for the board.
             var status = (PlayerKillerStatus)(target.GetProperty(PropertyInt.PlayerKillerStatus) ?? (int)PlayerKillerStatus.NPK);
             bool respite = PlayerManager.GetOnlinePlayer(tg) is Player tp && tp.MinimumTimeSincePk != null;
             if (!status.HasFlag(PlayerKillerStatus.PK) && !respite) { PkCommon.Say(p, $"{target.Name} is not a player killer. Bounties are only for player killers."); return; }
@@ -184,7 +152,9 @@ namespace RevivalGuard
             uint pm = p.MonarchId ?? p.Guid.Full, tm = target.MonarchId ?? tg;
             if (pm == tm) { PkCommon.Say(p, $"{target.Name} is of your own allegiance."); return; }
             long min = PkCommon.Long(P_MIN_AMOUNT, 10000), max = PkCommon.Long(P_MAX_AMOUNT, 2000000);
-            if (amount < min || amount <= 0) { PkCommon.Say(p, $"The smallest bounty is {PkCommon.Pyreals(Math.Max(1, min))}."); return; }   // never a negative amount, whatever the tunable says (audit item 7)
+            if (amount < min || amount <= 0) { PkCommon.Say(p, $"The smallest bounty is {PkCommon.Pyreals(Math.Max(1, min))}."); return; }
+            // Inventory consumption takes an int count.
+            if (amount > int.MaxValue) { PkCommon.Say(p, $"A single posting cannot exceed {PkCommon.Pyreals(int.MaxValue)}."); return; }
             double fee = Math.Clamp(PkCommon.Dbl(P_FEE, 0.10), 0, 0.9);
             long net = (long)Math.Floor(amount * (1 - fee));
             lock (s_Lock)
@@ -195,7 +165,7 @@ namespace RevivalGuard
             // Not mid-trade: the pyreals could be the ones on the trade window (as house rent refuses them).
             if (p.IsTrading) { PkCommon.Say(p, "Finish or cancel your trade first. Nothing was posted."); return; }
             if ((p.CoinValue ?? 0) < amount) { PkCommon.Say(p, $"You do not carry {PkCommon.Pyreals(amount)}. Bounties are posted in pyreals from your pack."); return; }
-            if (!p.TryConsumeFromInventoryWithNetworking(PYREAL, (int)Math.Min(amount, int.MaxValue)))
+            if (!p.TryConsumeFromInventoryWithNetworking(PYREAL, (int)amount))
             { PkCommon.Say(p, "The pyreals could not be taken from your pack. Nothing was posted."); return; }
             long total;
             lock (s_Lock)
@@ -306,8 +276,7 @@ namespace RevivalGuard
             lock (s_Lock)
             {
                 owed = s_State.Owed.TryGetValue(p.Guid.Full, out var v) ? v : 0;
-                // taken out now, and on disk before any coin is made (a crash between loses the payout, never pays it
-                // twice); whatever is not delivered goes back
+                // taken out now, and on disk before any coin is made; whatever is not delivered goes back
                 if (owed > 0) { s_State.Owed.Remove(p.Guid.Full); Save(); }
             }
             if (owed <= 0) { if (!quiet) PkCommon.Say(p, "You are owed nothing."); return; }
@@ -380,7 +349,20 @@ namespace RevivalGuard
         static List<(uint g, Target t, long total)> Snapshot()
         {
             lock (s_Lock)
-                return s_State.Targets.Select(kv => (kv.Key, kv.Value, kv.Value.Posts.Sum(x => x.Amount)))
+                return s_State.Targets.Select(kv => (kv.Key, new Target
+                    {
+                        Name = kv.Value.Name,
+                        Level = kv.Value.Level,
+                        Posts = kv.Value.Posts.Select(x => new Posting
+                        {
+                            Poster = x.Poster,
+                            PosterName = x.PosterName,
+                            PosterAccount = x.PosterAccount,
+                            Amount = x.Amount,
+                            At = x.At,
+                            Expires = x.Expires
+                        }).ToList()
+                    }, kv.Value.Posts.Sum(x => x.Amount)))
                     .OrderByDescending(x => x.Item3).ToList();
         }
 

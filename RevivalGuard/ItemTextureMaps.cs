@@ -7,26 +7,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AN ITEM'S OWN TEXTURE ROWS, WORN OR DROPPED (the seasonal Jack o' Lantern Masks, weenies
-    /// 900713 and 900718-900720; docs/SEASONAL-UPGRADE.md). Made, not added: the switch
-    /// `expansion_item_textures` defaults OFF and no live weenie has rows for it.
-    ///
-    /// Stock ACE takes a worn item's texture changes from its ClothingTable and nothing else
-    /// (Creature.CalculateObjDesc), and a dropped item's the same way (WorldObject.CalculateObjDesc),
-    /// so a weenie's weenie_properties_texture_map rows are never sent for an item. This postfix lets
-    /// a 900000+ item REWRITE a texture change its ClothingTable already made: a row (part, old, new)
-    /// replaces the NewTexture of an existing change with the same part and OldTexture, and does
-    /// nothing else. That one rule keeps it exact, the same way ApplyOwnAnimParts only replaces a
-    /// part the table already changed: a row meant for the dropped mask (part 0 of its item setup)
-    /// finds no matching change on the wearer's abdomen and is ignored, and a row can never add a
-    /// texture the retail table did not already put there.
-    ///
-    /// The use: retail's Scarecrow Mask (ClothingTable 0x1000032A) wears pumpkin 0x010027B6 with
-    /// texture 0x050019F5; the Jack o' Lantern family paints the same pumpkin mesh with four other
-    /// carved faces (0x05002D09-0x05002D0C). A clone with one row per part wears retail's pumpkin with
-    /// another of retail's faces: no new art. Off, the clone looks exactly like the Scarecrow Mask.
-    /// </summary>
+    /// <summary>An item's own texture ROWS, worn or dropped.</summary>
     static class ItemTextureMaps
     {
         const string P_ON = "expansion_item_textures";
@@ -66,7 +47,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A dropped or carried item. A hook forwards to its item, whose own call already ran.</summary>
+        /// <summary>A dropped or carried item.</summary>
         [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.CalculateObjDesc))]
         static class Item
         {

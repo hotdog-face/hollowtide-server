@@ -8,23 +8,7 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// SHARED BY THE PK EXPANSION (docs/PK-EXPANSION.md): the renown ladder (PkRenown), the bounty
-    /// board (PkBounty) and the Shadow Shrines (PkShrines). Ours.
-    ///
-    /// EVERY PART IS OFF UNTIL THE OWNER TURNS IT ON. Each has its own server property, registered
-    /// here with a default of false, so a deploy that carries this code changes nothing in the game:
-    /// no line is said, no data reaches a client, no kill is scored. `@modifybool pk_renown_enabled
-    /// true` (and the other two) turns one on, like any ACE property.
-    ///
-    /// THE HONOUR CHECK is here because the ladder and the bounties must agree on which kills count.
-    /// Retail's PK history is the reason for every rule (wiki: Olthoi Play's slag "less likely to drop"
-    /// each time the same player is killed; the 2006 dev chat on gank squads; Darktide's lifestone
-    /// campers): a kill between two accounts of one player, two allies, or two characters on one
-    /// connection is not a kill; a kill of or by a Hollow Company mercenary is no kill at all
-    /// (owner 2026-10-22: players only); a kill of a newcomer (under level 15) or of someone far below the killer earns
-    /// infamy instead of renown; the same victim again and again earns less and then nothing.
-    /// </summary>
+    /// <summary>Shared by the PK expansion: the renown ladder, the bounty board and the Shadow Shrines.</summary>
     internal static partial class PkCommon
     {
         internal const string P_RENOWN = "pk_renown_enabled", P_BOUNTY = "pk_bounty_enabled", P_SHRINES = "pk_shrines_enabled";
@@ -37,7 +21,7 @@ namespace RevivalGuard
             (P_BOUNTY, false, "PK expansion: player-posted bounties in pyreals, escrowed (RevivalGuard PkBounty)"),
             (P_SHRINES, false, "PK expansion: capturable Shadow Shrines with an allegiance XP boon (RevivalGuard PkShrines)"),
             (P_IGNORE_IP, false, "PK expansion: count kills between characters on one connection address (a test aid; leave false)"),
-            (PkNight.P_ON, false, "PK Night: every other Sunday 7 PM Pacific, hold the hill for 40 minutes (RevivalGuard PkNight; docs/proposals/pk-night.md)"),
+            (PkNight.P_ON, false, "PK Night: every other Sunday 2 PM Pacific, hold the hill for 40 minutes (RevivalGuard PkNight; docs/proposals/pk-night.md)"),
             (PkNight.P_DISCORD, false, "PK Night: post the start and the result to Discord (DiscordBridge.Announce)"),
             (PkBattlefield.P_ON, false, "PK battlefields: player corpses in the PK zones (Dark Isle beach, Arwic's lawn, mansions, PK Night spots) never rot on a timer; over a zone's cap the oldest rots (RevivalGuard PkBattlefield)"),
             (PkNight.P_BANNER, false, "PK Night: a Banner of the Held Ground (908120) to the winners: by fellowship, its leader once per player ever; by allegiance, its monarch once per allegiance ever (HeldGroundBanner)"),
@@ -73,9 +57,7 @@ namespace RevivalGuard
             (PkNight.P_SIDES, PkNight.SIDES_FELLOWSHIP, "PK Night: what a side is, fellowship (a fellowship, or a player alone; unset means this) or allegiance (the monarch, or a player alone)"),
         };
 
-        /// <summary>Make every key an ordinary ACE property (@modifybool / @modifylong / @fetch...):
-        /// ModifyX refuses a key that is not in the Default*Properties dictionary, a ReadOnlyDictionary
-        /// over a private one, so the key is added to that inner dictionary (MansionPk, EventDirector).</summary>
+        /// <summary>Make every key an ordinary ACE property</summary>
         internal static void RegisterProperties()
         {
             try
@@ -92,8 +74,6 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] PK expansion: properties not registered with @modify* ({e.Message}); they are still read with their defaults"); }
         }
 
-        /// <summary>One bool switch of another module's made an ordinary ACE property the same way (TownCrier's rg_crier), so
-        /// `@modifybool` takes it on a shard that has never stored it; without this ACE answers "Unknown bool property".</summary>
         internal static void RegisterBool(string key, bool def, string desc)
         {
             try
@@ -128,14 +108,13 @@ namespace RevivalGuard
 
         // Verdict, Judgement and the rules themselves are in PkRules.cs (pure C#, tested by NetTest).
 
-        /// <summary>How a PK kill counts. `priorKills` is how many times this killer has killed this
-        /// victim within pk_honor_repeat_hours, from the renown ledger (0 when the ladder is off).</summary>
+        /// <summary>How a PK kill counts.</summary>
         internal static Judgement Judge(Player killer, Player victim, int attackers, int priorKills)
         {
             var f = new Facts { NoKiller = killer == null || victim == null || killer == victim };
             if (!f.NoKiller)
             {
-                // the Hollow Company only: a Borg is a player here (owner 2026-11-22; live had logged Borg kills "a mercenary")
+                // the Hollow Company only: a Borg is a player here
                 f.KillerMerc = Mercenaries.IsHollowCompany(killer);
                 f.VictimMerc = Mercenaries.IsHollowCompany(victim);
                 f.SameAccount = killer.Account != null && victim.Account != null && killer.Account.AccountId == victim.Account.AccountId;
@@ -151,11 +130,6 @@ namespace RevivalGuard
         {
             try
             {
-                // THE PLAYER'S OWN ADDRESS, NOT THE GATEWAY'S (owner 2026-10-18: the PK board stayed empty). Every browser
-                // player reaches ACE from the WebSocket gateway on this machine's loopback, so comparing the endpoint called
-                // two strangers in browsers "two characters on one connection": 108 of 161 live PK kills were thrown out
-                // for it. Gateway.RealAddress asks the gateway who is behind each port; one it could not answer for (the
-                // unknown marker) never counts as the same connection.
                 var x = Gateway.RealAddress(a.Session?.EndPointC2S); var y = Gateway.RealAddress(b.Session?.EndPointC2S);
                 if (x == null || y == null || Gateway.IsUnknown(x) || Gateway.IsUnknown(y)) return false;
                 if (x.IsIPv4MappedToIPv6) x = x.MapToIPv4();
@@ -184,8 +158,7 @@ namespace RevivalGuard
             return p.Name;
         }
 
-        /// <summary>" of &lt;allegiance&gt;" for a player in one, or "" for a lone player (whose side is
-        /// themselves, so "X of X" would read wrong).</summary>
+        /// <summary>" of &lt;allegiance&gt;" for a player in one, or "" for a lone player.</summary>
         internal static string Of(Player p) =>
             p.Allegiance != null && p.Allegiance.TotalMembers > 1 ? " of " + Mansions.AllegianceLabel(p.Allegiance) : "";
 

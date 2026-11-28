@@ -13,26 +13,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE HOLTBURG NOTICE BOARD (owner 2026-11-09: "a notice board near the Holtburg lifestone, retail-looking, with
-    /// this month's Chronicle, the events on now and coming, and Borg news; data-driven so it updates without a client
-    /// release"). docs/HOLTBURG-HUB.md.
-    ///
-    /// The board is a retail Book in the world (weenie 901101, a copy of retail's own unplaced Holtburg Bulletin Board,
-    /// placed by datafix 2026-11-10-holtburg-notice-board.sql) flagged with PropertyBool 29113. Its pages are never in
-    /// the database: they are written at read time, the way the Allegiance Hall Board's are (Mansions.cs), so every
-    /// client, ours or retail, reads them with the ordinary book window and nothing ships in a client release.
-    ///
-    ///   page 1      the notices: live events now and next (EventDirector), festivals open and coming
-    ///               (SeasonalCalendar), and the short notices of the content file
-    ///   pages 2..   this month's Chronicle, in the Turbine voice (docs/outreach/VOICE.md)
-    ///   last page   news of the Collective (the Borg), lore only: nothing about how they work
-    ///
-    /// The words come from NoticeBoard.json beside the dll (ModFolder; SeasonalOverrides.json's folder). It is seeded
-    /// from the embedded copy on first read and re-read whenever its modification time changes, so staff edit the file
-    /// on the shard and the next reader sees the new month. A file that will not parse keeps the last good words and
-    /// says so in the log. `@noticeboard` (Admin) prints the pages to chat, for a check without walking to Holtburg.
-    /// </summary>
+    /// <summary>The holtburg notice board. docs/HOLTBURG-HUB.md.</summary>
     static class NoticeBoard
     {
         internal const PropertyBool BOARD = (PropertyBool)29113;
@@ -178,7 +159,6 @@ namespace RevivalGuard
             return pages;
         }
 
-        /// <summary>Paragraphs onto pages of at most PAGE_CHARS, never splitting one (a longer one is cut).</summary>
         static void Pack(List<string> pages, string head, string[] paragraphs, string contHead)
         {
             var sb = new StringBuilder(head);
@@ -214,8 +194,6 @@ namespace RevivalGuard
 
         static bool IsBoard(WorldObject wo) => wo is Book && (wo.GetProperty(BOARD) ?? false);
 
-        // A board stands in the landblock, never in a pack or on a hook: ACE's own ReadBook/ReadBookPage look only
-        // in the pack and the last hook, which is why the page requests are answered here.
         const Player.SearchLocations WHERE = Player.SearchLocations.Landblock | Player.SearchLocations.MyInventory | Player.SearchLocations.LastUsedHook;
 
         static void SendBoard(Book board, Player reader)

@@ -6,17 +6,7 @@ using System.Text.Json;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// Inspire looks staff marked "Not style" (owner ticket 261109-0029: "inspire button needs a way to remove options that
-    /// were not good tailors from players but just things they wore for practical reasons. not style"). Pure: no ACE, so
-    /// tools/dressing-room/hidetest compiles it by path.
-    ///  - per character: a look one staff member hid stops coming up for that character;
-    ///  - for everyone (Admin): it stops coming up for all staff, and outfits_extract.py drops it on the next rebuild once
-    ///    the "all" ids are copied into tools/dressing-room/not-style.json.
-    /// A look is named by the ids outfits_extract.py gives each captured look (a hash of its content); one Inspire outfit
-    /// can stand for several captured looks, and hiding it hides them all.
-    /// Saved beside the mod as dressing-room/inspire-hidden.json: {"All": [ids], "By": {"guid": [ids]}}.
-    /// </summary>
+    /// <summary>Inspire looks staff marked "Not style".</summary>
     public sealed class InspireHidden
     {
         public HashSet<string> All { get; set; } = new HashSet<string>();
@@ -29,7 +19,7 @@ namespace RevivalGuard
             return ids.Any(i => All.Contains(i) || (mine != null && mine.Contains(i)));
         }
 
-        /// <summary>Hides these ids for one character, or for everyone. The number newly hidden.</summary>
+        /// <summary>Hides these ids for one character, or for everyone.</summary>
         public int Hide(uint character, IEnumerable<string> ids, bool everyone)
         {
             HashSet<string> to;

@@ -9,18 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// PK NIGHT v2: THE MOVING HILL ON THE GROUND (owner 2026-11-22, docs/proposals/pk-night-v2.md; the rules in
-    /// PkNightHillRules.cs). While a round runs:
-    ///   * the hill's edge is a ring of torches about every 8 m (pk_night_marker, default the retail Tumerok Torch 22858) with
-    ///     a Gout of Elemental Flame (pk_night_marker_centre, 20636: a tall red column seen from far off) in the middle.
-    ///     They are ordinary retail objects, so every client draws them, retail too. The Gateway pattern (PkNightGate.cs):
-    ///     made by the mod, never saved to the shard (HillNoSave), gone at the end or a move, made again where a landblock
-    ///     unload took one, and a Lifespan in case a removal is ever missed. Stuck, ethereal (no one is blocked or hides
-    ///     behind them), not attackable or usable.
-    ///   * every BOARD_LINE_SECONDS each player within the radius plus BOARD_LINE_NEAR metres of the hill is told who holds it
-    ///     (HillLine); the hill's place and that line go in the board JSON too (AppendHillJson).
-    /// </summary>
+    /// <summary>PK night v2: the moving hill on the ground.</summary>
     public static partial class PkNight
     {
         internal const string P_MARKER = "pk_night_marker", P_MARKER_CENTRE = "pk_night_marker_centre";
@@ -53,8 +42,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The side a player near the hill reads the line as: 0 for one who cannot hold it (not a player killer, a
-        /// Hollow Company mercenary, or benched).</summary>
+        /// <summary>The side a player near the hill reads the line as: 0 for one who cannot hold it.</summary>
         static uint ReaderSide(Player p, Live live)
         {
             if (p == null || !p.IsPK || Mercenaries.IsHollowCompany(p)) return 0;
@@ -110,8 +98,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Where a marker may stand if its own point is refused (a wall or a building there: box 2026-11-23, Zombie
-        /// Castle's centre and three edge points sit in the castle ruin), in metres east and north, nearest first.</summary>
+        /// <summary>Where a marker may stand if its own point is refused, in metres east and north, nearest first.</summary>
         static readonly (double e, double n)[] NUDGE =
             { (0, 0), (0, -3), (0, 3), (-3, 0), (3, 0), (0, -6), (0, 6), (-6, 0), (6, 0), (-6, -6), (6, -6), (-6, 6), (6, 6), (0, -10), (0, 10), (-10, 0), (10, 0) };
 
@@ -133,9 +120,7 @@ namespace RevivalGuard
             return wo;
         }
 
-        /// <summary>A marker, entering the world on the world thread at its point or the nearest NUDGE that takes it. Returns
-        /// the first object made at once (so the tick does not make another while it waits); a nudged one replaces it in
-        /// m.Wo. None taking: m.Failed, not tried again for this hill.</summary>
+        /// <summary>A marker, entering the world on the world thread at its point or the nearest NUDGE that takes it.</summary>
         static WorldObject MakeMarker(Marker m, double endsAt, double now)
         {
             try
@@ -190,7 +175,6 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] PkNight: hill markers removed ({why}): {n}");
         }
 
-        /// <summary>The markers are the mod's alone: never written to the shard database.</summary>
         [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.IsDynamicThatShouldPersistToShard))]
         static class HillNoSave
         {
@@ -200,9 +184,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A marker's guid is forgotten when it is destroyed, by any path (a hill move, the night's end, its Lifespan,
-        /// a landblock unload): ACE recycles dynamic guids, and a stale one here would stop a later object with that guid from
-        /// ever being saved (Codex review 11-23).</summary>
+        /// <summary>A marker's guid is forgotten when it is destroyed, by any path</summary>
         [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.Destroy))]
         static class HillForget
         {
@@ -214,8 +196,6 @@ namespace RevivalGuard
         }
 
         /// <summary>For @pknight gate: the markers now, in a line.</summary>
-        /// <summary>A PK Night round is running and p stands on its hill or within earshot of it (Radius +
-        /// BOARD_LINE_NEAR, the same ring that hears the standings). PkDeathFeed tags such kills "PK Night".</summary>
         internal static bool NearHill(Player p)
         {
             try
@@ -241,8 +221,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ the board's data
 
-        /// <summary>The hill in the "night" JSON (live rounds): where it is, which point, when it moves and to where, and the
-        /// battlefield line as the asker would read it.</summary>
+        /// <summary>The hill in the "night" JSON</summary>
         static void AppendHillJson(StringBuilder sb, Live live, Spot spot, Player asker, double now)
         {
             var pts = HillPoints(spot);

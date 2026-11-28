@@ -5,15 +5,7 @@ using System.Text.Json.Nodes;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// GROUND PAINTING (owner F7 261126-0004: "a ground type editor so i can make paths and set the ground to look like dirt or
-    /// stone or grass"; docs/proposals/world-decorator.md "Ground painting"). A landblock's ground is 81 terrain words (9x9
-    /// points; bits 0-1 road, 2-6 type, 11-15 scenery) in its 0xXXYYFFFF cell record. The mod only KEEPS the painted words, as
-    /// it keeps map pieces: one entry per landblock, key g:&lt;blk&gt;, kind "ground", after/before = {point: word}. The client
-    /// draws them through its cell overlay; tools/decor/decor.py writes them into the published overlay's landblock records.
-    /// Undo, redo, Clear area and locks go through the generic entry path (Reconcile's default branch).
-    ///   ground &lt;blk&gt; &lt;i&gt;=&lt;new&gt;:&lt;old&gt; ... [&lt;blk&gt; ...]   point i (0-80) of block blk; new == old takes the point back
-    /// </summary>
+    /// <summary>Ground painting.</summary>
     internal static partial class Decor
     {
         static void Ground(string[] a, Action<string> reply)
@@ -40,7 +32,7 @@ namespace RevivalGuard
                 var after = (JsonObject)e["after"]!;
                 var before = (JsonObject)e["before"]!;
                 string vk = v.ToString(CultureInfo.InvariantCulture);
-                if (before[vk] == null) before[vk] = (int)was;   // ints: a JsonValue<ushort> will not read back as int   // the first-seen word stays the point's retail word
+                if (before[vk] == null) before[vk] = (int)was;
                 ushort retail = (ushort)(int)before[vk]!;
                 if (now == retail) { after.Remove(vk); before.Remove(vk); }
                 else after[vk] = (int)now;

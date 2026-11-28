@@ -5,10 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// "FEELS LIKE RETAIL DARKTIDE" (owner's yes 2026-11-18, docs/proposals/darktide-feel-2026-11-18.md): the pure half of
-    /// SignedLoot, the capsule house signs and OnThisDay. No ACE types: tools/nettest compiles this file by path.
-    /// </summary>
+    /// <summary>"feels like retail darktide": the pure half of SignedLoot, the capsule house signs and OnThisDay.</summary>
     public static class SignedLootRule
     {
         public enum Kind { Other, Armor, Melee, Missile, Caster }
@@ -18,7 +15,7 @@ namespace RevivalGuard
             GREEN_GARNET = 0x3800004B, SUNSTONE = 0x38000025, BLACK_OPAL = 0x38000023, FIRE_OPAL = 0x38000024;
         public const int MAX_TINKERS = 10;   // retail: an item takes ten tinkers at most
 
-        /// <summary>What the item already is (read from the object, never assumed).</summary>
+        /// <summary>What the item already is.</summary>
         public sealed class Facts
         {
             public Kind Kind; public int Workmanship; public int Tinkered; public bool Imbued; public bool Salvage;
@@ -35,13 +32,12 @@ namespace RevivalGuard
             public bool Any => Count > 0 || Craftsman != null || Inscription != null;
         }
 
-        /// <summary>Who signs: tinker- and imbuer-named retail Darktide characters first, then any Darktide person, then
-        /// any retail person. Names come from the server-only names file only.</summary>
+        /// <summary>Who signs: tinker- and imbuer-named retail Darktide characters first, then any Darktide person, then any retail person.</summary>
         public sealed class Pools
         {
             public IReadOnlyList<string> Tinkers = Array.Empty<string>(), Imbuers = Array.Empty<string>(),
                 Darktide = Array.Empty<string>(), Other = Array.Empty<string>();
-            public Func<string, bool> InUse;   // a name a character on this shard has: never used
+            public Func<string, bool> InUse;
             public bool Empty => Tinkers.Count + Imbuers.Count + Darktide.Count + Other.Count == 0;
         }
 
@@ -81,17 +77,14 @@ namespace RevivalGuard
             33998, 33999, 40088, 40089, 40517, 40518, 40519, 87748, 87749, 87750, 87751
         };
         static HashSet<int> s_CraftedSet;
-        /// <summary>The results of every ace_world recipe that writes CraftsmanName ("Created by %s.": PropertyString 25,
-        /// CopyFromSourceToResult), so only an item a player could have made says who made it.</summary>
+        /// <summary>The results of every ace_world recipe that writes CraftsmanName</summary>
         public static bool Crafted(uint wcid) => (s_CraftedSet ??= new HashSet<int>(s_Crafted)).Contains((int)wcid);
 
-        /// <param name="owner">The character the item belonged to (the corpse's victim, the house's last owner).</param>
         public static Plan Decide(Facts f, string owner, Pools pools, Random rng, bool inscriptions)
         {
             var p = new Plan();
             if (f == null || pools == null || pools.Empty || f.Signed) return p;
-            // TINKERS: only what a player could have tinkered (loot with workmanship, never salvage, room left), in the
-            // materials retail used on that kind of item, through ACE's own mutation so the numbers are real.
+            // TINKERS: only what a player could have tinkered, in the materials retail used on that kind of item
             bool tinkerable = f.Workmanship > 0 && !f.Salvage && f.Tinkered == 0 && f.Kind != Kind.Other;
             if (tinkerable && rng.NextDouble() < TinkeredChance(f.Workmanship))
             {
@@ -115,8 +108,7 @@ namespace RevivalGuard
             return p;
         }
 
-        /// <summary>Retail's materials per kind: steel on armour; iron, granite and brass on melee; mahogany and brass on
-        /// bows; green garnet on a war caster, brass on any other.</summary>
+        /// <summary>Retail's materials per kind</summary>
         static uint Material(Facts f, Random rng) => f.Kind switch
         {
             Kind.Armor => STEEL,
@@ -126,8 +118,6 @@ namespace RevivalGuard
             _ => STEEL,
         };
 
-        /// <summary>A name for the job: sometimes the owner did it himself; else a tinker (or imbuer) by trade, else any
-        /// Darktide person, else any retail person. Never a name in use here.</summary>
         public static string Pick(Pools pools, Random rng, string owner, bool imbuer, bool roleFirst = true, Kind kind = Kind.Other)
         {
             if (owner != null && NameOk(owner) && rng.NextDouble() < SELF_TINKER) return owner;
@@ -150,8 +140,7 @@ namespace RevivalGuard
             return owner != null && NameOk(owner) ? owner : null;
         }
 
-        /// <summary>Plain lines a player cut into his own gear. Owner's call (docs/proposals/darktide-feel-2026-11-18.md);
-        /// behind rg_signed_loot_inscriptions.</summary>
+        /// <summary>Plain lines a player cut into his own gear.</summary>
         public static readonly string[] Inscriptions =
         {
             "Property of {n}", "{n}", "If found, return to {n}", "Do not sell", "Main hand", "Keep", "Spare",
@@ -169,11 +158,10 @@ namespace RevivalGuard
         public static bool TinkerName(string n) => n != null && Regex.IsMatch(n, @"tink|tinker", RegexOptions.IgnoreCase) && !Regex.IsMatch(n, @"\bset\b|salvag|junk|urself|\bgo\b", RegexOptions.IgnoreCase);
         public static bool ImbuerName(string n) => n != null && Regex.IsMatch(n, @"\bimbu", RegexOptions.IgnoreCase) && !Regex.IsMatch(n, @"\bset\b|salvag|^imbued$", RegexOptions.IgnoreCase);
 
-        /// <summary>The house capsule note's rule (TimeCapsuleRule.NameOk): letters, space ' - . only, 3-30, not crude.</summary>
+        /// <summary>The house capsule note's rule (TimeCapsuleRule.NameOk): letters, space ' -. only, 3-30, not crude.</summary>
         public static bool NameOk(string n) => TimeCapsuleRule.NameOk(n);
 
-        /// <summary>A plan is consistent: count matches tinkers, at most ten, a tinker name only with a tinker, an imbuer
-        /// only with an imbue, a weapon imbue only.</summary>
+        /// <summary>A plan is consistent: count matches tinkers, at most ten, a tinker name only with a tinker</summary>
         public static bool Consistent(Facts f, Plan p) =>
             p.Count <= MAX_TINKERS && (p.Tinker != null) == (p.Tinkers.Count > 0) && (p.Imbuer != null) == (p.Imbue != 0)
             && (p.Imbue == 0 || f.Kind == Kind.Melee || f.Kind == Kind.Missile) && (p.Count == 0 || (f.Workmanship > 0 && !f.Salvage))
@@ -183,25 +171,19 @@ namespace RevivalGuard
     /// <summary>The capsule house's covenant crystal names its last owner while it stands empty with his things inside.</summary>
     public static class HouseSignRule
     {
-        /// <summary>ACE's own owned-house naming (SlumLord.SetAndBroadcastName): "&lt;owner&gt;'s &lt;weenie name&gt;".</summary>
         public static string Signed(string owner, string baseName) => string.IsNullOrWhiteSpace(owner) ? baseName : $"{owner}'s {baseName}";
 
         /// <summary>Show a name only on an empty house whose last owner's pieces are up this vacancy, with a real name.</summary>
         public static bool Show(bool on, bool owned, bool piecesUp, string owner) =>
             on && !owned && piecesUp && !string.IsNullOrWhiteSpace(owner) && owner != TimeCapsuleRule.FallbackNames[0];
 
-        /// <summary>The last owner's name: Darktide people first (the server-only names file), else the chat-corpus
-        /// names the notes always used. Same house and vacancy, same name.</summary>
+        /// <summary>The last owner's name: Darktide people first, else the chat-corpus names the notes always used.</summary>
         public static string LastOwner(IReadOnlyList<string> darktide, IReadOnlyList<string> other, ulong roll, Func<string, bool> inUse, Func<string, bool> ok) =>
             LastOwner(null, darktide, other, roll, inUse, ok);
 
-        /// <summary>Share of capsule houses whose last owner comes from the home list first (names seen recalling home or on
-        /// an apartment/cottage panel in the owner's retail screenshots): ~35 names over ~330 named houses, so about one
-        /// house each instead of every house drawing from 35.</summary>
+        /// <summary>Share of capsule houses whose last owner comes from the home list first</summary>
         public const int HOMES_PCT = 10;
 
-        /// <summary>Owner 2026-11-27: the names read from his retail screenshots. <paramref name="homes"/> (people with
-        /// evidence of a house) for HOMES_PCT of houses, then Darktide (his own screenshots), then the rest.</summary>
         public static string LastOwner(IReadOnlyList<string> homes, IReadOnlyList<string> darktide, IReadOnlyList<string> other, ulong roll, Func<string, bool> inUse, Func<string, bool> ok)
         {
             bool homeFirst = homes != null && homes.Count > 0 && (int)((roll >> 17) % 100) < HOMES_PCT;
@@ -220,14 +202,12 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>ON THIS DAY: a dated line of real Asheron's Call history, Darktide first, from OnThisDay.json (the AC wiki,
-    /// CC-BY-SA, paraphrased, each entry's page in source_url).</summary>
+    /// <summary>On this day: a dated line of real Asheron's Call history, Darktide first, from OnThisDay.json.</summary>
     public static class OnThisDayRule
     {
         public sealed class Entry { public string Md; public int Year; public bool Darktide; public string Text; public string Title; public string Url; }
 
-        /// <summary>Today's entry (UTC month-day): Darktide first, then the oldest unsaid. Null when the day has none.
-        /// <paramref name="said"/> counts how many lines were already said today (0, then 1 for the second).</summary>
+        /// <summary>Today's entry (UTC month-day): Darktide first, then the oldest unsaid.</summary>
         public static Entry Pick(IReadOnlyList<Entry> all, DateTime utc, int said)
         {
             var md = utc.ToString("MM-dd");
@@ -235,7 +215,7 @@ namespace RevivalGuard
             return said < day.Count ? day[said] : null;
         }
 
-        /// <summary>"On this day, twenty-two years ago, &lt;text&gt;" (VOICE.md: a crier never says a date in numerals).</summary>
+        /// <summary>"On this day, twenty-two years ago, &lt;text&gt;".</summary>
         public static string Line(Entry e, DateTime utc)
         {
             int n = utc.Year - e.Year;
@@ -247,8 +227,7 @@ namespace RevivalGuard
         static readonly string[] s_Tens = { "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety" };
         public static string Words(int n) => n < 0 ? n.ToString() : n < 20 ? s_Ones[n] : n < 100 ? s_Tens[n / 10] + (n % 10 == 0 ? "" : "-" + s_Ones[n % 10]) : n.ToString();
 
-        /// <summary>When today's lines are said (UTC hours): the first in the evening of the Americas, the second in
-        /// Europe's. Each hour has a fixed minute per day so it is not on the hour.</summary>
+        /// <summary>When today's lines are said</summary>
         public static readonly int[] HOURS = { 2, 19 };
         public static int Due(DateTime utc, int said)
         {

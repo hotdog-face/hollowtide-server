@@ -5,16 +5,7 @@ using System.IO;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// EVERY NEW CHARACTER STARTS IN HOLTBURG (owner 2026-11-09: "only one starter town is available. holtburg only,
-    /// remove the other options"; Holtburg is the hub). The byte work of <see cref="HoltburgOnly"/>, pure C# (no ACE
-    /// types) so NetTest runs it (tools/nettest/HoltburgOnlyCase.cs).
-    ///
-    /// CharacterCreateInfo.Unpack ends with three u32: StartArea, IsAdmin, IsSentinel. StartArea's low six bits are the
-    /// index into the DAT's StarterAreas (Holtburg, Shoushi, Yaraq, Sanamar) or, when starter_towns_override is set, into
-    /// that list; 0x80 (skip the Training Academy, allow_town_spawn) and 0x40 (Samurai loadout) are create-time flags our
-    /// ACE strips in Unpack. Only the index is rewritten; the flags stay the player's.
-    /// </summary>
+    /// <summary>Every new character starts in holtburg.</summary>
     static class HoltburgOnlyRule
     {
         public const string TOWN = "Holtburg";
@@ -23,8 +14,7 @@ namespace RevivalGuard
         /// <summary>StartArea, IsAdmin, IsSentinel: the last three u32 of the create.</summary>
         public const int TAIL = 12;
 
-        /// <summary>Holtburg's StartArea index: in the shard's starter_towns_override list first (index N means its Nth
-        /// entry), else among the DAT's starter area names; -1 when neither names Holtburg (then nothing is rewritten).</summary>
+        /// <summary>Holtburg's StartArea index</summary>
         public static int HomeIndex(string overrideList, IList<string> datNames)
         {
             if (!string.IsNullOrWhiteSpace(overrideList))
@@ -40,9 +30,7 @@ namespace RevivalGuard
             return -1;
         }
 
-        /// <summary>Set the StartArea index of the create whose last byte sits at <paramref name="end"/> to
-        /// <paramref name="home"/>, keeping the flag bits. The stream's position is left where it was. True when a byte
-        /// changed; <paramref name="before"/> and <paramref name="after"/> are the whole u32.</summary>
+        /// <summary>Set the StartArea index of the create whose last byte sits at end to home, keeping the flag bits.</summary>
         public static bool Rewrite(Stream s, long end, int home, out uint before, out uint after)
         {
             before = after = 0;

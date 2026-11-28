@@ -18,28 +18,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// HOUSE TIME CAPSULES (ours, not retail; owner 2026-10-29). Themes, odds and rules: TimeCapsuleRule,
-    /// TimeCapsuleThemes (generated) and docs/HOUSE-TIME-CAPSULES.md. Off until the owner approves:
-    /// rg_house_capsules (bool, default false).
-    ///
-    /// Retail behaviour kept: ACE never empties storage chests or hooks when a house is abandoned, evicted or
-    /// released (only the slumlord's rent box), so a real owner's leftovers already reach the next buyer.
-    ///
-    /// SEEDED AT PURCHASE, not on a timer: nobody can open an unowned house's chest or hooks (ACE's checks;
-    /// UnownedHouseGuard covers staff), so a stash placed the moment the house is bought looks the same to the
-    /// buyer as one that sat there for weeks. A timer would load every empty house's landblock and write
-    /// thousands of item rows for houses nobody buys.
-    ///
-    /// Vacancy: House.ClearPermissions runs on every release path (abandon, eviction, HouseRelease) with the owner
-    /// already cleared, so it stamps VACANT_SINCE there. Purchase reads it, decides, then removes it: at most one
-    /// stash per vacancy, and a house bought and lost again starts a fresh one. No stamp = never owned since
-    /// tracking began = eligible.
-    ///
-    /// The note's signature is a real retail player's name from our January 2017 captures (owner's call for this
-    /// feature), read at run time from the chat replay corpus on the host (it never ships in git or the public
-    /// source); crude names and names in use on this shard are skipped.
-    /// </summary>
+    /// <summary>House time capsules.</summary>
     static class TimeCapsule
     {
         internal const string P_ON = "rg_house_capsules";
@@ -48,16 +27,13 @@ namespace RevivalGuard
         internal const PropertyBool CAPSULE_ITEM = (PropertyBool)29152;     // on each stash item, so @capsule clear finds it
         internal const PropertyInt64 FOUND_AT = (PropertyInt64)29153;       // on the buyer: the account limit reads it
         internal const PropertyInt64 HUNG_FOR = (PropertyInt64)29154;       // on the house: Marker(vacancy key) once its pieces are up
-        /// <summary>The hook layout's version. A house hung by an older layout (2026-10-29: too sparse) has its own pieces
-        /// taken down and is hung again; a real owner's things are never touched.</summary>
+        /// <summary>The hook layout's version.</summary>
         const long LAYOUT = 2, LAYOUT_UNIT = 1_000_000_000_000L;
         static long Marker(long vacancyKey) => vacancyKey + 1 + LAYOUT * LAYOUT_UNIT;
         internal const PropertyInt64 CHEST_DUE = (PropertyInt64)29155;      // on a villa/mansion: vacancy key + 1 whose chest waits for the basement
-        /// <summary>On the house: its LAST_OWNER is the real player who lost it with his goods inside (REAL CAPSULES below).</summary>
+        /// <summary>On the house: its LAST_OWNER is the real player who lost it with his goods inside (real capsules below).</summary>
         internal const PropertyBool REAL_OWNER = (PropertyBool)29159;
-        /// <summary>REAL CAPSULES (owner 2026-11-27, docs/proposals/house-real-capsules.md): a real player's house lost to
-        /// unpaid maintenance or a deleted character, with his goods still inside, keeps his name on its crystal until
-        /// someone buys it. The goods already stay (ACE never empties storage or hooks on a release). Default OFF.</summary>
+        /// <summary>Real capsules: a real player's house lost to unpaid maintenance or a deleted character, with his goods still inside</summary>
         internal const string P_REAL = "rg_house_real_capsules";
         internal static bool RealOn => PkCommon.On(P_REAL);
         const float REACH = 40f;
@@ -82,7 +58,6 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] TimeCapsule: {(On ? "ON" : "off")} ({P_ON}), real capsules {(RealOn ? "ON" : "off")} ({P_REAL}), @capsule");
         }
 
-        /// <summary>Called after ACE made the buyer the owner. Same landblock as the house, its storage and hooks.</summary>
         internal static void OnPurchase(Player buyer, House house)
         {
             if (buyer == null || house == null) return;
@@ -140,8 +115,7 @@ namespace RevivalGuard
             Telemetry.Emit("house_capsule", buyer, $"0x{house.Guid.Full:X8} {stash.Theme.Key} {inChest}+{onHooks}");
         }
 
-        /// <summary>What storage and hooks hold, not counting this vacancy's own hung pieces. After a release HUNG_FOR is
-        /// gone, so everything left behind (stash pieces included) counts as the last owner's.</summary>
+        /// <summary>What storage and hooks hold, not counting this vacancy's own hung pieces.</summary>
         static int Existing(House house)
         {
             bool hung = OwnVacancy(house, house.GetProperty(VACANT_SINCE) ?? 0);
@@ -154,7 +128,7 @@ namespace RevivalGuard
         /// <summary>Hung (or cleared) this vacancy by any layout version: its capsule pieces are ours, not an owner's.</summary>
         static bool OwnVacancy(House house, long vacancyKey) => house.GetProperty(HUNG_FOR) is long m && m % LAYOUT_UNIT == vacancyKey + 1;
 
-        /// <summary>Takes down this house's own capsule pieces (hooks and chest). Only items carrying the marker.</summary>
+        /// <summary>Takes down this house's own capsule pieces (hooks and chest).</summary>
         static int TakeDown(House house)
         {
             int n = 0;
@@ -172,9 +146,7 @@ namespace RevivalGuard
 
         static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, byte> s_Filled = new System.Collections.Concurrent.ConcurrentDictionary<uint, byte>();
 
-        /// <summary>A basement storage chest loaded: if its villa or mansion was bought with the chest still due, fill it.
-        /// RootHouse is the live main house when its landblock is loaded, else a database copy; the marker is cleared on
-        /// the live object (its own landblock) or, with none loaded, on the copy, never a copy over a live house.</summary>
+        /// <summary>A basement storage chest loaded: if its villa or mansion was bought with the chest still due, fill it.</summary>
         internal static void FillBasement(Storage storage)
         {
             if (!On || storage?.House == null) return;
@@ -197,17 +169,15 @@ namespace RevivalGuard
             }
         }
 
-        // ---- hook pieces on an empty house (owner 2026-10-29: "there are items on hooks in the houses right?") ----
+        // ---- hook pieces on an empty house ----
 
-        /// <summary>A landblock finished creating its objects (queued behind ACE's own creation action, so every house,
-        /// hook and storage chest exists, is linked and has its contents). Hook and storage contents load in their
-        /// constructors, before any landblock or house link exists, so this is the first moment to look.</summary>
+        /// <summary>A landblock finished creating its objects.</summary>
         internal static void OnLandblockReady(ACE.Server.Entity.Landblock lb)
         {
             if (lb == null) return;
             if (!On)
             {
-                // Capsules off with the crystal names on: take ours off (rg_house_last_owner), touch nothing else.
+                // Capsules off with the crystal names on: take ours off, touch nothing else.
                 foreach (var house in lb.Houses.Where(h => h.Guid == h.RootGuid).ToList())
                     try
                     {
@@ -230,8 +200,7 @@ namespace RevivalGuard
 
         static bool IsReal(House house) => (house.HouseOwner ?? 0) == 0 && (house.GetProperty(REAL_OWNER) ?? false);
 
-        /// <summary>A real player's lost house: his name on the crystal while his goods are still in it (they can't leave:
-        /// no player may open an unowned house's storage or hooks). No stash is ever added to it.</summary>
+        /// <summary>A real player's lost house: his name on the crystal while his goods are still in it.</summary>
         internal static void RealSign(House house, int tries)
         {
             if (!IsReal(house)) return;
@@ -250,13 +219,12 @@ namespace RevivalGuard
             DarktideFeel.UpdateSign(house, goods > 0, house.GetProperty(DarktideFeel.LAST_OWNER), real: true);
         }
 
-        // ---- real capsules: who lost the house (ACE clears the owner before ClearPermissions, where the vacancy starts) ----
+        // ---- real capsules: who lost the house ----
 
         static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, (string name, DateTime at)> s_Losing =
             new System.Collections.Concurrent.ConcurrentDictionary<uint, (string, DateTime)>();
 
-        /// <summary>Called as an eviction starts (unpaid maintenance, a deleted character): remembers the owner's name for
-        /// the release a moment later. Not a voluntary abandon, not a multi-house trim (the player is still here).</summary>
+        /// <summary>Called as an eviction starts: remembers the owner's name for the release a moment later.</summary>
         internal static void Losing(House house, bool multihouse)
         {
             if (house == null || multihouse || (house.HouseOwner ?? 0) == 0) return;
@@ -264,12 +232,11 @@ namespace RevivalGuard
             if (!string.IsNullOrWhiteSpace(name)) s_Losing[house.Guid.Full] = (name, DateTime.UtcNow);
         }
 
-        /// <summary>The release itself (owner already cleared): with the switch on, the lost owner's name stays on the house.
-        /// Whether his goods are still there is decided when the crystal is named (RealSign), on the live landblock.</summary>
+        /// <summary>The release itself: with the switch on, the lost owner's name stays on the house.</summary>
         internal static void MarkReal(House house)
         {
             if (!s_Losing.TryRemove(house.Guid.Full, out var e) || (DateTime.UtcNow - e.at).TotalSeconds > 120) return;
-            if (!RealOn || !TimeCapsuleRule.NameOk(e.name)) return;   // NameOk: never a staff (+) character
+            if (!RealOn || !TimeCapsuleRule.NameOk(e.name)) return;
             house.SetProperty(DarktideFeel.LAST_OWNER, e.name);
             house.SetProperty(REAL_OWNER, true);
             Mod.Log.Info($"[RevivalGuard] TimeCapsule: 0x{house.Guid.Full:X8} ({house.HouseType}) lost by {e.name}: a real capsule, his name on the crystal while his things are inside");
@@ -365,9 +332,6 @@ namespace RevivalGuard
             return wo;
         }
 
-        /// <summary>Owner 2026-10-29: the stash must pass for a real player's leftovers. Created and last touched before
-        /// the "owner" left (ageDays, plus a few days per item), and a hidden staff-only marker (custom properties are
-        /// never in an appraisal: ACE sends only [AssessmentProperty] values) so @capsule clear can find it.</summary>
         static void Age(WorldObject wo, int ageDays)
         {
             long then = (long)Time.GetUnixTime() - (ageDays + (int)(wo.Guid.Full % 60)) * TimeCapsuleRule.DAY;
@@ -385,8 +349,6 @@ namespace RevivalGuard
             if (stash.Note >= 0 && WorldObjectFactory.CreateNewWorldObject(TimeCapsuleRule.NOTE_WCID) is Book note)
             {
                 signer = owner;
-                // Written the way a player's page is: an author name and a player-range author id (high in the range,
-                // clear of real characters), never "ignore author".
                 uint authorId = 0x5F000000u | (uint)(stash.NameRoll & 0xFFFFF);
                 note.AddPage(authorId, signer, "", false, TimeCapsuleRule.NoteTexts(stash.Theme)[stash.Note], out _);
                 Age(note, stash.AgeDays);
@@ -401,8 +363,7 @@ namespace RevivalGuard
             return (inChest, signer);
         }
 
-        /// <summary>Each hook candidate on the first free hook it fits, within ACE's hook and hook-group limits, through
-        /// ACE's own hook path (Hook.OnAddItem: the same state a player's hanging leaves).</summary>
+        /// <summary>Each hook candidate on the first free hook it fits, within ACE's hook and hook-group limits</summary>
         static int PlaceHooks(House house, Storage chest, TimeCapsuleRule.Stash stash, ref int inChest, string owner = null)
         {
             owner ??= Owner(house, stash);
@@ -455,15 +416,10 @@ namespace RevivalGuard
             return $"chest ({stash.Chest.Count}): {string.Join(", ", stash.Chest.Select(N))}; theme hook pieces: {string.Join(", ", stash.Hooks.Select(N))} (plus furniture and clutter to 70-100% of free hooks)";
         }
 
-        /// <summary>Who lived here: the note's signature, the crystal's name (rg_house_last_owner) and the owner on signed
-        /// items. With the sign on, Darktide people first (the server-only names file), kept on the house for the vacancy so
-        /// the crystal and the note always agree; off, the chat-corpus name the notes always had.</summary>
         internal static string Owner(House house, TimeCapsuleRule.Stash stash, bool store = true)
         {
             if (stash.Signer != null) return stash.Signer;   // a hand-authored house (Xanzabar)
             var kept = house?.GetProperty(DarktideFeel.LAST_OWNER);
-            // Owner 2026-11-27: the names read from his retail screenshots. A name kept from an older names file, or one a
-            // character here now has, is replaced while the house stands empty; a real owner's and a bought house's stay.
             bool owned = (house?.HouseOwner ?? 0) != 0;
             if (kept != null && (owned || (house.GetProperty(REAL_OWNER) ?? false) || DarktideFeel.StillGood(kept))) return kept;
             var name = DarktideFeel.LastOwner(stash.NameRoll);
@@ -496,7 +452,7 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] TimeCapsule: 0x{house.Guid.Full:X8} last owner {was} -> {now} (names file){(n > 0 ? $", {n} signed piece(s) follow" : "")}");
         }
 
-        // ---- the retail names list (never in git: read from the chat replay corpus on the host) ----
+        // ---- the retail names list ----
 
         static List<string> s_Names;
         static readonly object s_NamesLock = new object();
@@ -641,8 +597,6 @@ namespace RevivalGuard
             House best = null; float bestD = REACH;
             foreach (var o in p.CurrentLandblock.GetAllWorldObjectsForDiagnostics())
             {
-                // The house the object belongs to on THIS landblock (a basement's chest -> the basement house), never
-                // RootHouse: that is another landblock's object, not this thread's to change.
                 House h = o is SlumLord sl ? sl.House : o is Storage st ? st.House : o is Hook hk ? hk.House : o as House;
                 if (h == null || o.Location == null) continue;
                 float d = p.Location.DistanceTo(o.Location);
@@ -666,7 +620,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Every release path clears the owner, then calls ClearPermissions, then saves the house.</summary>
     [HarmonyPatch(typeof(House), nameof(House.ClearPermissions))]
     static class TimeCapsuleOnRelease
     {
@@ -685,8 +638,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Real capsules: the owner's name before an eviction clears it (unpaid maintenance; a deleted character comes
-    /// here too, or through HouseRelease.Release). First, so it runs before HouseReleaseEviction may skip the original.</summary>
+    /// <summary>Real capsules: the owner's name before an eviction clears it.</summary>
     [HarmonyPatch(typeof(HouseManager), nameof(HouseManager.HandleEviction), new[] { typeof(House), typeof(uint), typeof(bool), typeof(bool) })]
     static class TimeCapsuleOnEviction
     {
@@ -698,8 +650,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Landblock.CreateWorldObjects (private) queues the creation itself; this queues the capsule look right
-    /// behind it on the same landblock queue.</summary>
+    /// <summary>Landblock.CreateWorldObjects queues the creation itself</summary>
     [HarmonyPatch(typeof(ACE.Server.Entity.Landblock), "CreateWorldObjects")]
     static class TimeCapsuleOnLandblock
     {

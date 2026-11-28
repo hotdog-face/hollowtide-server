@@ -14,42 +14,16 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// LOCKED ITEMS, ON THE SERVER (owner, 2026-09-25: "we need a way for players to lock down an
-    /// item as something the auto functions never touch", then "yes do it" to enforcing it for every
-    /// client, not only ours). Ours.
-    ///
-    /// The lock is a property ON THE ITEM (PropertyBool LOCKED, far outside ACE's range), so it is
-    /// saved with the item and follows it wherever it goes. While it is set the shard refuses:
-    ///   * DropItem, and GiveObjectRequest of it to anyone;
-    ///   * salvaging it (it is taken out of the salvage list; the rest is salvaged);
-    ///   * selling it (taken out of the sale);
-    ///   * any use-with that TARGETS it -- an empty mana stone destroys what it drains, and a failed
-    ///     tinker can destroy its target -- except a charged mana stone, which only fills it.
-    /// Wielding, using and trading it stay allowed; a trade needs both sides to accept.
-    ///
-    ///     @lockitem &lt;0xguid | item name&gt;     @unlockitem &lt;0xguid | item name&gt;     @lockeditems
-    ///
-    /// NOT @lock / @unlock: ACE has an Envoy command "unlock" (AdminCommands.HandleUnlock, an empty
-    /// SQL-lock stub) that registers after this mod and replaced ours, so an admin's @unlock did
-    /// nothing at all (2026-09-25).
-    ///
-    /// Our client (AcItemLock) sends @lockitem/@unlockitem and reads the list back on the mod channel
-    /// ("locks", a JSON array of guids), sent after the handshake and on every change; a retail
-    /// client uses the commands and gets chat lines.
-    /// </summary>
+    /// <summary>Locked items, on the server.</summary>
     public static class ItemLock
     {
-        /// <summary>Ours: PropertyBool 29101. ACE's own run to 9010; an unknown id persists in
-        /// biota_properties_bool like any other and is never sent to a client.</summary>
         public const PropertyBool LOCKED = (PropertyBool)29101;
 
         public static bool IsLocked(WorldObject wo) => wo != null && (wo.GetProperty(LOCKED) ?? false);
 
         internal static void Register()
         {
-            // Named static handlers: ACE rebuilds each handler from its MethodInfo, so a lambda
-            // ("Cannot bind to the target method", 2026-09-25) stops the whole mod's Initialize.
+            // Named static handlers: ACE rebuilds each handler from its MethodInfo, so a lambda stops the whole mod's Initialize.
             CommandManager.TryAddCommand(Lock, "lockitem", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
                 "Lock an item so it cannot be dropped, given, salvaged, sold or drained.", "<0xguid | item name>");
             CommandManager.TryAddCommand(Unlock, "unlockitem", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
@@ -118,8 +92,7 @@ namespace RevivalGuard
 
         internal static void Refuse(Player p, WorldObject item, string verb)
         {
-            // How to unlock, in the words of the client it goes to (report 261026-0013: "does not know why or how"): ours has
-            // the examine window's padlock, a retail client has the command.
+            // How to unlock, in the words of the client it goes to: ours has the examine window's padlock, a retail client has the command.
             bool ours = ModChannel.Capable(p.Session);
             Say(p.Session, $"Your {item.Name} is locked, so it was not {verb}. " + (ours
                 ? "To unlock it, examine it and click the padlock beside Wiki."

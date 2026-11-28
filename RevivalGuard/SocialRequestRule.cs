@@ -3,14 +3,7 @@ using System.Collections.Generic;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// REQUESTS THAT POP UP ON ANOTHER PLAYER'S SCREEN (macro abuse audit, docs/findings/macro-abuse-audit-2026-11-24.md):
-    /// a trade request, a fellowship invite and an allegiance swear each open a window or a question on the target. Looped
-    /// by a macro or a modified client they lock someone out of play, so per sender: the same request to the same player
-    /// at most PAIR_MAX times in PAIR_WINDOW, and at most ANY_MAX such requests in ANY_WINDOW to anyone. A refused one
-    /// is dropped with a short notice to the sender. Pure C#, no ACE types (tools/nettest/SocialRequestCase.cs); FloodGuard
-    /// in Mod.cs feeds it and exempts staff.
-    /// </summary>
+    /// <summary>Requests that pop up on another player's screen</summary>
     public sealed class SocialRequestRule
     {
         public const uint SwearAllegiance = 0x001D, FellowshipRecruit = 0x00A5, OpenTrade = 0x01F6;
@@ -28,7 +21,7 @@ namespace RevivalGuard
 
         readonly Dictionary<uint, List<(DateTime at, uint op, uint to)>> m_Sent = new Dictionary<uint, List<(DateTime, uint, uint)>>();
 
-        /// <summary>Null when <paramref name="from"/> may send this request now (it is counted), else the sender's notice.</summary>
+        /// <summary>Null when from may send this request now (it is counted), else the sender's notice.</summary>
         public string Check(uint from, uint opcode, uint to, DateTime now)
         {
             lock (m_Sent)

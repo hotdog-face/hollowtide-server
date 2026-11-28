@@ -4,17 +4,7 @@ using System.Text;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AUTOMATED CHAT, WHATEVER THE CLIENT (owner 2026-11-24: "in retail players used the macro tools to span chat. we want
-    /// to make sure there are safeguards for abusing things in game like this with the macro tool"; audit
-    /// docs/findings/macro-abuse-audit-2026-11-24.md). ChatGuard's burst and repeat limits catch fast spam; a macro or a
-    /// modified client can stay under them by speaking slowly. This catches the slow kind, per character, on every channel:
-    ///  - the same or a near-identical line SAME_MAX+1 times in SAME_WINDOW, whichever channels it went to;
-    ///  - the same line CADENCE_COUNT times in CADENCE_WINDOW at a fixed period (a macro's loop), jitter under CADENCE_JITTER.
-    /// Each catch is a strike: the first warns, the second mutes MUTE1, the third MUTE2, later ones MUTE3; strikes are
-    /// forgotten after STRIKE_MEMORY without one. Commands (@, /) are never judged or muted; lines shorter than MIN_LEN are not judged.
-    /// Pure C#, no ACE types (tools/nettest/ChatCadenceCase.cs); ChatGuard in Mod.cs feeds it and exempts staff.
-    /// </summary>
+    /// <summary>Automated chat, whatever the client.</summary>
     public sealed class ChatCadenceRule
     {
         public const int MIN_LEN = 6;
@@ -50,8 +40,7 @@ namespace RevivalGuard
 
         readonly Dictionary<uint, Person> m_People = new Dictionary<uint, Person>();
 
-        /// <summary>A line as compared: letters and digits only, lower case, a run of one letter cut to one ("heyyyy" and
-        /// "hey" are "hey"; "hello" is "helo" on both sides), so spacing, punctuation and stretched words do not make a line new.</summary>
+        /// <summary>A line as compared: letters and digits only, lower case, a run of one letter cut to one, so spacing</summary>
         public static string Normalize(string text)
         {
             var sb = new StringBuilder();
@@ -85,8 +74,7 @@ namespace RevivalGuard
             return 1.0 - (double)prev[lb] / longer >= NEAR;
         }
 
-        /// <summary>Times of <paramref name="times"/> (oldest first) end in CADENCE_COUNT at one period: the gaps between
-        /// the last CADENCE_COUNT differ by at most CADENCE_JITTER of their mean (plus CADENCE_SLACK_S).</summary>
+        /// <summary>Times of times end in CADENCE_COUNT at one period</summary>
         public static bool Regular(IReadOnlyList<DateTime> times, out double period)
         {
             period = 0;
@@ -112,7 +100,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Judge one line <paramref name="who"/> is sending at <paramref name="now"/>. Only an Ok line is kept.</summary>
+        /// <summary>Judge one line who is sending at now.</summary>
         public Result Check(uint who, string text, DateTime now)
         {
             lock (m_People)
@@ -123,7 +111,6 @@ namespace RevivalGuard
                     m_People[who] = p = new Person();
                 }
                 p.LastSeen = now;
-                // a command is never speech: not judged, not muted (the client's own @pop / @myquests polls keep working)
                 string t = (text ?? "").TrimStart();
                 if (t.StartsWith("@") || t.StartsWith("/")) return new Result { Verdict = Verdict.Ok };
                 if (p.MutedUntil > now) return new Result { Verdict = Verdict.Muted, Until = p.MutedUntil, Strike = p.Strikes.Count };

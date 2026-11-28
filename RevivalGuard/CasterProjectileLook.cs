@@ -11,26 +11,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A CASTER MAY NAME ITS PROJECTILE'S LOOK (owner 2026-11-03: "make the bread a loaf shooter. have it shoot slices of
-    /// bread like the egg shooter", then "yes build it"). A new projectile can't be a new spell: ACE builds every spell
-    /// from the client's spell table (Spell.cs), and every spell there already has a server row. So a caster with
-    /// PropertyDataId 9070 (a Setup) fires its spell's own projectile wearing that Setup: only the look changes; the
-    /// projectile item, its flight and damage stay the spell's. Used by the staff-only Loaf Shooter
-    /// (tools/gpubox-ace/gen_costume_prototypes.py): retail's Egg spell, a Slice of Bread in flight.
-    ///
-    /// LaunchSpellProjectiles notes the casting item (its weapon argument, else the caster's wielded wand) for the
-    /// projectiles it makes on this thread; SpellProjectile.Setup builds each projectile's physics from SetupTableId, so
-    /// the swap goes in just before it. Items without the property: nothing changes.
-    ///
-    /// The look also tumbles (owner 261103-0033: "the toast should spin mid air as it flys"): Setup gives a projectile
-    /// with RotationSpeed a spin and drops AlignPath, as it does for retail's swirling missiles, so the borrowed prop
-    /// turns over like a thrown item instead of flying nose-first like the spell's own missile.
-    ///
-    /// And it may carry its own name (same ticket: "says it shoots an egg but it needs to say toast"): PropertyString 9070
-    /// on the caster replaces the spell's name in the hit lines DamageTarget sends ("You bash X for 2 points with Toast.").
-    /// The examine panel reads the client's spell table; our client renames it there (AppraisalHud.ItemSpellNames).
-    /// </summary>
+    /// <summary>A caster may name its projectile's look.</summary>
     static class CasterProjectileLook
     {
         internal const PropertyDataId P_LOOK = (PropertyDataId)9070;

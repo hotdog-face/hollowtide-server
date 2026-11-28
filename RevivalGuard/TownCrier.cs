@@ -18,23 +18,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE HOLTBURG TOWN CRIER (owner 2026-11-09: "yes do the Holtburg Town Crier"). A retail-looking Town Crier (weenie
-    /// 903150, a clone of retail's Aluvian crier 5773, placed by the datafix tools/gpubox-ace/gen_town_crier.py writes)
-    /// who answers players' questions about the game in character: where to hunt at a level, how to reach a place, what
-    /// a thing does, what level a quest is. The answers come from TownCrierBrain, a deterministic search over our own
-    /// data (the client's wiki pack and Journal data, copied into `crier/` beside this dll by tools/crier/sync-knowledge.sh);
-    /// no model, no network call, nothing made up: what he does not know he says so and points at the Journal's Wiki tab.
-    /// docs/TOWN-CRIER.md has the design and the test sheet.
-    ///
-    /// How players ask (all three answer privately, as his tells):
-    ///   - say it near him (local chat within SAY_RANGE), as to any NPC;
-    ///   - /tell Town Crier, &lt;question&gt; from anywhere in the world (GameActionTell is patched: a tell to his name goes to
-    ///     him instead of "that character is not online");
-    ///   - speak to him as the selected target (TalkDirect: EmoteManager.OnTalkDirect).
-    ///   Using him (double-click) gets the greeting. Off unless `@modifybool rg_crier true` (new content: owner's yes).
-    /// Staff: @crier status | ask &lt;question&gt; | reload.
-    /// </summary>
+    /// <summary>The holtburg town crier.</summary>
     public static class TownCrier
     {
         internal const string P_ON = "rg_crier";
@@ -99,14 +83,12 @@ namespace RevivalGuard
         internal static bool IsCrier(WorldObject wo) =>
             wo is Creature && !(wo is Player) && (wo.WeenieClassId == CRIER_WCID || (s_AllCriers && RETAIL_CRIERS.Contains(wo.WeenieClassId)));
 
-        // every crier guid ever seen this run: a tell from afar names him by the guid the client remembers, and his
-        // landblock may not be the asker's (or may be unloaded)
+        // every crier guid ever seen this run: a tell from afar names him by the guid the client remembers, and his landblock may not be the asker's
         static readonly HashSet<uint> s_CrierGuids = new HashSet<uint>();
 
         static void Remember(WorldObject wo) { if (wo != null) lock (s_Lock) s_CrierGuids.Add(wo.Guid.Full); }
 
-        /// <summary>The crier this guid names, wherever he stands (the asker's landblock, any loaded landblock), or null; a
-        /// guid seen before counts as his even while his landblock is unloaded (the object is then null).</summary>
+        /// <summary>The crier this guid names, wherever he stands, or null</summary>
         static bool IsCrierGuid(uint guid, Player p, out WorldObject npc)
         {
             npc = p?.CurrentLandblock?.GetObject(guid);
@@ -167,7 +149,7 @@ namespace RevivalGuard
                 if (s_LastAnswer.TryGetValue(p.Guid.Full, out var last) && now - last < ANSWER_GAP_S) return;
                 s_LastAnswer[p.Guid.Full] = now;
             }
-            // PK Night (owner 2026-11-20): the crier names the next round's spot and the way, from PkNight's own words
+            // PK Night: the crier names the next round's spot and the way, from PkNight's own words
             var night = System.Text.RegularExpressions.Regex.IsMatch(q, @"\b(pk ?night|pvp night|pk event|hold the spot|dark isle)\b",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? PkNight.CrierNightLine() : null;
             if (night != null) { Tell(p, npc, night); Log(p.Name, q, new List<string> { night }); return; }
@@ -188,7 +170,7 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] TownCrier log: {e.Message}"); }
         }
 
-        /// <summary>The crier in the player's landblock, within range, or null. The block is scanned once a minute at most.</summary>
+        /// <summary>The crier in the player's landblock, within range, or null.</summary>
         static WorldObject CrierNear(Player p)
         {
             var lb = p?.CurrentLandblock;
@@ -288,10 +270,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>"/tell Town Crier, where is the Mana Forge" from afar. Our client sends a tell to a name it has seen as
-        /// TalkDirect by that object's guid (ChatHud's speakable target), and ACE answers "not available" when the guid is
-        /// not in the asker's landblock. A guid that is a crier's, anywhere, is answered; the payload is put back for ACE
-        /// when it is anyone else's.</summary>
+        /// <summary>"/tell Town Crier, where is the Mana Forge" from afar.</summary>
         [HarmonyPatch(typeof(GameActionTalkDirect), nameof(GameActionTalkDirect.Handle))]
         static class ToldByGuid
         {
@@ -321,8 +300,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>"/tell Town Crier, where do I level at 30" by name (a retail client, or ours before it has seen him): ACE
-        /// would answer "not online". The payload is read here and put back for ACE when the tell is for someone else.</summary>
+        /// <summary>"/tell Town Crier, where do I level at 30" by name: ACE would answer "not online".</summary>
         [HarmonyPatch(typeof(GameActionTell), nameof(GameActionTell.Handle))]
         static class ToldFromAfar
         {

@@ -9,19 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// PK NIGHT'S EVENT PORTALS AND QUIET GROUND (owner 2026-11-20, "Yes, this Sunday": the Dark Isle). For a spot with
-    /// HasGate (PkNightRules), from GATE_LEAD_MINUTES (30) before the start to the end of the round (GateSpot):
-    ///   * a "Dark Isle Portal" stands in Holtburg's lower town (never the lifestone square where players arrive) and lands
-    ///     players on the beach by the spot, no flagging quest asked; a "Holtburg Portal" on the beach takes them back;
-    ///   * creature generators within the spot's ClearMetres of the centre or the landing do not generate (a prefix on
-    ///     Generator_Generate, so pods, their bosses and generators loaded during the window all wait), and hostile
-    ///     generator-spawned creatures within half that are removed every SWEEP_S, so the circle and the landing are a PK
-    ///     fight, not a level 150 slaughter. Everything further out is retail. At the end the prefix lets go: the
-    ///     generators fill again on their own regeneration (retail delays, 5 minutes on the Dark Isle).
-    /// The portals are Gateways (weenie 1955: never saved to the shard, use only, no recall tie) made again if a landblock
-    /// unload took one; a restart mid-window makes them again on the next tick.
-    /// </summary>
+    /// <summary>PK night's event portals and quiet ground.</summary>
     public static partial class PkNight
     {
         const uint GATEWAY_WCID = 1955;
@@ -72,9 +60,6 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A portal to (re)make: never made, destroyed, or out of the world for a while (a landblock unload took
-        /// it). Remade only where its landblock is loaded again (a player there), except the first time, so an empty isle
-        /// is not kept awake.</summary>
         static bool Gone(WorldObject p, double madeAt, double now, double ns, double ew)
         {
             if (p == null) return true;

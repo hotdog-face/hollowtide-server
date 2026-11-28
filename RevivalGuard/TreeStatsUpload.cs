@@ -24,36 +24,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// CHARACTERS ON TREESTATS, SENT BY THE SERVER (owner 2026-11-06: "make it opt out only not opt in. we need our numbers
-    /// to be higher to rise up the ranks"; amoeba's token uploads, treestats.net docs/direct-upload.md). Ours.
-    /// docs/TREESTATS-UPLOADS.md.
-    ///
-    /// WHAT: the Decal plugin's JSON (github.com/amoeba/treestats Character.cs) for each online character, POSTed to
-    /// https://treestats.net/characters with header X-TreeStats-Server-Token. Built here from ACE's own values, so it
-    /// cannot be faked by a client and the token never leaves the server. Left out on purpose: monarch, patron and
-    /// vassals (the site makes a page for every name in them, which would publish players who opted out),
-    /// server_population (TreeStats polls hollowtide.org/population.json), location, account_name.
-    ///
-    /// WHO: everyone at Player level, on by default. Never: a character that opted out (PropertyBool 29160, saved on the
-    /// character, so it holds on every device and before the client says anything), staff (above Player, or a "+"
-    /// name), browser guests that were never kept (account "guest..."), Hollow Company mercenaries.
-    ///
-    /// WHEN: a minute after entering the world, then hourly while online, and on a level-up (no more than once a minute
-    /// per character). At most 900 uploads an hour in all (the token allows 1,000).
-    ///
-    /// OPT-OUT: "/treestats off|on" for players on any client (our client turns an unknown slash command into "@treestats",
-    /// so it works on every version, before 0.1.98's Options row), answered in chat. "@rgtreestats 0|1" is the silent form
-    /// the Options > Character switch sends. Both set the same saved property. The answer
-    /// goes on the mod channel as "treestats" {"on":bool}, also sent at every hello, which is how the client knows the
-    /// feature is here and shows the switch. THE NOTICE: once per character, before its first upload, a system line
-    /// (PropertyBool 29161 marks it said).
-    ///
-    /// CONFIG: treestats.json beside the mod turns it on: {"on": true} (optional "url", a test's mock; optional "tokenFile";
-    /// optional "token" for a test, never the real one). The real token is read from ~/ace/secrets/treestats-token (OVH,
-    /// mode 600, never in git, logs or the published source). No file, or "on" false: nothing is sent and the switch stays
-    /// hidden, so placing the token alone never starts uploads (owner's go first).
-    /// </summary>
+    /// <summary>Characters on treestats, sent by the server.</summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     static class TreeStatsUpload
     {
@@ -84,8 +55,6 @@ namespace RevivalGuard
         static int s_Ok, s_Fail, s_InFlight, s_FailsToAlert;
         static DateTime s_LogAt, s_Started = DateTime.UtcNow, s_AlertAt, s_FailWindowStart;
         static string s_LastFail;
-        /// <summary>A failure alert is an ERROR line (the bug alarm reads those), so never in the first minutes after a
-        /// start: nightly-restart.sh rolls the mod back on any RevivalGuard ERROR right after the restart.</summary>
         const double ALERT_AFTER_UPTIME_MIN = 10, ALERT_EVERY_MIN = 15;
 
         internal static bool On => s_Cfg != null;
@@ -130,8 +99,7 @@ namespace RevivalGuard
 
         static bool Shares(Player p) => p.GetProperty(OFF) != true;
 
-        /// <summary>"@rgtreestats 0|1": the Options switch's silent form (state back on the mod channel; chat only for a
-        /// client without the channel).</summary>
+        /// <summary>"@rgtreestats 0|1": the Options switch's silent form.</summary>
         static void Option(Session session, params string[] parameters)
         {
             var p = session?.Player;
@@ -181,7 +149,6 @@ namespace RevivalGuard
 
         // ---------------------------------------------------------------- who and when
 
-        /// <summary>Why this character is never sent, or null.</summary>
         internal static string Excluded(Player p)
         {
             if (p.Account == null || p.Session == null) return "no session";
@@ -202,8 +169,7 @@ namespace RevivalGuard
                 s_NextScan = now.AddSeconds(SCAN_SECONDS);
                 while (s_Hour.Count > 0 && (now - s_Hour.Peek()).TotalHours >= 1) s_Hour.Dequeue();
                 if (now >= s_LogAt) { s_LogAt = now.AddHours(1); if (s_Ok + s_Fail > 0) Mod.Log.Info($"[RevivalGuard] TreeStats: {s_Ok} sent, {s_Fail} failed since start"); }
-                // FAILED UPLOADS ARE SURFACED (amoeba 2026-11-07: "let me know if you see any failed uploads"): one ERROR per
-                // 15 minutes at most, with the count and the last refusal.
+                // Failed uploads are surfaced: one ERROR per 15 minutes at most, with the count and the last refusal.
                 int pending = Volatile.Read(ref s_FailsToAlert);
                 if (pending > 0 && now >= s_AlertAt && (now - s_Started).TotalMinutes >= ALERT_AFTER_UPTIME_MIN)
                 {
@@ -290,7 +256,7 @@ namespace RevivalGuard
             s_LastFail = what;
         }
 
-        /// <summary>The site's reply for a log line: one line, at most 200 characters (it never contains the token).</summary>
+        /// <summary>The site's reply for a log line: one line, at most 200 characters.</summary>
         static string OneLine(string s)
         {
             s = (s ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
@@ -299,7 +265,6 @@ namespace RevivalGuard
 
         // ---------------------------------------------------------------- the payload (the plugin's, a subset)
 
-        /// <summary>The plugin's PropertyInt blacklist (Character.cs Init): never sent.</summary>
         static readonly HashSet<int> BLACKLIST = new HashSet<int>
         {
             2,5,7,10,17,19,20,24,25,26,28,30,33,35,36,38,43,45,86,87,88,89,90,91,92,98,105,106,107,108,109,110,111,
@@ -326,7 +291,7 @@ namespace RevivalGuard
             (PropertyAttribute2nd.MaxHealth, "Health"), (PropertyAttribute2nd.MaxStamina, "Stamina"), (PropertyAttribute2nd.MaxMana, "Mana"),
         };
 
-        /// <summary>The upload, or null if the character is not ready (no name, no heritage). World thread only.</summary>
+        /// <summary>The upload, or null if the character is not ready (no name, no heritage).</summary>
         internal static string Build(Player p)
         {
             string race = Race((int)p.HeritageGroup);
@@ -402,7 +367,7 @@ namespace RevivalGuard
                 foreach (var kv in p.GetAllPropertyInt().OrderBy(k => (int)k.Key))
                 {
                     int id = (int)kv.Key;
-                    if (id >= 1000 || BLACKLIST.Contains(id)) continue;   // ours (29xxx) and the plugin's blacklist never go
+                    if (id >= 1000 || BLACKLIST.Contains(id)) continue;
                     w.WriteNumber(id.ToString(CultureInfo.InvariantCulture), kv.Value);
                 }
                 w.WriteEndObject();

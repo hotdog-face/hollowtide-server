@@ -9,18 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// SPELL MISSES, MEASURED (2026-10-22, The Forsaken Moustache: "20% of my spells hit an invisible wall" and "a DOT
-    /// resisting 12 times in a row vs a level 135"). READ ONLY: nothing here changes what ACE does.
-    /// 1. A player's targeted bolt that ends on the environment (SpellProjectile.OnCollideEnvironment): one log line and a
-    ///    "spellwall" event with the caster's and target's cells and positions, the bolt's flight from its spawn (0 m = ACE's
-    ///    launch sight test failed, LaunchSpellProjectiles), and the player's walls/hits so far, so a wall rate and the
-    ///    places it happens can be read off the events instead of guessed.
-    /// 2. Resist streaks (WorldObject.TryResistSpell): at RESIST_STREAK resists in a row on one target, a line and a
-    ///    "resist_streak" event with the caster's school skill, the target's effective magic defense, ACE's resist chance
-    ///    (SkillCheck.GetSkillChance, 0.03 factor, as MagicDefenseCheck) and the odds of the streak at that chance.
-    ///   @modifybool spell_miss_log false   no lines or events
-    /// </summary>
+    /// <summary>Spell misses, MEASURED.</summary>
     [HarmonyPatch]
     static class SpellMissWatch
     {

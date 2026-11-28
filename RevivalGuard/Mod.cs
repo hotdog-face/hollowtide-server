@@ -14,21 +14,7 @@ using log4net;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ANTI-CHEAT GUARDS FOR THE SHARD. The client is in the attacker's hands (a modified client, or an
-    /// AI agent writing packets), so every rule that matters is enforced here, on the server.
-    /// docs/security/ANTI-CHEAT.md has the audit behind each guard; tools/security/ has the hostile tests
-    /// that prove each one.
-    ///
-    ///   MovementGuard  - ANTI-CHEAT #1/#2/#12: speed, short teleports and lag-switch warps
-    ///   VendorGuard    - #10: a purchase total that would wrap a uint (retail's January 2001 exploit)
-    ///   FellowshipGuard- #13: the 9-member cap raced across parallel landblock threads
-    ///   FloodGuard     - plan item 3: game-action floods from macros and bots
-    ///   ChatGuard      - chat spam: a crash tool (the retail DDoS-then-dupe) and a nuisance to everyone
-    ///   TicketDesk     - player reports and support tickets (retail's AbuseLogRequest), filed for staff
-    ///
-    /// Each guard logs under [RevivalGuard] and counts offences per character, for staff review.
-    /// </summary>
+    /// <summary>Anti-cheat guards for the shard.</summary>
     public class Mod : IHarmonyMod
     {
         internal static readonly ILog Log = LogManager.GetLogger(typeof(Mod));
@@ -40,8 +26,7 @@ namespace RevivalGuard
             m_Harmony = new Harmony(ID);
             s_Failed.Clear(); s_PatchedClasses = 0;
             PatchEach();
-            // The ticket queue is chat commands, not Harmony patches, so it registers itself rather
-            // than being found by PatchEach. See TicketConsole for why it is commands and not a panel.
+            // The ticket queue is chat commands, not Harmony patches, so it registers itself rather than being found by PatchEach.
             Try(nameof(TicketConsole), TicketConsole.Register);
             Try(nameof(AdminOps), AdminOps.Register);
             Try(nameof(Decor), Decor.Register);
@@ -60,17 +45,17 @@ namespace RevivalGuard
             Try(nameof(AuditTrail), AuditTrail.Register);
             Try(nameof(CharacterSnapshot), CharacterSnapshot.Register);
             Try(nameof(Bestow), Bestow.Register);
-            Try(nameof(PkSuit), PkSuit.Register);   // @pksuit [undo]: staff PK-ready suit (owner 2026-11-22)
-            Try(nameof(PvpKit), PvpKit.Register);   // @pvpkit [again]: staff retail end-game PvP kit, rg_pvp_kit (owner 2026-11-25)
-            Try(nameof(AdminKit), AdminKit.Register);   // @adminkit: the admin panel's Ready kit, rg_admin_kit (owner 2026-11-25)
+            Try(nameof(PkSuit), PkSuit.Register);   // @pksuit [undo]: staff PK-ready suit
+            Try(nameof(PvpKit), PvpKit.Register);   // @pvpkit [again]: staff retail end-game PvP kit, rg_pvp_kit
+            Try(nameof(AdminKit), AdminKit.Register);   // @adminkit: the admin panel's Ready kit, rg_admin_kit
             Try(nameof(SetHeritage), SetHeritage.Register);
             Try(nameof(QuestLog), QuestLog.Register);
             Try(nameof(ModChannel), ModChannel.Register);
             Try(nameof(Mail), Mail.Register);
-            Try(nameof(DeathLog), DeathLog.Register);          // /deaths: your last 10 deaths (owner 2026-11-16)
-            Try(nameof(NewcomerNotes), NewcomerNotes.Register);   // first-gank note under 30, swap-coin notice at 30 (owner 2026-11-21)
+            Try(nameof(DeathLog), DeathLog.Register);          // /deaths: your last 10 deaths
+            Try(nameof(NewcomerNotes), NewcomerNotes.Register);   // first-gank note under 30, swap-coin notice at 30
             Try(nameof(AwayMessage), AwayMessage.Register);    // /away: an automatic answer to tells (Feature Requests #33)
-            Try(nameof(FellowPassword), FellowPassword.Register);   // /fpass <word> | /fjoin <leader> <password> (owner 2026-11-20; rg_fellow_password)
+            Try(nameof(FellowPassword), FellowPassword.Register);   // /fpass <word> | /fjoin <leader> <password>
             Try(nameof(Broker), Broker.Register);
             Try(nameof(TownCrier), TownCrier.Register);        // the Holtburg Town Crier's question desk (rg_crier, off by default)
             Try(nameof(DressingRoom), DressingRoom.Register);
@@ -86,18 +71,18 @@ namespace RevivalGuard
             Try(nameof(RetailWelcome), RetailWelcome.Register);
             Try(nameof(NewcomerWelcome), NewcomerWelcome.Register);   // a brand-new player's first character welcomed on General + Discord (rg_newcomer_welcome, off)
             Try(nameof(WhatsNew), WhatsNew.Register);            // last logout to our client for its what's-new card (rg_whats_new, on)
-            Try(nameof(DnDefaultOn), DnDefaultOn.Register);      // every player character on the Dereth Network by default, silently (owner 2026-11-11)
+            Try(nameof(DnDefaultOn), DnDefaultOn.Register);      // every player character on the Dereth Network by default, silently
             Try(nameof(LoginTokens), LoginTokens.Register);
             Try(nameof(PasswordRecovery), PasswordRecovery.Register);
             Try(nameof(LfgBoard), LfgBoard.Register);
-            Try(nameof(Recruiting), Recruiting.Register);      // /recruit (alias /recruiting): player allegiances that welcome new players, offered at level 10 (rg_recruit, off by default)
+            Try(nameof(Recruiting), Recruiting.Register);      // /recruit: player allegiances that welcome new players, offered at level 10
             Try(nameof(SmallAllegianceBonus), SmallAllegianceBonus.Register);   // small allegiances pass up more XP and earn more luminance (rg_small_alleg_bonus, off)
             Try(nameof(ChessLobby), ChessLobby.Register);      // /chess: the Game Center lobby, temporary boards, records, titles, ladder (rg_chess_lobby, off)
-            Try(nameof(Leaderboards), Leaderboards.Register);      // /top: level, XP, luminance, kills, PK, quests (rg_top; Discord post rg_top_discord, on)
+            Try(nameof(Leaderboards), Leaderboards.Register);      // /top: level, XP, luminance, kills, PK, quests
             Try(nameof(FeatureBoard), FeatureBoard.Register);
             Try(nameof(ItemLock), ItemLock.Register);
-            Try(nameof(TinkerLock), TinkerLock.Register);       // a recipe that locks the item to its applier asks first (owner 2026-11-20)
-            Try(nameof(UnlockWield), UnlockWield.Register);     // @unlockwield: staff undo a binding recipe's wield lock (owner 2026-11-20)
+            Try(nameof(TinkerLock), TinkerLock.Register);       // a recipe that locks the item to its applier asks first
+            Try(nameof(UnlockWield), UnlockWield.Register);     // @unlockwield: staff undo a binding recipe's wield lock
             Try(nameof(AutoStack), AutoStack.Register);
             Try(nameof(TreeStatsUpload), TreeStatsUpload.Register);   // characters on treestats.net (off without treestats.json)
             Try(nameof(RagdollCorpse), RagdollCorpse.Register);
@@ -109,14 +94,14 @@ namespace RevivalGuard
             Try(nameof(ServerFirsts), ServerFirsts.Register);
             Try(nameof(MonsterAi), MonsterAi.Register);
             Try(nameof(MonsterFun), MonsterFun.Register);
-            Try(nameof(HuntGrounds), HuntGrounds.Register);     // fewer champions on the Tusker/Stomper grounds, more in quiet dungeons, Director champion hunts (rg_hunt_grounds, off)
+            Try(nameof(HuntGrounds), HuntGrounds.Register);     // fewer champions on the Tusker/Stomper grounds, more in quiet dungeons, Director champion hunts
             Try(nameof(EventDirector), EventDirector.Register);
             Try(nameof(ScavengerHunt), ScavengerHunt.Register);
             Try(nameof(ExtraDeathLines), ExtraDeathLines.Register);
             Try(nameof(HoltburgGuards), HoltburgGuards.Register);    // Holtburg's Royal Guards talk, patrol and fight monsters in town (rg_holtburg_guards)
-            Try(nameof(TickContainment), TickContainment.Register);   // one object's tick exception is contained, not the end of the world (rg_tick_containment, @tickfaults)
+            Try(nameof(TickContainment), TickContainment.Register);   // one object's tick exception is contained, not the end of the world
             Try(nameof(ForeverChest), ForeverChest.Register);   // the chest beside the Holtburg grocer keeps what players leave in it (rg_forever_chest)
-            Try(nameof(TargetDummy), TargetDummy.Register);     // retail's Pyreal Target Drudge reports your damage and never dies (rg_target_dummy, off)
+            Try(nameof(TargetDummy), TargetDummy.Register);
             // The PK expansion (docs/PK-EXPANSION.md): every part off until its property is set.
             Try(nameof(PkCommon), PkCommon.RegisterProperties);
             Try(nameof(PkRenown), PkRenown.Register);
@@ -126,10 +111,8 @@ namespace RevivalGuard
             Try(nameof(PkShrines), PkShrines.Register);
             Try(nameof(PkBoard), PkBoard.Register);
             Try(nameof(PkArena), PkArena.Register);
-            Try(nameof(PkNight), PkNight.Register);           // Sunday 7 PM Pacific, hold the spot (rg_pk_night, off by default)
+            Try(nameof(PkNight), PkNight.Register);           // Sunday 2 PM Pacific, hold the spot (rg_pk_night, off by default)
             Try(nameof(PkBattlefield), PkBattlefield.Register);   // PK zones keep player corpses, capped (pk_battlefield_corpses, off)
-            // Harmony-only guards with a switch read at its default: registered so @modifybool can turn them off on a
-            // shard that has never stored the key (ACE answers "Unknown bool property" otherwise; review 2026-11-10).
             Try(nameof(MoveGuard), MoveGuard.Register);         // rg_moveguard_mode 0 off / 1 log (default) / 2 enforce; rg_moveguard_staff
             Try(nameof(MeleeLatchGuard), MeleeLatchGuard.Register);   // rg_melee_latch_mode 0 off / 1 log (default) / 2 finish
             Try(nameof(MeleeRestart), () => PkCommon.RegisterBool(MeleeRestart.P_ON, true, "RevivalGuard MeleeRestart: a new melee attack replaces one still waiting on its walk to a monster it cannot reach, as a jump frees it (false: ACE drops the new attack)"));
@@ -157,18 +140,11 @@ namespace RevivalGuard
                 + "character's pack (@bestow), and the looking-for-group board (@lfgboard), and the feature request board (@features), and locked items (@lockitem / @unlockitem), and cell furniture taken out of the world (HiddenCellStatics), and no house purchase waits for dev accounts (DevHousing), and the allegiance hall: bank, hall board, hall portal, lawn corpses, kill board and raid alarm (/mansion), and ragdoll corpses where the body lands (@ragdollcorpse), and the login screen's population count on the login port (PopulationQuery), and combat pets that only pick targets in line of sight (PetLos, pet_los_targets), and dyes that take only on clothing whose art has the colour (DyeArt, dye_by_art), and hovering NPCs reported lower than their physics (HoverDrop, hover_drop), and generator spawns placed in the air dropped to the ground (SpawnGround, rg_spawn_ground), and monsters ACE sends home sent as a teleport (ForceHomeStamp, rg_forcehome_stamp), and town NPCs that keep one face across landblock reloads (NpcFaceStable, rg_npc_face_stable), and Azimar greeting players by name, level, hour and visit, with paced blessings (AzimarVoice, azimar_voice), and every new character starting in Holtburg whatever town the client asked for (HoltburgOnly, rg_holtburg_only), and Holtburg's Royal Guards talking, patrolling and keeping the town (HoltburgGuards, rg_holtburg_guards), and Holtburg's townsfolk going about their day, mostly in silence, under one speech budget (TownLife, rg_town_life), and the chest beside the Holtburg grocer keeping what players leave in it (ForeverChest, rg_forever_chest " + (ForeverChest.On ? "ON" : "off") + "), and the Pyreal Target Drudge as a damage meter (TargetDummy, rg_target_dummy " + (TargetDummy.On ? "ON" : "off") + "), and one object's or player's tick exception contained instead of stopping the server (TickContainment, rg_tick_containment " + (TickContainment.On ? "ON" : "off") + ", @tickfaults), and Hollowtide Marionette essences in the normal essence loot (HollowEssences, rg_hollow_essences " + (HollowEssences.On ? "ON" : "off") + ", @hollowessences)");
         }
 
-        // ---- one failure loses one feature, not the mod (assessment 2026-11: a single PatchAll lost every guard on 2026-09-22) ----
-        //
-        // ROLLBACK CHOICE: each failure is logged at ERROR, and the nightly restart (tools/public-shard/nightly-restart.sh,
-        // RG_BAD) and stage-mod.sh's box test roll back / refuse a staged mod on any "ERROR: [RevivalGuard]" line. That is
-        // kept on purpose: a new dll that loses a guard against the ACE it will run on is a regression, and yesterday's dll
-        // is the safer one. What changes is the worst case: if the old dll fails the same patch too (ACE moved underneath
-        // both), it now still loads with everything else on, instead of the shard running with no guards at all.
+        // one failure loses one feature, not the mod
         static readonly List<string> s_Failed = new List<string>();
         static int s_PatchedClasses;
 
-        /// <summary>PatchAll, one [HarmonyPatch] class at a time. A class that throws (a renamed or ambiguous ACE target) is
-        /// logged and its own partly-applied patches are taken off again, so no feature runs half-patched.</summary>
+        /// <summary>PatchAll, one [HarmonyPatch] class at a time.</summary>
         void PatchEach()
         {
             foreach (var type in AccessTools.GetTypesFromAssembly(typeof(Mod).Assembly))
@@ -235,60 +211,31 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// MOVEMENT. ACE's UpdatePlayerPosition accepted any client position up to 50 m away unless it also
-    /// crossed more than one landblock (Player_Tick.cs), so a modified client could move up to 50 m per
-    /// update, and a lag-switcher warped on reconnect. A player can't outrun their own run rate: retail's
-    /// RunForward cycle is 4 m/s at run rate 1 (MotionTable), and ACE computes the rate from the Run skill
-    /// and burden (Creature.GetRunRate). So the distance allowed since the last ACCEPTED update is
-    /// 4 m/s x run rate x elapsed time, x SLACK for lag and jumps, plus a flat MARGIN. Anything beyond that
-    /// is refused and the client is snapped back to the server's position -- the same response ACE's own
-    /// z-hack check uses. Teleports, portals and server-forced moves are not client moves and are exempt.
-    /// </summary>
+    /// <summary>Movement.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.UpdatePlayerPosition))]
     static class MovementGuard
     {
         const float BASE_RUN = 4.0f;      // m/s at run rate 1 (retail RunForward)
-        // The live values are in tunables.json on the server (Tunables): a published limit is one a
-        // cheater stays just under. The defaults here are deliberately MORE lenient than the live ones,
-        // so a missing file can only ever let more through, never snap an honest player back.
+        // The live values are in tunables.json on the server (Tunables): a published limit is one a cheater stays just under.
         static float SLACK => (float)Tunables.D("movement.slack", 2.0);           // jump arcs, slopes, rounding
         static float MARGIN => (float)Tunables.D("movement.margin", 8.0);         // metres always allowed on top of the budget
         static double MAX_DT => Tunables.D("movement.max_dt", 3.0);               // a longer silence earns no more than this: a lag switch gains little
         static double BURST_SECONDS => Tunables.D("movement.burst_seconds", 3.0); // the budget holds up to this much running
 
-        // A BUDGET, NOT A PER-REPORT LIMIT. Our client's reports arrive bunched: the bridge's own
-        // movement messages and the client's relay both carry positions, so two reports a third of a
-        // second apart can be 8-18 m apart while the player runs honestly (measured 2026-09-18,
-        // playtest P16: entering combat while running snapped the owner back three times in 10 s).
-        // So each report spends from a budget that refills at the character's run speed (x SLACK)
-        // and holds up to BURST_SECONDS of running. Sustained speed beyond SLACK, or a jump beyond
-        // the budget plus MARGIN, is still refused.
-
-        // MEASURED FROM THE CLIENT'S OWN LAST REPORT, not from the server's copy of the player.
-        // The first version measured from p.Location, and the server moves that copy itself: a Use
-        // out of reach runs ACE's own MoveToObject on the server's physics, so the server's player
-        // walks toward the target while the client's reports lag behind or lead it. Owner playtest
-        // 2026-09-18: "moved 9.5 m in 0.07 s" beside the Academy lifestone, the snap-back cancelled
-        // the walk, and the bind never happened (so death and /ls went to the old bind point); the
-        // same snap is the reported pop-back by the lifestone. A cheater gains nothing from the
-        // change: every report is still held to what could have been run since the last report.
-        // The baseline is re-taken from the server after a teleport or a forced position, and after
-        // a refusal, so a refused jump cannot become the new starting point.
+        // Measured from the client's own last report, not from the server's copy of the player.
         internal sealed class State
         {
             public DateTime At; public ACE.Entity.Position Pos; public float Budget = float.NaN; public ACE.Entity.Position StaleFrom; public DateTime TeleportedAt;
             public ushort SnapStamp; public DateTime SnapAt; public int StaleDrops;   // the last snap-back's ForcePosition sequence
             public ACE.Entity.Position ReqPos; public ushort ReqStamp;               // the newest AutonomousPosition and its echoed sequence
             public int ForceBefore = -1;   // ACE's ForcePosition sequence when a report was let through to it (-1: none)
-            public int Unheard; public DateTime UnheardSince; public bool DesyncLogged;   // snaps in a row the client never echoed
+            public int Unheard; public DateTime UnheardSince; public bool DesyncLogged;
         }
         internal static readonly ConditionalWeakTable<Player, State> s_State = new ConditionalWeakTable<Player, State>();
 
         internal static void Rebaseline(Player p) { MoveGuard.Restart(p); if (s_State.TryGetValue(p, out var st)) st.Pos = null; }
 
-        /// <summary>A teleport is starting: remember where from, so a report still carrying the old
-        /// spot (sent before the client heard of the teleport) is recognised as stale, not a cheat.</summary>
+        /// <summary>A teleport is starting: remember where from, so a report still carrying the old spot is recognised as stale</summary>
         internal static void TeleportFrom(Player p)
         {
             var st = s_State.GetOrCreateValue(p);
@@ -300,8 +247,7 @@ namespace RevivalGuard
 
         const double SILENCE_MAX = 30.0;   // seconds of silence a report can be credited with as plain running
 
-        /// <summary>Whether plain running (BASE_RUN x rate, no SLACK) for the real seconds since the baseline, at most
-        /// SILENCE_MAX, covers <paramref name="moved"/>. A teleport restarts the count (its destination is the baseline).</summary>
+        /// <summary>Whether plain running for the real seconds since the baseline, at most SILENCE_MAX, covers moved.</summary>
         internal static bool SilenceAllows(State st, DateTime now, float rate, float moved, out double silent, out float runAllowed)
         {
             var since = st.TeleportedAt > st.At ? st.TeleportedAt : st.At;
@@ -319,10 +265,7 @@ namespace RevivalGuard
             catch { return -1; }
         }
 
-        /// <summary>A report the client sent before our snap-back reached it (its echoed ForcePosition sequence is older than
-        /// the snap's): dropped quietly. The stamp comes from the AutonomousPosition that stored this very Position object,
-        /// or from the MoveToState that did.</summary>
-        /// <summary>The ForcePosition sequence the report carrying <paramref name="pos"/> echoed, or -1 when unknown.</summary>
+        /// <summary>A report the client sent before our snap-back reached it: dropped quietly.</summary>
         static int ReportStamp(Player p, State st, ACE.Entity.Position pos)
         {
             if (ReferenceEquals(st.ReqPos, pos)) return st.ReqStamp;
@@ -372,13 +315,7 @@ namespace RevivalGuard
             float budget = st.Budget;
             bool fits = MovementBudget.Judge(ref budget, dt, rate, moved, (float)SLACK, (float)MARGIN, (float)BURST_SECONDS, out float allowed);
 
-            // A LONG HONEST SILENCE. The client holds its reports while a room's cell is unresolved (pending
-            // room, "outside every room", after a correction), and MAX_DT credits such a silence with 3 s at
-            // most, so the report that ends it looked like a speed hack: Mystic Warrior 2026-10-19 12:17 UTC,
-            // gaps of 17-22 s, 6.6-8.7 m/s against his 10.8 m/s run speed, snapped back five times
-            // (docs/findings/FINDINGS-raise-and-snapback.md). So a report is also accepted if it is within
-            // plain running (no SLACK, no MARGIN) for the real time since the baseline, up to SILENCE_MAX.
-            // A lag switch gains nothing: this is exactly what running the whole silence would have covered.
+            // A long honest silence.
             st.Budget = budget;
             if (!fits && SilenceAllows(st, now, rate, moved, out double silent, out float runAllowed))
             {
@@ -393,24 +330,10 @@ namespace RevivalGuard
 
             if (!fits)
             {
-                // THE BUDGET IS KEPT (2026-10-20 triage: 43 snapbacks for 7 players). It used to be zeroed here, so the
-                // next honest report (Lou: 0.12 s later) failed too and one refusal became a chain. Keeping it gives a
-                // cheater nothing: the budget only ever holds real elapsed time at the capped rate (Judge).
-                // A STALE REPORT FROM BEFORE A TELEPORT is refused the same way but is not an offence:
-                // a sweep bot "moved 40915.0 m in 1.52 s" (2026-09-19) was the client's last position
-                // report from the old landblock, arriving after the teleport. Refusing it keeps the
-                // player at the destination; logging it as cheating would bury real offences.
-                // THE STALE SPOT HOLDS FOR 15 MINUTES, not 10 s (2026-10 snap sweep, docs/findings/snaps-2026-10.md):
-                // a browser player who died sat in portal space past TeleportWatchdog's 20 s, the watchdog finished the teleport,
-                // and their client's next report came from the corpse spot 1-13 minutes later ("moved 26859.7 m"; Genki, Zanenvel,
-                // Metallideth, 13 such offences in 7 days). It is still refused and the client still snapped to the lifestone: this
-                // only decides whether a REFUSED report is logged as an offence, so it is not cleared by a report from the
-                // destination either (a probe bot reported its arrival first, and its old-spot report was then an offence).
+                // The budget is kept.
                 bool stale = st.StaleFrom != null && (now - st.TeleportedAt).TotalSeconds < STALE_TELEPORT_MAX
                              && st.StaleFrom.Distance2D(newPosition) < 50f;
-                // The baseline and the server's own copy are named too (2026-10 snap sweep): six "40-175 m in under a second"
-                // refusals could not be traced from the old line, and in seven others the server's copy had fallen 40-55 m
-                // below the client on a hill (FallWatch) and the snap pulled the client down to it.
+                // The baseline and the server's own copy are named too
                 if (!stale)
                 Offences.Add(p, "movement", $"moved {moved:F1} m in {dt:F2} s (budget allowed {allowed:F1} m at run rate {rate:F2}); snapped back to {p.Location.ToLOCString()}"
                     + $" (measured from {st.Pos.ToLOCString()}, {(now - st.At).TotalSeconds:F1} s old; the server's copy {p.Location.DistanceTo(newPosition):F1} m from the report)");
@@ -433,12 +356,6 @@ namespace RevivalGuard
             var seq = p.Sequences.GetNextSequence(SequenceType.ObjectForcePosition);
             if (seq != null && seq.Length >= 2) { st.SnapStamp = BitConverter.ToUInt16(seq, 0); st.SnapAt = now; st.StaleDrops = 0; }
             p.SendUpdatePosition();
-            // A CLIENT THAT NEVER HEARS THE SNAP-BACKS (ticket 261108-0014, 2026-11-08): Olivia's browser client died in a
-            // dungeon and never took the lifestone teleport; for over an hour it kept running in the dungeon and echoed
-            // ForcePosition sequence 0 through 1,100+ snaps. Every snap put her back at the Holtburg lifestone and every report
-            // started her running again, so the players there saw her run and snap back on a loop. A client that echoes none
-            // of our snaps for this long is out of step with the server and only a relog brings it back (as TeleportWatchdog's
-            // last arm does): it re-enters where the server has it.
             if (st.Unheard++ == 0) st.UnheardSince = now;
             if (MovementBudget.Desynced(st.Unheard, (now - st.UnheardSince).TotalSeconds) && !st.DesyncLogged)
             {
@@ -447,20 +364,12 @@ namespace RevivalGuard
                     + $"{(now - st.UnheardSince).TotalSeconds:F0} s (its client is not applying the server's positions); forcing a relog at {p.Location.ToLOCString()}");
                 if (p.Session != null) p.Session.LogOffPlayer(true); else p.LogOut();
             }
-            // The server's position stands AS OF NOW: measuring the next attempt from the last
-            // accepted update instead would let a cheater who keeps trying earn a longer and longer
-            // window (up to MAX_DT) and so a steady ~2x speed.
+            // The server's position stands as of now
             st.Pos = new ACE.Entity.Position(p.Location);
             st.At = now;
         }
 
-        /// <summary>
-        /// ACE'S OWN SNAP-BACK COUNTS AS A SNAP (2026-10 snap sweep). ACE's z-pos check snaps a report back to LastGroundPos with
-        /// its own ForcePosition sequence, and this guard did not know: the report already in flight from before it was judged
-        /// against the snapped spot and snapped again as an offence (The Forsaken Moustache 2026-10-24 14:38 and 14:43, "moved
-        /// 174.7 m in 0.10 s" 0 s after ACE's snap). GroundAnchor took away most of ACE's snaps; the ones left (indoors, more than
-        /// 10 m over the terrain) now arm the same stale-report drop and baseline as this guard's own snap.
-        /// </summary>
+        /// <summary>Ace's own snap-back counts as a snap.</summary>
         static void Postfix(Player __instance, bool __result)
         {
             try
@@ -479,18 +388,12 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// The movement budget's arithmetic, pure so tools/modcheck can test it without a server.
-    /// </summary>
+    /// <summary>The movement budget's arithmetic, pure so tools/modcheck can test it without a server.</summary>
     public static class MovementBudget
     {
         public const float BASE_RUN = 4.0f;   // m/s at run rate 1 (retail RunForward)
 
-        /// <summary>Refill <paramref name="budget"/> (NaN = new: full) by <paramref name="dt"/> seconds at run speed x
-        /// slack, capped at burstSeconds of it; a move fits within budget + margin. A fitting move spends the budget, down
-        /// to -margin: MARGIN is borrowed and paid back by time, not given again with every report (before, each report at
-        /// an empty budget got the whole margin free, so a client sending reports fast enough moved as fast as it liked).
-        /// A refused move spends nothing, so a refusal does not cost the next honest report its time.</summary>
+        /// <summary>Refill budget by dt seconds at run speed x slack, capped at burstSeconds of it; a move fits within budget + margin.</summary>
         public static bool Judge(ref float budget, double dt, float rate, float moved, float slack, float margin, float burstSeconds, out float allowed)
         {
             float speed = BASE_RUN * rate * slack;
@@ -503,11 +406,7 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>A position report sent before the client saw the snap-back: its ForcePosition sequence is older than the
-        /// one the snap carried (16-bit, wrapping). Only within <paramref name="window"/> seconds of the snap, so a client
-        /// that never echoes the sequence is judged normally again after that.</summary>
-        /// <summary>Snap-backs in a row the client never echoed, over how long, before it counts as out of step with the
-        /// server (MovementGuard forces a relog). An honest client echoes a snap in its next report, well under a second.</summary>
+        /// <summary>A position report sent before the client saw the snap-back</summary>
         public const int DESYNC_SNAPS = 10;
         public const double DESYNC_SECONDS = 30.0;
         public static bool Desynced(int unheardSnaps, double secondsSinceFirst) => unheardSnaps >= DESYNC_SNAPS && secondsSinceFirst >= DESYNC_SECONDS;
@@ -520,13 +419,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// IN-FLIGHT REPORTS AFTER A SNAP-BACK. A position report the client sent before the snap reached it still carries the
-    /// old spot, so it failed the guard again (the second offence 0.12 s after the first, 2026-10-20 triage) and earned a
-    /// second snap. Each report echoes the newest ForcePosition sequence the client has seen (MoveStamps; ACE reads it and
-    /// ignores it): one older than our snap's is dropped quietly, no offence and no new snap. Dropping gives a cheater
-    /// nothing; a stamp from the future is judged as usual.
-    /// </summary>
+    /// <summary>In-flight reports after a snap-back.</summary>
     [HarmonyPatch(typeof(ACE.Server.Network.GameAction.Actions.GameActionAutonomousPosition), nameof(ACE.Server.Network.GameAction.Actions.GameActionAutonomousPosition.Handle))]
     static class AutonomousStamp
     {
@@ -546,9 +439,7 @@ namespace RevivalGuard
             catch { t_Stamp = 0; }
         }
 
-        // The stamp is kept beside the very Position object the handler stored as RequestedLocation, and judged when the
-        // tick hands that object to UpdatePlayerPosition (MovementGuard). Not a patch on SetRequestedLocation: two field
-        // stores, so the JIT may inline it into its callers past any patch.
+        // The stamp is kept beside the very Position object the handler stored as RequestedLocation
         static void Postfix(Session session)
         {
             var p = session?.Player;
@@ -560,8 +451,7 @@ namespace RevivalGuard
         static Exception Finalizer(Exception __exception) { t_Stamp = 0; return __exception; }
     }
 
-    /// <summary>A teleport (portal, recall, admin, death) moves the player without a client report:
-    /// the movement guard measures the next report from the destination, not from the old spot.</summary>
+    /// <summary>A teleport moves the player without a client report</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.Teleport))]
     static class TeleportRebaseline
     {
@@ -569,13 +459,7 @@ namespace RevivalGuard
         static void Postfix(Player __instance) => MovementGuard.Rebaseline(__instance);
     }
 
-    /// <summary>
-    /// VENDOR PRICE OVERFLOW. ACE sums a purchase into a uint totalPrice with a "detect rollover?"
-    /// comment and no check (Vendor.BuyItems_ValidateTransaction). Retail's January 2001 exploit was the
-    /// same arithmetic: a big enough buy list wrapped the price to almost nothing. Before ACE's own
-    /// validation, the list is priced in 64 bits, and anything past what a uint (or a purse) can hold is
-    /// refused.
-    /// </summary>
+    /// <summary>Vendor price overflow.</summary>
     [HarmonyPatch(typeof(Vendor), nameof(Vendor.BuyItems_ValidateTransaction))]
     static class VendorGuard
     {
@@ -603,12 +487,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// FELLOWSHIP SIZE. ACE checks Count >= MaxFellows and then adds, at invite AND at accept
-    /// (Fellowship.AddFellowshipMember / AddConfirmedMember) -- a check-then-act that two acceptances on
-    /// different landblock threads can both pass, which is the shape of the retail "more than nine in a
-    /// fellowship" trick. Both paths run under one lock, so the check and the add are one step.
-    /// </summary>
+    /// <summary>Fellowship size.</summary>
     [HarmonyPatch]
     static class FellowshipGuard
     {
@@ -628,19 +507,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// ACTION FLOODS. A human produces a few game actions a second; a macro or an AI-driven client can
-    /// produce hundreds, which is how the retail vendor/trade/give dupes were raced. Non-movement game
-    /// actions are capped per session per second; the excess is dropped and counted. Movement and
-    /// position messages are exempt (MovementGuard judges those).
-    ///
-    /// DECAL/UTILITYBELT (Discord, Rekah, 2026-11-24: "auto vender makes my client crash", UB "prevRequest=10"). A retail
-    /// client with Decal bursts read-only queries (QueryItemMana for every worn item, IdentifyObject queues): live logged
-    /// Rekah over 30/s five times. Those filled the bucket, so the Sell that followed was dropped unanswered and the
-    /// client's IR_SHOP_EVENT (10) request never cleared (ACCWeenieObject::RecordResponse @0058cab0 only clears on the
-    /// vendor's VendorInfo or an 0xA0). Read-only queries now have their own, larger bucket, and an inventory or shop
-    /// action dropped here is answered like ACE's own busy refusal (0xA0, plus UseDone for buy/sell) so it clears.
-    /// </summary>
+    /// <summary>Action floods.</summary>
     [HarmonyPatch(typeof(InboundMessageManager), nameof(InboundMessageManager.HandleGameAction))]
     static class FloodGuard
     {
@@ -652,8 +519,7 @@ namespace RevivalGuard
         internal static bool IsQuery(GameActionType op) => op == GameActionType.IdentifyObject || op == GameActionType.QueryItemMana
             || op == GameActionType.QueryHealth || op == GameActionType.QueryAge || op == GameActionType.QueryBirth || op == GameActionType.PingRequest;
 
-        /// <summary>Retail's client records these as a pending request (UIAttempt*, gmVendorUI::SendShopEvent) and waits
-        /// for the server's answer; a silent drop leaves it waiting.</summary>
+        /// <summary>Retail's client records these as a pending request and waits for the server's answer; a silent drop leaves it waiting.</summary>
         internal static bool AwaitsAnswer(GameActionType op) => op == GameActionType.Buy || op == GameActionType.Sell
             || op == GameActionType.PutItemInContainer || op == GameActionType.GetAndWieldItem || op == GameActionType.DropItem
             || op == GameActionType.StackableMerge || op == GameActionType.StackableSplitToContainer || op == GameActionType.StackableSplitTo3D
@@ -706,28 +572,13 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// CHAT SPAM. Retail players flooded chat to lag and crash servers, then used the crash for a
-    /// rollback dupe (AC-CHEAT-HISTORY.md), and spam ruins the game for everyone else anyway (owner,
-    /// 2026-09-18). Per character: at most MAX_MSGS chat messages in WINDOW seconds, and the same text
-    /// at most MAX_REPEAT times in REPEAT_WINDOW seconds; anything past that is dropped with a short
-    /// notice to the sender only. Admin accounts are exempt so the owner's commands and the test harness always work;
-    /// every other level, Developer included, is held to the limit.
-    /// Say, tells, channel chat and emotes count; commands a player may use (/ and @) count as chat too,
-    /// since they cost the server the same.
-    /// </summary>
+    /// <summary>Chat spam.</summary>
     static class ChatGuard
     {
         const int MAX_MSGS = 6; const double WINDOW = 10;
         const int MAX_REPEAT = 2; const double REPEAT_WINDOW = 30;
 
-        // THE CLIENT'S OWN QUERIES. Hollowtide sends these by itself and consumes the replies: at every
-        // world entry @revivalclient, @questlog, @rgexpansion, @ragdollcorpse (twice) and WorldClock's
-        // @time, plus the bridge's @pop (every 20 s), @myquests (login, then 5 min) and staff @gps polls.
-        // That is eight Talks in the first seconds of a login, so every player was told "You are
-        // sending messages too quickly" on arrival, logged an offence, and had their first real line
-        // eaten (Windows first-run test, 2026-10-01). They get their own bucket, MAX_AUTO per WINDOW,
-        // outside the player's allowance and the repeat rule; past it they count as chat again.
+        // The client's own queries.
         static readonly HashSet<string> s_Auto = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "@revivalclient 1", "@questlog", "@rgexpansion 0", "@rgexpansion 1", "@ragdollcorpse 0",
@@ -749,7 +600,7 @@ namespace RevivalGuard
                 case (GameActionType)0x01E1: break;   // SoulEmote: a *wave* typed in chat, a text line to everyone near
                 default: return true;
             }
-            if (session.AccessLevel >= AccessLevel.Admin) return true;   // the owner and the harness only
+            if (session.AccessLevel >= AccessLevel.Admin) return true;
 
             string text = null;
             try
@@ -760,12 +611,10 @@ namespace RevivalGuard
             }
             catch { }
 
-            // The staff Dressing Room's panel speaks one @dress line per click (DressingRoom.cs); Sentinels are below
-            // Admin, so without this a few quick colour clicks would be dropped as spam.
+            // The staff Dressing Room's panel speaks one @dress line per click
             if (opcode == GameActionType.Talk && session.AccessLevel >= AccessLevel.Sentinel && text != null
                 && text.TrimStart().StartsWith("@dress ", StringComparison.OrdinalIgnoreCase)) return true;
-            // The Decorate panel speaks one @decor line per gesture (Undo pressed three times is the same text three times);
-            // @decor needs Developer on a test shard and Admin on live (rg_decor_live; Decor.cs DecorAccessRule).
+            // The Decorate panel speaks one @decor line per gesture; @decor needs Developer on a test shard and Admin on live.
             if (opcode == GameActionType.Talk && session.AccessLevel >= AccessLevel.Developer && text != null
                 && text.TrimStart().StartsWith("@decor ", StringComparison.OrdinalIgnoreCase)) return true;
 
@@ -791,8 +640,6 @@ namespace RevivalGuard
                     Offences.Add(session.Player, "chat", $"{opcode} dropped: {why}");
                     return false;
                 }
-                // SLOW, AUTOMATED REPEATS (ChatCadenceRule, macro abuse audit 2026-11-24): staff (Sentinel and up) exempt
-                // off until the owner approves it live (switch rg_macro_guards, default off; coordinator 2026-11-24)
                 if (text != null && session.AccessLevel < AccessLevel.Sentinel && PkCommon.On("rg_macro_guards"))
                 {
                     string said = text.StartsWith("#") && text.IndexOf(':') > 0 ? text.Substring(text.IndexOf(':') + 1) : text;
@@ -817,17 +664,14 @@ namespace RevivalGuard
         static string Clip(string t) => t.Length <= 80 ? t : t.Substring(0, 80) + "...";
     }
 
-    /// <summary>
-    /// TRADE REQUESTS, FELLOWSHIP INVITES, ALLEGIANCE REQUESTS each pop up on another player's screen; a macro looping them
-    /// locks that player out of play (SocialRequestRule). Staff (Sentinel and up) exempt.
-    /// </summary>
+    /// <summary>Trade requests, fellowship invites, allegiance requests each pop up on another player's screen</summary>
     static class SocialGuard
     {
         static readonly SocialRequestRule s_Rule = new SocialRequestRule();
 
         public static bool Allow(GameActionType opcode, ClientMessage message, Session session)
         {
-            if (!PkCommon.On("rg_macro_guards")) return true;   // off until the owner approves it live (default off)
+            if (!PkCommon.On("rg_macro_guards")) return true;
             if (!SocialRequestRule.Covers((uint)opcode) || session.AccessLevel >= AccessLevel.Sentinel) return true;
             uint to;
             try

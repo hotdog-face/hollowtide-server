@@ -9,16 +9,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A CREATE THAT ASKS FOR A SKILL THIS SHARD DOES NOT HAVE IS NOT REFUSED WHOLE. ACE's PlayerFactory.Create returns
-    /// InvalidSkillRequested at the first non-Inactive skill its portal SkillTable lacks, and the client shows that as a
-    /// name/database refusal. Creation offers the skills of the PLAYER's portal.dat, so an install with older DATs
-    /// (Awareness, 25, still offered) could not make any character: live log 2026-10-23 00:01-00:59, 27 refusals under
-    /// seven names ("tried to create with skill 25 that was not found in Portal dat"). Those entries are set Inactive
-    /// before ACE reads them, the way a current client sends a skill it does not offer; the rest of the create is ACE's.
-    /// The client sends only end-of-retail skills from 0.1.78 (AcServerSkills); this covers the clients already out.
-    /// Switch: rg_chargen_skill_fix.
-    /// </summary>
     [HarmonyPatch]
     public static class CharGenSkills
     {

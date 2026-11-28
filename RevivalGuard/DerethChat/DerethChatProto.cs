@@ -1,6 +1,4 @@
 // Dereth cross-server chat: the wire format and the filters, shared by the hub and the ACE mod.
-// No ACE types here, so the hub (cross-server-chat/hub) compiles this same file. AGPL-3.0, like the rest of the
-// server source. Design: docs/proposals/cross-server-chat.md.
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
@@ -11,7 +9,7 @@ using System.Text.RegularExpressions;
 
 namespace DerethChat
 {
-    /// <summary>One JSON object per WebSocket text frame. "t" says what it is; unused fields are left out.</summary>
+    /// <summary>One JSON object per WebSocket text frame.</summary>
     public sealed class Frame
     {
         public string t { get; set; }        // challenge hello welcome say ok rejected servers who notice error
@@ -54,7 +52,7 @@ namespace DerethChat
 
         public static string PublicKey(ECDsa key) => Convert.ToBase64String(key.ExportSubjectPublicKeyInfo());
 
-        /// <summary>One line, printable, spaces collapsed, capped. Emoji and other characters past the game font are dropped.</summary>
+        /// <summary>One line, printable, spaces collapsed, capped.</summary>
         public static string CleanText(string s, int max)
         {
             if (string.IsNullOrEmpty(s)) return "";
@@ -71,8 +69,7 @@ namespace DerethChat
             return sb.ToString();
         }
 
-        /// <summary>A character name as the game allows it: letters, spaces, apostrophes, hyphens, and ACE's "+" staff mark
-        /// in front (kept, so a server's staff show as staff, as in its own chat).</summary>
+        /// <summary>A character name as the game allows it: letters, spaces, apostrophes, hyphens, and ACE's "+" staff mark in front.</summary>
         public static string CleanName(string n)
         {
             n = CleanText(n ?? "", MAX_NAME + 1).Trim();
@@ -91,22 +88,21 @@ namespace DerethChat
 
         // A web address in any common shape: a scheme, www., a dotted name with a known ending, an IP, or an invite.
         static readonly Regex s_Link = new Regex(
-            // no spaces around a plain dot: "home. Me too" is a sentence, not an address
+            // no spaces around a plain dot: "home.
             @"(\b[a-z][a-z0-9+.-]*://)|(\bwww\.)|(\b\d{1,3}(\.\d{1,3}){3}\b)|(discord\s*\.\s*gg)|" +
             @"(\b[a-z0-9-]{2,}(\.|\s*\(dot\)\s*|\s*\[dot\]\s*)(com|net|org|gg|io|me|tv|ly|xyz|co|us|uk|info|biz|ru|cn|de|app|dev|link|site|online|shop|club|live)\b)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         public static bool HasLink(string s) => !string.IsNullOrEmpty(s) && s_Link.IsMatch(s);
 
-        /// <summary>Everything a line goes through before anyone sees it, on the hub and on each server. Null = refused (why says so).</summary>
+        /// <summary>Everything a line goes through before anyone sees it, on the hub and on each server.</summary>
         public static string Filter(string text, out string why)
         {
             why = null;
             var t = CleanText(text, MAX_TEXT);
             if (t.Length == 0) { why = "empty"; return null; }
             if (HasLink(t)) { why = "link"; return null; }
-            // NO WORD MASKING (owner 2026-11-08): words pass unchanged; each player's own client applies its profanity
-            // setting (Hollowtide's Options, retail's own filter), as for any other chat.
+            // No word masking: words pass unchanged; each player's own client applies its profanity setting, as for any other chat.
             return t;
         }
 
@@ -114,7 +110,7 @@ namespace DerethChat
         public static string Line(string server, string name, string text, bool bot = false) => $"{name} ({server}{(bot ? ", bot" : "")}): {text}";
     }
 
-    /// <summary>A token bucket per key: <c>burst</c> lines at once, then one every <c>every</c>.</summary>
+    /// <summary>A token bucket per key: burst lines at once, then one every every.</summary>
     public sealed class RateLimiter
     {
         readonly double m_Burst, m_PerSecond;

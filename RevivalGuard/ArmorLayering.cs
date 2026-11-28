@@ -3,6 +3,7 @@ using ACE.DatLoader;
 using ACE.DatLoader.FileTypes;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
+using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
@@ -11,27 +12,11 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ARMOR LAYERING TOOLS AS RETAIL HAD THEM (docs/CRAFTING-TAILORING.md "Layering"; owner 2026-10-20).
-    /// Retail's own words: Top "make it show on top of other armor visually covering the same locations"; Bottom
-    /// "reset it to its default layering priority" (item text, ace_world 42724/42726), and the 2010 dev teaser:
-    /// Bottom "removes that quality". ACE differs in three ways, each fixed here behind a switch:
-    ///   1. Bottom SET TopLayerPriority=false, which ACE sorts BELOW every unflagged piece. Here Bottom clears the flag,
-    ///      and a false left by ACE reads as unflagged (layering_bottom_resets).
-    ///   2. Worn targets: ACE's Tailoring.VerifyUseRequirements searches the pack only. The tools are SourceContained/
-    ///      TargetContained (ItemUseable 0x80008), which ACE's own RecipeManager.VerifyUse reads as pack OR worn, and the
-    ///      retail client sends a contained-target use for anything the player owns, worn included
-    ///      (ItemHolder::TargetCompatibleWithObject @00587520 -> IsOwnedByObject @0058ceb0 checks the wielder). So a
-    ///      worn piece is layered in place and the look is re-sent at once (layering_worn).
-    ///   3. Default order: see RetailOrder below (layering_retail_order); the cloak last, CloakLast (layering_cloak_last).
-    /// Ours, not retail's (docs/DIVERGENCES.md): a line saying what changed (ACE and the record are silent), on the Craft
-    /// channel, and a use that would change nothing keeps the tool (layering_no_waste; owner 2026-10-20).
-    ///   @modifybool <switch> false   ACE's rule (layering_no_waste false: always consumed)
-    /// </summary>
+    /// <summary>Armor layering tools as retail had them.</summary>
     static class ArmorLayering
     {
         internal const string P_WORN = "layering_worn", P_BOTTOM = "layering_bottom_resets", P_ORDER = "layering_retail_order",
-                              P_NOWASTE = "layering_no_waste", P_CLOAK = "layering_cloak_last";
+                              P_NOWASTE = "layering_no_waste", P_CLOAK = "layering_cloak_last", P_OWN = "layering_own_parts_in_order";
 
         static bool On(string p) => PropertyManager.GetBool(p, true).Item;
 
@@ -50,6 +35,7 @@ namespace RevivalGuard
                 if (!b.ContainsKey(P_ORDER)) b[P_ORDER] = new Property<bool>(true, "RevivalGuard ArmorLayering: unflagged armor layers by its coverage (ClothingPriority), as retail (false: ACE's VisualClothingPriority)");
                 if (!b.ContainsKey(P_NOWASTE)) b[P_NOWASTE] = new Property<bool>(true, "RevivalGuard ArmorLayering: a layering tool that would change nothing is not used up (ours; false: always consumed)");
                 if (!b.ContainsKey(P_CLOAK)) b[P_CLOAK] = new Property<bool>(true, "RevivalGuard ArmorLayering: the cloak is drawn last, over everything, as retail (false: ACE, cloak first)");
+                if (!b.ContainsKey(P_OWN)) b[P_OWN] = new Property<bool>(true, "RevivalGuard ArmorLayering: a worn item's own part models (expansion clothing) keep their place in the layer order, so armor worn over them shows (false: an own part always wins)");
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] ArmorLayering: switches not registered with @modifybool ({e.Message}); still read at their defaults"); }
         }
@@ -61,8 +47,7 @@ namespace RevivalGuard
             return m;
         }
 
-        /// <summary>2. A worn target passes for a layering tool; the rest of ACE's checks (same item, tool in the
-        /// pack, retained, society armour) are repeated because ACE returned before reaching them.</summary>
+        /// <summary>2. A worn target passes for a layering tool</summary>
         [HarmonyPatch]
         static class WornTarget
         {
@@ -92,8 +77,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>1 and 2: the tool itself. Top sets the flag; Bottom clears it (retail) or sets false (ACE, switch
-        /// off). A worn piece re-sends the wearer's look so everyone sees the new order now, not at the next equip.</summary>
+        /// <summary>1 and 2: the tool itself.</summary>
         [HarmonyPatch]
         static class Apply
         {
@@ -144,8 +128,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>1: a TopLayerPriority=false that ACE's old Bottom left on an item reads as unflagged, so it sorts
-        /// with the default pieces instead of under them (CalculateObjDesc and MansionFurniture both read it).</summary>
+        /// <summary>1: a TopLayerPriority=false that ACE's old Bottom left on an item reads as unflagged</summary>
         [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.TopLayerPriority), MethodType.Getter)]
         static class FalseIsDefault
         {
@@ -155,12 +138,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>3: THE DEFAULT ORDER. ACE sorts unflagged armour by VisualClothingPriority, its own ephemeral
-        /// PropertyInt 9013 (custom range): the coverage the ClothingTable DRAWS. The 2017 retail captures (18 worn
-        /// lists, 11 characters; docs/CRAFTING-TAILORING.md) sort by the item's wire ClothingPriority (the REDUCED value), lowest
-        /// first, the helm after the body pieces, then the Top-tool tail, also by ClothingPriority. So a reduced coat
-        /// drew under separate sleeves until a Top tool (Chakram, pkt 1485671265), as the wiki's Tailoring notes say.
-        /// ACE's sort key becomes that. The cloak (retail last, ACE first) is CloakLast's.</summary>
+        /// <summary>3: the default order.</summary>
         [HarmonyPatch]
         static class RetailOrder
         {
@@ -177,11 +155,76 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>3b: THE CLOAK LAST. The 2017 captures put the cloak after everything (helm before cloak 103 times
-        /// against 2); ACE lists it first, with the shirts and pants. The 19 cloak tables have no subpalettes and on human
-        /// setups touch only parts 29-33, so the order rarely shows; it does where a table changes a shared part (setup
-        /// 0x02001B2A, part 0). The cloak's own entries (parts, textures, subpalettes, rebuilt as Creature_Networking
-        /// builds them) are moved to the end. A hidden cloak has none to move.</summary>
+        /// <summary>4: an item's own part models layer like the item. ACE applies every worn item's own anim-part rows after all
+        /// ClothingBase work, so an under-layer piece with its own models replaced the armor worn over it.</summary>
+        [HarmonyPatch]
+        static class OwnPartsInOrder
+        {
+            static MethodBase TargetMethod() => Find(typeof(Creature), nameof(Creature.CalculateObjDesc), "own part models in layer order");
+            static bool Prepare(MethodBase original) => original != null || TargetMethod() != null;
+
+            static void Postfix(Creature __instance, ACE.Entity.ObjDesc __result)
+            {
+                if (__result == null || !On(P_OWN)) return;
+                try
+                {
+                    var order = WornOrder(__instance);
+                    for (int x = 0; x < order.Count - 1; x++)
+                    {
+                        var own = OwnParts(order[x]);
+                        if (own == null) continue;
+                        foreach (var ap in own)
+                        {
+                            // the last piece over this one that covers the same part decides what the part shows
+                            uint? over = null;
+                            for (int y = x + 1; y < order.Count; y++) over = ModelFor(__instance, order[y], ap.Index) ?? over;
+                            if (over == null) continue;
+                            int at = __result.AnimPartChanges.FindIndex(a => a.Index == ap.Index && a.AnimationId == ap.AnimationId);
+                            if (at >= 0) __result.AnimPartChanges[at] = new ACE.Entity.Models.PropertiesAnimPart { Index = ap.Index, AnimationId = over.Value };
+                        }
+                    }
+                }
+                catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] ArmorLayering: own part order for {__instance?.Name}: {e.Message}"); }
+            }
+
+            /// <summary>The worn pieces in the order Creature.CalculateObjDesc lays them: clothes by ClothingPriority, then armor (under, default, top).</summary>
+            internal static List<WorldObject> WornOrder(Creature c)
+            {
+                var all = c.EquippedObjects.Values.ToList();
+                bool Armor(WorldObject w) => w.ItemType == ItemType.Armor || ((w.CurrentWieldedLocation ?? EquipMask.None) & (EquipMask.Armor | EquipMask.Extremity)) != 0;
+                var clothes = all.Where(w => w.ItemType == ItemType.Clothing && !Armor(w)).OrderBy(w => w.ClothingPriority);
+                var armor = all.Where(Armor).ToList();
+                var sorted = armor.Where(w => w.TopLayerPriority == false).OrderBy(w => w.VisualClothingPriority)
+                    .Concat(armor.Where(w => w.TopLayerPriority == null).OrderBy(w => w.VisualClothingPriority))
+                    .Concat(armor.Where(w => w.TopLayerPriority == true).OrderBy(w => w.VisualClothingPriority));
+                return clothes.Concat(sorted)
+                    .Where(w => ((w.CurrentWieldedLocation ?? EquipMask.None) & (EquipMask.Clothing | EquipMask.Armor | EquipMask.Cloak)) != 0).ToList();
+            }
+
+            static List<ACE.Entity.Models.PropertiesAnimPart> OwnParts(WorldObject w)
+            {
+                if (w.Biota.PropertiesAnimPart == null || w.Biota.PropertiesAnimPart.GetCount(w.BiotaDatabaseLock) == 0) return null;
+                var l = new List<ACE.Entity.Models.PropertiesAnimPart>();
+                w.Biota.PropertiesAnimPart.CopyTo(l, w.BiotaDatabaseLock);
+                return l;
+            }
+
+            /// <summary>The model this piece puts on a part of this wearer (its own row, else its ClothingBase), or null when it leaves the part alone.</summary>
+            static uint? ModelFor(Creature c, WorldObject w, byte index)
+            {
+                var loc = w.CurrentWieldedLocation ?? EquipMask.None;
+                if (loc == EquipMask.HeadWear || loc == EquipMask.Cloak) return null;   // may be hidden by the wearer; they share no part with clothes
+                var own = OwnParts(w);
+                if (own != null) foreach (var ap in own) if (ap.Index == index) return ap.AnimationId;
+                if (w.ClothingBase == null) return null;
+                var table = DatManager.PortalDat.ReadFromDat<ClothingTable>(w.ClothingBase.Value);
+                if (table == null || !table.ClothingBaseEffects.TryGetValue(c.SetupTableId, out var effect)) return null;
+                foreach (var t in effect.CloObjectEffects) if ((byte)t.Index == index) return t.ModelId;
+                return null;
+            }
+        }
+
+        /// <summary>3b: the cloak last.</summary>
         [HarmonyPatch]
         static class CloakLast
         {

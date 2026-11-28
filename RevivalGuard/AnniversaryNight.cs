@@ -18,29 +18,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ANNIVERSARY NIGHT: A ONE-COMMAND PARTY KIT FOR STAFF (owner 2026-10-21, seasonal improvement #3). The shard's
-    /// birthday is the Anniversary (Nov 2-5) and the Night Club month (Nov 2 - Dec 1). Retail's live events were run by
-    /// hand by staff; this is the kit for one evening of it:
-    ///
-    ///   @anniversary start [minutes]   (Developer; default 180 minutes, then it ends by itself)
-    ///     * the Anniversary and the Night Club festivals on: outside their dates they are forced through
-    ///       SeasonalCalendar's own @festival path, and handed back to the calendar at the end. That brings retail's
-    ///       fireworks (the Fireworks Generator at 31 places, Holtburg and Cragstone among them), the Festival Stones,
-    ///       the Anniversary Costumer and the Night Club Attendants;
-    ///     * the Night Club is open to all: its attendants send anyone in (festival-goals.sql), and the third night
-    ///       there pays the Night Club Regular trophy;
-    ///     * more fireworks: retail's Anniversary Effect over Holtburg's square and on the Night Club's floor while the
-    ///       party runs (only where a player has the landblock loaded; gone at the end);
-    ///     * a festive crier line to everyone every 20 minutes, and a welcome for whoever logs in;
-    ///     * the founders' toast: Founders.cs's granted list, the founders online named in a toast at the start (and on
-    ///       @anniversary toast), and a word for each founder who logs in during the party;
-    ///     * the Gift Concierge at Hotel Swank (vendor 901920, built on another branch) named in the opening line when
-    ///       that weenie exists.
-    ///   @anniversary stop | toast | status (no word: status)
-    /// The party survives a restart (AnniversaryNight/state.json beside the dll); one that ran out while the shard
-    /// was down is closed quietly at start-up. docs/EVENT-DIRECTOR.md "Anniversary Night" is the staff page.
-    /// </summary>
+    /// <summary>Anniversary night: a one-command party kit for staff.</summary>
     static class AnniversaryNight
     {
         const uint EFFECT = 8359;          // Anniversary Effect: what retail's Fireworks Generator (19457) spawns
@@ -48,12 +26,11 @@ namespace RevivalGuard
         const double CRIER_S = 20 * 60, CHECK_S = 10;
         const int DEFAULT_MIN = 180, MAX_MIN = 24 * 60;
 
-        // Where the kit adds fireworks: Holtburg's lifestone square (docs/SEASONAL-UPGRADE.md showcase stop) and where
-        // the attendants' Disco Inferno Portal Sending (spell 4023) lands on the Night Club's main floor.
+        // Where the kit adds fireworks
         static readonly (string where, uint cell, float x, float y, float z)[] Spots =
         {
             ("Holtburg", 0xA9B40019, 88f, 14f, 98f),
-            ("the Night Club", 0x8A04018A, 20f, -90f, 9f),   // the main floor, over the dancers' ring (owner 261029-0005/0006)
+            ("the Night Club", 0x8A04018A, 20f, -90f, 9f),   // the main floor, over the dancers' ring
         };
 
         static readonly string[] Crier =
@@ -94,8 +71,7 @@ namespace RevivalGuard
                 + (s_State.On ? $"; a party is on record until {Stamp(s_State.Ends)}" : ""));
         }
 
-        /// <summary>The first tick, not Register: Register runs inside PatchAll, before SeasonalCalendar has loaded its
-        /// overrides, and handing a festival back then would save an empty override file over everyone's.</summary>
+        /// <summary>The first tick, not Register</summary>
         static void Boot()
         {
             lock (s_Lock)
@@ -162,8 +138,7 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] AnniversaryNight: ended{(s == null ? "" : " by " + (s.Player?.Name ?? "console"))}; handed back {string.Join(",", forced)}");
         }
 
-        /// <summary>SeasonalCalendar's own @festival path (private; reached by name so its file is not touched): forcing
-        /// is persisted there, re-asserted every minute and handed back with "auto".</summary>
+        /// <summary>SeasonalCalendar's own @festival path: forcing is persisted there, re-asserted every minute and handed back with "auto".</summary>
         static bool Festival(Session s, string verb, string key)
         {
             if (s_FestivalCmd == null) return false;

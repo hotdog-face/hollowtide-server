@@ -6,13 +6,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A HOUSE NEEDS LEVEL 50, NOT A 15-DAY ACCOUNT (owner 2026-10-24, a player's "Your account must be at least 15 days
-    /// old to purchase this dwelling": "drop it but require level 50"). ACE's house_15day_account is switched off by the
-    /// datafix 2026-10-24-house-15day-off.sql; this asks for a level-50 character instead, so free throwaway guest accounts
-    /// cannot buy up the houses. Apartments stay open to all, as they were under the 15-day rule; staff are exempt.
-    /// DIVERGENCES row "Houses need level 50".
-    /// </summary>
     [HarmonyPatch(typeof(Player), nameof(Player.HandleActionBuyHouse))]
     static class HouseLevel
     {

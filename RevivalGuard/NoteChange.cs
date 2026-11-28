@@ -12,21 +12,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A PYREAL VENDOR TAKES TRADE NOTES (owner, 2026-09-25: "I have loads of money but vendor seems
-    /// to only take pyreal. thats like going to a store but the guy wants you to pay in pennies").
-    /// Ours; retail and ACE pay only in coin (Vendor.BuyItems_ValidateTransaction tests
-    /// Player.CoinValue, which counts coin stacks only, and SpendCurrency consumes wcid 273).
-    ///
-    /// While a purchase is validated, CoinValue also counts the notes carried, so the funds test
-    /// passes when coin and notes together cover it. When the purchase is paid, coin goes first;
-    /// only the shortfall breaks notes: the smallest single note that covers it, or the largest notes
-    /// first when none does. The change comes back as notes, largest first, and under 100 as coin,
-    /// not as a pile of 25,000-pyreal stacks. The player is told which notes were broken.
-    ///
-    /// Alternate-currency vendors are untouched. Our client counts notes into the vendor purse
-    /// only when the shard answers the mod channel, so a stock ACE shard still refuses the buy.
-    /// </summary>
+    /// <summary>A pyreal vendor takes trade notes.</summary>
     public static class NoteChange
     {
         public const uint PYREAL = 273;
@@ -46,12 +32,9 @@ namespace RevivalGuard
         [ThreadStatic] internal static bool t_InBuy;
         /// <summary>While buying trade notes: only notes worth LESS than the cheapest note bought may pay (0: no cap).</summary>
         [ThreadStatic] internal static int t_NoteCap;
-        /// <summary>This purchase is refused only BECAUSE of the cap: coin and every note would pay, coin and the notes
-        /// allowed would not. The refusal line says so only then.</summary>
+        /// <summary>This purchase is refused only BECAUSE of the cap: coin and every note would pay, coin and the notes allowed would not.</summary>
         [ThreadStatic] internal static bool t_CapBlocks;
-        /// <summary>Change owed by the payment, handed over only after ACE has put the goods in the pack
-        /// (NoteChange_AfterGoods): paid first, it took the free slot ACE had validated for them and the goods were
-        /// destroyed (currency suite 2026-10-17, "couldn't add ... after validation").</summary>
+        /// <summary>Change owed by the payment, handed over only after ACE has put the goods in the pack</summary>
         [ThreadStatic] internal static long t_Change;
 
         static int CountOf(Player p, uint wcid) => p.GetInventoryItemsOfWCID(wcid).Sum(s => s.StackSize ?? 1);
@@ -123,7 +106,7 @@ namespace RevivalGuard
             if (LandblockManager.AddObject(wo))
                 p.Session.Network.EnqueueSend(new GameMessageSystemChat($"Your pack is full, so {wo.Name} was set at your feet.", ChatMessageType.Broadcast));
             else
-            {   // nowhere to put it at all: say so loudly, it is the player's money (currency suite 2026-10-17)
+            {   // nowhere to put it at all: say so loudly, it is the player's money
                 Mod.Log.Error($"[RevivalGuard] NoteChange: {count} x {wo.Name} for {p.Name} could not go in the pack or at the feet at {p.Location?.ToLOCString()}; destroyed");
                 wo.Destroy();
             }
@@ -131,8 +114,7 @@ namespace RevivalGuard
 
         static string Named(int value) => $"{value:N0}";
 
-        /// <summary>Pays `amount` with every coin carried plus the notes that cover the rest.
-        /// False when coin and notes together fall short (nothing is taken then).</summary>
+        /// <summary>Pays `amount` with every coin carried plus the notes that cover the rest.</summary>
         internal static bool Pay(Player p, long amount)
         {
             long coins = CountOf(p, PYREAL);
@@ -163,11 +145,7 @@ namespace RevivalGuard
         {
             __state = 0;
             if (__instance.AlternateCurrency != null || player == null) return;
-            // BUYING TRADE NOTES IS PAID IN COIN AND SMALLER NOTES (player Lou Sassel, ticket 261016-0042: "i purchased 9 mmd
-            // notes but it kept giving me different value notes and only 2 mmds"). Paying for MMDs with MMDs broke the ones just
-            // bought and handed back smaller notes, a circle; coin only (0.1.54's fix) then refused a player whose money is in
-            // notes (261017-0007: "I cant purchase mmds"). Only notes worth less than the cheapest note bought may pay, so
-            // small notes become big ones and the change, smaller than one broken note, is smaller notes still.
+            // Buying trade notes is PAID in coin and smaller notes.
             NoteChange.t_NoteCap = SmallestNoteBought(__instance, itemProfiles);
             long notes = NoteChange.NoteValue(player);
             NoteChange.t_CapBlocks = false;
@@ -182,8 +160,7 @@ namespace RevivalGuard
             NoteChange.t_InBuy = true;
         }
 
-        /// <summary>What ACE will charge for the purchase: GetSellCost of each stock row times its amount (a note's
-        /// rate is ACE's flat 1.15 and its face a multiple of 100, so per unit and per stack agree).</summary>
+        /// <summary>What ACE will charge for the purchase: GetSellCost of each stock row times its amount.</summary>
         static long Price(Vendor v, List<ACE.Server.Entity.ItemProfile> items)
         {
             long total = 0;
@@ -215,9 +192,7 @@ namespace RevivalGuard
 
         static void Finalizer(Player player, long __state, bool __result)
         {
-            // A NOTE PURCHASE REFUSED BY THE CAP SAID NOTHING (261017-0007, "I cant purchase mmds"): the client counts every
-            // note, so it sends the buy and ACE refuses it silently. Tell the player why, but only when the cap is why: a note
-            // buy refused for pack space or plain lack of money (an auto-conversion over a full pack) got this line too.
+            // A NOTE purchase refused by the cap said nothing: the client counts every note, so it sends the buy and ACE refuses it silently.
             if (!__result && NoteChange.t_CapBlocks && player?.Session != null)
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat(
                     "Trade notes are bought with coin or with smaller notes, never with notes of the same kind or larger.", ChatMessageType.Broadcast));
@@ -229,7 +204,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>The change from a note payment goes into the pack AFTER the goods, which ACE places in the slots it validated.</summary>
+    /// <summary>The change from a note payment goes into the pack after the goods, which ACE places in the slots it validated.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.FinalizeBuyTransaction))]
     static class NoteChange_AfterGoods
     {
@@ -250,7 +225,7 @@ namespace RevivalGuard
         {
             if (!NoteChange.t_InBuy || currentWcid != NoteChange.PYREAL || !destroy || amount == 0) return true;
             if (!NoteChange.Pay(__instance, amount))
-            {   // coin and notes fell short (nothing was taken): ACE's own SpendCurrency, never goods for free silently
+            {
                 Mod.Log.Warn($"[RevivalGuard] NoteChange: {__instance.Name} could not pay {amount} in coin and notes; ACE's SpendCurrency runs");
                 return true;
             }

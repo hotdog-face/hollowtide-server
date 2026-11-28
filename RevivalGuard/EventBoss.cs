@@ -21,34 +21,7 @@ using R = RevivalGuard.EventBossRule;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE EVENT BOSS: Bael'Zharon, the Unleashed (weenie 900207, a copy of the lair boss 900200 made by
-    /// tools/public-shard/datafixes/2026-11-26-eventboss-1-bael-unleashed.sql). Owner 2026-11-22
-    /// (docs/proposals/staff-event-toolkit.md item 2, docs/proposals/bael-boss-redesign.md): a boss he can drop anywhere
-    /// from one admin button, that "kills people but not everyone". Ours, not retail. NOT the world boss: his weenie is
-    /// not in WorldBoss.Bosses, so the lair boss's schedule, 24 h rule, titles, phases and shadow pull never see him.
-    ///
-    ///   @eventboss [spawn]        (Admin) one in front of you; stays until killed (no 5-minute rot); asks first in the panel
-    ///   @eventboss status | despawn | hp &lt;percent&gt; | attack &lt;wrath|slam|pulse|teth|weak&gt;   (testing)
-    ///
-    /// The fight (numbers in EventBossRule, live-tunable through the eventboss_* doubles with @modifydouble):
-    ///   health    eventboss_base_health x (1 + k (N - 1)), N = non-staff players who have hurt him (cap x3)
-    ///   hit cap   no hit takes more than eventboss_hit_cap of his max health; staff count for neither health nor loot
-    ///   five tells, one every 16 s (10 s under 25%), each a chat line + PlayScript, then the hit 2-3 s later:
-    ///     Hopeslayer's Wrath  1-3 marked players; the burst at each mark hits everyone within 8 m and is SHARED
-    ///     Shadowfall Slam     a 60-degree cone in front (his facing when he turned to his target), 80%, knocked back 12 m
-    ///     Demon's Pulse       everyone within 10 m, 70%, knocked back 10 m (both kill the already hurt, not the healthy)
-    ///     Portal to Teth      the top non-staff damager; dodged by being 25 m or more from him when it lands
-    ///     Marked Weakness     one player deals 30% less until another player stands within 3 m
-    ///   phases    75% three Shadows (each one alive after 20 s gives him Damage Rating +10), 50% a 10 s shield,
-    ///             25% faster; 14 minutes after the first hit a lethal pulse over 60 m every 4 s (hard enrage)
-    ///   first 2 minutes: signature hits do half damage and no Teth (learn the tells)
-    ///   death     every non-staff player in his damage history gets one roll from Bael'Zharon's world boss table
-    ///             (WorldBossSchedule.Grant, the same owed-if-full path); no title, no weekly bonus (those are the lair boss's)
-    /// Knockback is a short teleport (ACE has none for monsters), outdoors only; indoors the hit lands without it.
-    /// Hooks: Creature.Monster_Tick postfix, DamageHistory.Add prefix (every hit kind lands through it, before ACE's death
-    /// check), Creature.OnDeath prefix (the history is cleared on the way out), Player.OnDeath postfix (death count).
-    /// </summary>
+    /// <summary>The event boss: Bael'Zharon, the Unleashed.</summary>
     static class EventBoss
     {
         internal const uint WCID = 900207, SHADOW = 900201;
@@ -152,7 +125,7 @@ namespace RevivalGuard
             Reply("@eventboss [spawn | status | despawn | hp <percent> | attack <name>]");
         }
 
-        static string Spawn(Player me)
+        internal static string Spawn(Player me)
         {
             var wo = WorldObjectFactory.CreateNewWorldObject(WCID);
             if (wo == null) return $"weenie {WCID} is not in this world: the datafix 2026-11-26-eventboss-1-bael-unleashed.sql has not been applied here.";
@@ -239,8 +212,7 @@ namespace RevivalGuard
             double now = Now;
             if (st.BaseMax == 0)
             {
-                // one that ACE saved and brought back with his landblock (a creature with no generator persists): ours again,
-                // so @eventboss finds him and the 20-minute sweep can take him
+                // one that ACE saved and brought back with his landblock: ours again, so @eventboss finds him and the 20-minute sweep can take him
                 st.BaseMax = c.Health.MaxValue; st.LastNear = now;
                 lock (s_Lock) if (!s_Live.Any(w => w.TryGetTarget(out var x) && x == c)) s_Live.Add(new WeakReference<Creature>(c));
             }
@@ -495,8 +467,7 @@ namespace RevivalGuard
             return targets.OrderByDescending(p => tot.TryGetValue(p.Guid.Full, out var v) ? v : 0).FirstOrDefault();
         }
 
-        /// <summary>A share of the player's own max health, straight to health (no resists: the dodge is the defence).
-        /// True if they are still standing.</summary>
+        /// <summary>A share of the player's own max health, straight to health (no resists: the dodge is the defence).</summary>
         static bool Hit(Creature c, St st, Player p, double frac, string what)
         {
             if (p.IsDead) return false;
@@ -507,8 +478,7 @@ namespace RevivalGuard
             return !p.IsDead;
         }
 
-        /// <summary>Knockback: a short teleport straight away from him, outdoors only (indoors a wall or a missing cell
-        /// would strand the client, AGENT-BRIEF trap 4).</summary>
+        /// <summary>Knockback: a short teleport straight away from him, outdoors only.</summary>
         static void Knock(Creature c, St st, Player p, float dist, Vector2 facing)
         {
             if (p.IsDead || p.Location == null || c.Location == null || p.Location.Indoors || c.Location.Indoors) return;
@@ -524,8 +494,7 @@ namespace RevivalGuard
             chain.EnqueueChain();
         }
 
-        /// <summary>An outdoor position moved by a world offset: the landblock and cell are worked out again (cell id 0
-        /// makes ACE's Position find them) and the height is put on the ground.</summary>
+        /// <summary>An outdoor position moved by a world offset</summary>
         static ACE.Entity.Position Offset(ACE.Entity.Position from, Vector3 by)
         {
             if (from == null || from.Indoors) return null;

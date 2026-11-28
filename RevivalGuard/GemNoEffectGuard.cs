@@ -6,18 +6,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A GEM THAT DOES NOTHING IS NOT USED UP. ACE's Gem.UseGem ends with
-    /// `TryConsumeFromInventoryWithNetworking(this, 1)` unless the gem is UnlimitedUse, whether or not
-    /// it cast a spell, granted a contract or created an item. Coalesced Aetheria (wcid 42635-42637) is
-    /// a WeenieType Gem with none of the three, so double-clicking it simply destroyed it: the owner
-    /// lost five on 2026-09-23 trying to put them in his newly visible sigil slots. Retail reveals
-    /// Coalesced Aetheria by using an Aetheria Mana Stone ON it (ACE Aetheria.UseObjectOnTarget); a
-    /// plain use does nothing.
-    ///
-    /// So a gem with no spell, no contract and no created item is refused here before UseGem runs,
-    /// with a hint for Coalesced Aetheria and the Arcanum's turn-in gems (GemNoEffectRule). Every gem that does something is untouched.
-    /// </summary>
     [HarmonyPatch(typeof(Gem), nameof(Gem.UseGem))]
     public static class GemNoEffectGuard
     {
@@ -34,10 +22,6 @@ namespace RevivalGuard
             return false;
         }
 
-        /// <summary>Report 261123-0021: a weapon rare (Rage of Grael, spell 3828) used with no enchantable weapon wielded
-        /// hits the "You fail to affect" branch of ACE's TryCastItemEnchantment_WithRedirects, yet UseGem still consumes it
-        /// and starts the rare timer. An armor rare (impen/bane type) with no enchantable armor worn silently does the same.
-        /// Mirrors that method's target choice and refuses before UseGem.</summary>
         static bool HasTarget(Gem gem, Player player)
         {
             if (!gem.SpellDID.HasValue) return true;

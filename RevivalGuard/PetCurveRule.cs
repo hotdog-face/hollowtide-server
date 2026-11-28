@@ -4,21 +4,7 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// SUMMONING CURVE, the pure part (PetCurve.cs patches ACE; tools/nettest PetCurveCase compiles this file by path).
-    /// Owner 2026-11-24, "Smooth the curve" (docs/proposals/summoning-curve.md). ACE's level-200 pets carry about 3.3x the
-    /// per-hit damage of level-180 ones (skeleton 248 -> 825), and per family the damage per second differs by swing speed.
-    /// With rg_pet_curve on, a combat pet's hit is scaled so its damage per second is TARGET for its level, whatever its
-    /// swing: 50-180 keep ACE's middle (median) family, 200 is 180 times retail's pet health step 1370 / 1020 (AC wiki
-    /// essence pages; the only retail per-level pet power number). Golems (vendor, no mastery) keep ACE's numbers.
-    ///
-    /// The model is ACE's Monster_Melee: a swing is one maneuver (ACE's own odds over its combat table), its animation at
-    /// speed clamp(1 / (1 - Quickness/300), 0.5, 2) plus a random 0..PowerupTime wait (1 s if unset); each attack frame is
-    /// a strike for a body part's DVal x (1 - DVar/2) on average, times ACE's Strength mod 1 + (Str - 55) x 0.011.
-    /// SWING is measured from the portal DAT by tools/gpubox-ace/petdps (ACE's DatLoader on the box).
-    /// Damage per second here is before the target's armor, resistances, evades and the essence's ratings: the same
-    /// factors for every pet of a level, so the comparison holds; absolute numbers in play are lower.
-    /// </summary>
+    /// <summary>Summoning curve, the pure part (PetCurve.cs patches ACE; tools/nettest PetCurveCase compiles this file by path).</summary>
     public static class PetCurveRule
     {
         public const string P_ON = "rg_pet_curve";
@@ -39,7 +25,7 @@ namespace RevivalGuard
             { 200, Math.Round(396.8 * RETAIL_HEALTH_200 / RETAIL_HEALTH_180, 1) },
         };
 
-        /// <summary>Golem motion table: ACE's golems (vendor, no mastery) are left as they are (owner question).</summary>
+        /// <summary>Golem motion table: ACE's golems (vendor, no mastery) are left as they are.</summary>
         public const uint GOLEM_MT = 0x09000081;
 
         public const double MIN_MULT = 0.25, MAX_MULT = 2.5;
@@ -55,7 +41,7 @@ namespace RevivalGuard
             { (0x09000192, 0x30000000), (1.3222, 1) }, { (0x0900009A, 0x30000000), (1.6778, 1) },
             { (0x09000166, 0x30000000), (1.8788, 1) }, { (0x09000167, 0x30000000), (0.5000, 1) },
             { (0x090001CB, 0x30000000), (1.3389, 1) }, { (0x09000168, 0x30000000), (0.5000, 3) },
-            // Hollowtide pets (2026-11-24-summon-1-marionette.sql, 2026-11-25-summon-2-families.sql)
+            // Hollowtide pets
             { (0x0900009B, 0x3000002A), (2.2778, 1) }, { (0x09000008, 0x30000004), (1.1333, 1) },
             { (0x09000009, 0x30000005), (1.1444, 1) }, { (0x0900001A, 0x3000000A), (0.8000, 1) },
             { (0x09000025, 0x30000000), (1.4167, 1) }, { (0x09000007, 0x30000002), (1.1444, 1) },

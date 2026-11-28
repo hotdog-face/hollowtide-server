@@ -5,19 +5,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A WIELDED "DESTROYED ON DEATH" ITEM IS DESTROYED TOO. Death sweep 2026-09-30
-    /// (docs/SWEEP-DEATH-SOCIAL-2026-09-30.md s4); owner, 2026-09-30: "yes".
-    ///
-    /// ACE's `Player.HandleDestroyBonded` takes every possession with Bonded -2 (Destroy) and calls
-    /// `TryConsumeFromInventoryWithNetworking`, which only finds pack items. A wielded one (the Ensorcelled
-    /// Mace 47227, quest weapons) stayed in the hand, yet was put on the list the death message reads from:
-    /// "You've lost ... your Ensorcelled Mace!", and it was "lost" again at every death after.
-    ///
-    /// Postfix: whatever ACE listed and is still equipped is dequipped with `ConsumeItem`, ACE's own
-    /// dequip-and-destroy path (it sends the unwield, the delete and the burden update, and saves). ACE's
-    /// returned list, and so its message, is left as it was.
-    /// </summary>
+    /// <summary>A wielded "destroyed on death" item is destroyed too.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.HandleDestroyBonded))]
     static class DestroyBondedWielded
     {

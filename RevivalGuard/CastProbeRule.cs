@@ -1,10 +1,6 @@
 namespace RevivalGuard
 {
-    /// <summary>CastWatchdog's per-cast movement probe, pure (no ACE types), so tools/nettest compiles and checks it by path.
-    /// Diagnostics only (cast-spin audit 2026-11-10, H1): does the caster keep moving during the turn before the windup,
-    /// so each MoveToState cancels ACE's turn and TurnTo_Magic starts it again? Counts per cast, reset lazily the first time
-    /// a new CastNum is seen; written only while the player is casting. One probe per player, touched only by that
-    /// player's own threads (world thread for messages, its landblock group for turns; ACE runs those phases one after another).</summary>
+    /// <summary>CastWatchdog's per-cast movement probe, pure (no ACE types), so tools/nettest compiles and checks it by path.</summary>
     public sealed class CastProbe
     {
         public int CastNum = int.MinValue;
@@ -28,8 +24,7 @@ namespace RevivalGuard
             HaveLast = true; Fwd = fwd; Side = side; Turn = turn; Hold = hold;
         }
 
-        /// <summary>The probe part of a cast watchdog line. probe null or another cast's: all counts 0. cmd/key name a
-        /// MotionCommand / HoldKey (0 prints "none"). target 0: no target; dist/angle NaN print "?".</summary>
+        /// <summary>The probe part of a cast watchdog line. probe null or another cast's</summary>
         public static string Describe(CastProbe p, int castNum, System.Func<uint, string> cmd, System.Func<uint, string> key,
                                       uint heldTurn, uint heldTurnKey, uint target, double dist, double angle)
         {

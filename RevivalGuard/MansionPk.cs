@@ -10,32 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE PK SIDE OF A MANSION (owner, 2026-09-27: "i want corpses to last longer on mansion lawns.
-    /// rival allegiances do mansion raids frequently and the corpses become battle trophies and
-    /// evidence of an active PK allegiance. open to recommendations to enhance the pk dynamic").
-    /// Ours; docs/MANSIONS-AND-PK.md lists the recommendations that were not built.
-    ///
-    /// LAWN CORPSES. A player who dies on a mansion's landblock (lawn, yard, the house, and its
-    /// basement block) leaves a corpse that lasts mansion_corpse_decay_seconds (a server property,
-    /// default 86400 = 24 h; @modifylong changes it) of WALL-CLOCK time, empty or not, looted or not,
-    /// across restarts. ACE normally gives a player corpse max(1 h, level x 5 min) of ticking time and
-    /// drops an empty one to 15 s (WorldObject.Decay). The corpse carries its expiry (PropertyInt64
-    /// 29112, ours); PkBattlefield's Decay prefix (the one owner of kept corpses) keeps TimeToRot at what is left until the last 15 s, then lets
-    /// ACE rot it the usual way. corpse_spam_limit is still honoured: when ACE cuts the oldest corpse
-    /// of a repeat victim to 15 s, that cut stands. The name ("Corpse of X") and the appraisal line
-    /// ("Killed by Y.") are ACE's own, retail's words. With pk_battlefield_corpses on, every mansion
-    /// landblock is a PK battlefield instead (PkBattlefield: no timer, a cap per landblock).
-    ///
-    /// THE KILL BOARD. Every player killed by a player on those grounds is recorded against the
-    /// mansion (mansions.json, last 60) and shown on the Allegiance Hall Board and by /mansion kills;
-    /// the defending allegiance is told at once.
-    ///
-    /// THE RAID ALARM. Every 3 s the world loop (PlayerManager.Tick, which runs even where a
-    /// landblock is quiet) looks at where each online PK is. One who steps onto a mansion's grounds
-    /// and is not of the owner's allegiance (or account) raises one Allegiance line to every online
-    /// member of the defending allegiance, at most once per intruder per mansion per 10 minutes.
-    /// </summary>
+    /// <summary>The PK side of a mansion.</summary>
     internal static class MansionPk
     {
         internal const string DECAY_PROPERTY = "mansion_corpse_decay_seconds";
@@ -43,10 +18,7 @@ namespace RevivalGuard
         internal const PropertyInt64 TROPHY_UNTIL = (PropertyInt64)29112;
         const double ALARM_EVERY = 3.0, ALARM_REPEAT = 600.0;
 
-        /// <summary>Make mansion_corpse_decay_seconds an ordinary ACE property: ModifyLong refuses a key
-        /// that is not in DefaultLongProperties, a ReadOnlyDictionary over a private dictionary, so the
-        /// key is added to that inner dictionary. If that fails the property is still read (GetLong
-        /// reads config_properties_long by name); only @modifylong would refuse it.</summary>
+        /// <summary>Make mansion_corpse_decay_seconds an ordinary ACE property</summary>
         internal static void RegisterProperty()
         {
             try

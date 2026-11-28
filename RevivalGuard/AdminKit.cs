@@ -23,30 +23,6 @@ using Position = ACE.Entity.Position;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// `@adminkit` (AccessLevel.Admin, ours, not retail; owner 2026-11-25): the admin panel's Ready kit, to make the owner's
-    /// character "ready for anything". Behind one switch, `rg_admin_kit` (default OFF): off, every verb says so and does
-    /// nothing, and the hooks below never act. AuditTrail records every use (an above-Player command), and each verb also
-    /// posts what it did to ACE's Audit channel. ACE's own staff verbs are called where they exist (@buff, @run, @pk,
-    /// @attackable, @adminvision); the rest is ours.
-    ///
-    ///   ready                 cure, then every self buff at level 8 (ACE @buff: creature, life, item, banes and
-    ///                         Impenetrability on worn armour and shields), then full vitals
-    ///   cure                  vitae off, harmful enchantments off you and your worn gear (retail's death purge, as asked)
-    ///   restock               components your known spells take, ammunition for the wielded launcher, kits, elixirs,
-    ///                         mana charges (AdminKitRule.SUPPLIES); worn items' mana full; pack items' uses full
-    ///   revive|nofall|ignore|run|see [on|off]   toggles: revive in place with no vitae (memory), no fall damage (memory),
-    ///                         monsters ignore you (ACE @attackable, saved), ACE's Sentinel run boost (wears off), ACE
-    ///                         @adminvision (see cloaked staff and hidden objects; off takes a relog to hide them again)
-    ///   pk                    flip your own PK and NPK (ACE @pk)
-    ///   tp &lt;NS&gt; &lt;EW&gt;           travel to map coordinates (the map's click; ACE's AdvocateTeleport placement)
-    ///   goto &lt;0xguid|name&gt;      go to a player, keeping where you stood;  back: return there
-    ///   smite &lt;0xguid&gt; [player] kill the target (a player only with "player": the panel asks first)
-    ///   clear [metres]        kill every attackable monster within that range (default 30)
-    ///   freeze &lt;0xguid&gt; [secs]  a monster stops moving and attacking for that long (default 30); unfreeze &lt;0xguid&gt;
-    ///   scout &lt;0xguid|name&gt;     a player's level, vitals, attributes, top skills, ratings and worn gear, in chat
-    ///   status                the switch and every toggle, one line (the panel's orbs)
-    /// </summary>
     public static class AdminKit
     {
         const AccessLevel LEVEL = AccessLevel.Admin;
@@ -212,9 +188,7 @@ namespace RevivalGuard
                 got.Add($"{s.name} to {s.target}");
             }
 
-            // Components the known spells take as this character casts them (a focus swaps in scarab + prismatic taper), for
-            // each school's highest level known only: the lower levels' formulas would fill a pack (82 kinds on a test
-            // character, 2026-11-25) for spells nobody casts once the top level is known.
+            // Components the known spells take as this character casts them, for each school's highest level known only
             var top = new Dictionary<MagicSchool, uint>();
             var spells = new List<Spell>();
             foreach (var id in p.Biota.GetKnownSpellsIds(p.BiotaDatabaseLock))
@@ -256,8 +230,6 @@ namespace RevivalGuard
                 + (heavy > 0 ? $" {heavy} left out to keep you under full burden." : ""));
         }
 
-        /// <summary>Stacks of `wcid` until the pack holds target(name), counting what is there (AdminVoid.TopUp's way); never
-        /// past full burden (100%: slower movement and weaker defense beyond it).</summary>
         static int TopUp(Player p, uint wcid, Func<string, int> target, ref int failed, ref int heavy, out string name)
         {
             name = null;

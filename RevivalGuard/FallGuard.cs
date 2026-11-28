@@ -5,15 +5,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// FALL DAMAGE THE CLIENT'S REPORTS SHOW (FallWatch, 7 days to 2026-10-24: 188 hurt landings, 8,974 damage). ACE hurts a
-    /// PK by its server body's speed at every touch of the ground, so one fall bouncing down a cliff face was charged up to
-    /// 9 times (21 landings, 1,584 extra damage), and 15 outdoor landings were deeper than any drop near the client.
-    /// FallGuardState caps a descent's damage at the fall the client's own reports show, and holds a hit the reports do not
-    /// show yet for the landing report (10 s). Switch rg_fall_guard, default OFF (a change from ACE, which owns this rule,
-    /// for the owner to approve): off, ACE's damage stands and each decision is logged as a shadow, so live shows what it
-    /// would change. Findings: docs/findings/phantom-falls-2026-10.md.
-    /// </summary>
+    /// <summary>Fall damage the client's reports show.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.TakeDamage_Falling))]
     static class FallGuard
     {

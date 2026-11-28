@@ -10,22 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// JOKE SPELLS (owner 2026-10-20 "unlock existing jokes"; ours, docs/DIVERGENCES.md). Retail's joke spells as scrolls
-    /// (tools/gpubox-ace/gen_joke_spells.py); nobody sells them (Tumble removed, owner 2026-10-20) and the festival
-    /// delivery waits for his approval (JokeScrollRewards, off). They keep their ORIGINAL ids, which every
-    /// client already has in its DAT, so this rule makes them jokes only when a PLAYER casts them:
-    ///   Cow 4267, Present 4269, Table 4270 (the Jester's gag bolts, 100-200) and Bovine Intervention 2366 (a cow from
-    ///     the sky, 100-200): damage x SCALE (16-32, a Bolt I). The Jester and any monster keep theirs.
-    ///   Fireworks 2815-2926, 4375-4390: harmless (a player's firework bursts on contact and does nothing else); cast at
-    ///     no target they fly at the spell's launch angle (ACE reads DefaultLaunchAngle nowhere; UP = 90, OUT = 45)
-    ///     instead of level, and burst after FUSE_S in the air (an untargeted streak otherwise flies on and never bursts).
-    ///     Anyone's firework bursts in its own colour (ACE's data made every one grey; see Colour).
-    ///   Castable by anyone (coordinator 2026-10-20 "fun for anyone"): a player casts every joke id (the above and
-    ///     Old School Fireworks 2927; NOT Egg 4078: the Egg Launcher is a holiday item, owner 2026-10-20) at difficulty POWER instead of the DAT's Power (Cow 300), trained or not, and
-    ///     needs and burns no components, for at most MANA mana. The client shows the same (Assets/Streaming/AcJokeSpells.cs; keep the ids equal).
-    ///   @modifybool rg_joke_spells false   ACE's own behaviour for all of the above
-    /// </summary>
+    /// <summary>Joke spells.</summary>
     static class JokeSpells
     {
         internal const string P_ON = "rg_joke_spells";
@@ -99,8 +84,7 @@ namespace RevivalGuard
             }
         }
 
-        // ACE writes a scroll's LongDesc from the DAT ("Inscribed spell: Cow\nShoots a Cow ... 100-200"); a joke scroll
-        // tells the player's numbers instead. Same words as the client's AcJokeSpells.
+        // ACE writes a scroll's LongDesc from the DAT; a joke scroll tells the player's numbers instead.
         static readonly Dictionary<uint, string> s_Desc = new()
         {
             { 4267, "Shoots a cow at your target. In a student's hands the cow does 16-32 points of bludgeoning damage, most of it to the target's pride." },
@@ -204,11 +188,7 @@ namespace RevivalGuard
             }
         }
 
-        // ACE's world data gives every firework spell a grey burst: 120 of the 128 point at Force Bolt (7264) and the
-        // firework weenies (22259-22314) all carry Force Bolt's effect table 0x34000009 (grey sparks, 0x06004049). The DAT
-        // keeps retail's coloured missile tables in a row, each burst's particle art that colour (scratch DAT dump,
-        // report 261020-0034): red 0x3400000C, orange 0D, yellow 0E, green 0F, blue 10, purple 11, black 13, white 14.
-        // A firework projectile (anyone's) takes its colour's table, and the firework weenies' setup 0x0200040D.
+        // ACE's world data gives every firework spell a grey burst
         static readonly (string word, uint table)[] s_Colour =
         {
             (" Red ", 0x3400000C), (" Orange ", 0x3400000D), (" Yellow ", 0x3400000E), (" Green ", 0x3400000F),
@@ -252,7 +232,7 @@ namespace RevivalGuard
                         chain.AddDelaySeconds(FUSE_S);
                         chain.AddAction(sp, () =>
                         {
-                            // still flying (ProjectileImpact clears ReportCollisions and destroys it 5 s later)
+                            // still flying
                             if (!sp.IsDestroyed && sp.PhysicsObj != null && sp.ReportCollisions == true) sp.ProjectileImpact();
                         });
                         chain.EnqueueChain();

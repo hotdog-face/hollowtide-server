@@ -11,19 +11,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE ASSISTANT'S DAILY USAGE SUMMARY (owner 2026-10-31, "Build assistant usage"). The client's anonymous Assistant
-    /// batches (Assets/Streaming/AcAssistUsage.cs) land in the event log as "assist" lines (Telemetry.Assist; an older mod
-    /// logged them as "usage" lines whose u.kind is "assist", read here too). Once a day this adds them up into counts only,
-    /// with no account hashes, character names or anything per player, and files the result where the tickets are, as
-    /// ~/ace/reports/summaries/asum-&lt;yyMMdd&gt;.json (kind "assist_summary", status "closed"), so the laptop's report
-    /// tools fetch it through the same read as the ticket digest (tools/reports/assistant_usage.py) and never read the
-    /// event log itself. Staff and mercenary lines are left out.
-    ///
-    /// When: checked every 30 minutes from PlayerManager.Tick, and so right after each start (the nightly restart); a
-    /// day is summarised once it has ended (UTC), for the last DAYS_BACK days that have an event file and no summary yet.
-    /// The work runs off the world thread; any failure is logged and tried again next time.
-    /// </summary>
+    /// <summary>The assistant's daily usage summary.</summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     static class AssistUsageSummary
     {
@@ -86,7 +74,7 @@ namespace RevivalGuard
 
     }
 
-    /// <summary>The pure part of AssistUsageSummary: one day's event lines to counts. No ACE types (tools/modcheck calls it).</summary>
+    /// <summary>The pure part of AssistUsageSummary: one day's event lines to counts.</summary>
     public static class AssistUsageRollup
     {
         const int OVERNIGHT_S = 6 * 3600;

@@ -11,21 +11,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// SMALL-ALLEGIANCE BONUS (owner 2026-11-25, picked from three: "Bonus for small allegiances: smaller allegiances get
-    /// extra XP pass-up and luminance, fading as they grow; nobody is forced out"; numbers docs/proposals/allegiance-balance.md).
-    /// Ours, not retail (docs/DIVERGENCES.md "Small-allegiance bonus").
-    ///
-    ///   Pass-up: the XP a member earns is counted (1 + bonus) times when ACE passes it up the chain (AllegianceManager.
-    ///   PassXP, direct call only, so each patron above gets ACE's own share of the bigger amount). The member's own XP is
-    ///   unchanged. Luminance: a member's kill and quest luminance gets (1 + bonus) (Player.AddLuminance, after the
-    ///   fellowship split). Bonus: AllegianceBalanceRule.Bonus by the allegiance's distinct ACCOUNTS, monarch's included
-    ///   (owner 2026-11-27 "alt-proof": a main and its alts are one; one account alone gets nothing), and no pass-up bonus
-    ///   between two characters of one account. Never for an allegiance whose monarch is a bot or staff (Recruiting.BotOrStaff).
-    ///
-    /// Switch rg_small_alleg_bonus (default OFF). Numbers, each a server property so they move without a stage:
-    /// rg_small_alleg_full (10), rg_small_alleg_zero (40), rg_small_alleg_passup (0.25), rg_small_alleg_lum (0.12).
-    /// </summary>
+    /// <summary>Small-allegiance bonus.</summary>
     public static class SmallAllegianceBonus
     {
         internal const string P_ON = "rg_small_alleg_bonus", P_FULL = "rg_small_alleg_full", P_ZERO = "rg_small_alleg_zero",
@@ -81,8 +67,7 @@ namespace RevivalGuard
             catch { return null; }
         }
 
-        /// <summary>(distinct accounts, distinct accounts active this week) of these characters; no database reads (ACE
-        /// keeps every character's Account in memory).</summary>
+        /// <summary>of these characters; no database reads.</summary>
         internal static (int accounts, int active) Count(IEnumerable<IPlayer> members, DateTime now)
         {
             var who = new List<AllegianceBalanceRule.Who>();

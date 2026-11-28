@@ -17,25 +17,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE PLAYER EVENT LOG (docs/PLAYER-DATA-PLAN.md, phase 1; owner 2026-10-03 "go phase 1"). From the
-    /// first soft-launch player on, one JSON line per event in ~/ace/reports/events/&lt;yyyy-MM-dd&gt;.jsonl,
-    /// so questions we think of later (where do new players stop? what kills them? who comes back?) can
-    /// still be answered. ACE's database holds only the current state of a character, never its history.
-    ///
-    /// Every field: t (UTC), ev, and for a player a (account: a salted hash, never the name), c
-    /// (character name), g (guid), lvl, lb (landblock), staff:1 for admin and bot accounts (filter them
-    /// out of any analysis). NOT RECORDED: chat, IP addresses, passwords. The salt is
-    /// events/.salt, made once; without it the hashes cannot be tied back to accounts.
-    ///
-    /// Events: login, logout (seconds), chargen (build), academy_exit (RecallsDisabled cleared), where (every 60 s: position, coin, total XP,
-    /// kills since the last sample by creature name), levelup, death (killer), quest (stamp), tp
-    /// (teleports: portal or not), buy (vendor purchases), fellow, swear, house; assist (the Assistant's anonymous usage,
-    /// account hash only: Usage below; summed daily by AssistUsageSummary).
-    ///
-    /// ALL POSTFIXES/PREFIXES THAT ONLY READ. Nothing here changes what ACE does, and every hook
-    /// swallows its own exceptions: a telemetry failure must never cost a player anything.
-    /// </summary>
+    /// <summary>The player event log.</summary>
     static class Telemetry
     {
         static readonly string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ace", "reports", "events");
@@ -103,7 +85,7 @@ namespace RevivalGuard
 
         static string F(double d) => d.ToString("0.#", CultureInfo.InvariantCulture);
 
-        /// <summary>Write one event. `extra` is a JSON fragment starting with a comma (or empty).</summary>
+        /// <summary>Write one event.</summary>
         internal static void Emit(string ev, Player p, string extra, uint? accountId = null)
         {
             try
@@ -130,8 +112,7 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] telemetry {ev}: {e.Message}"); }
         }
 
-        /// <summary>The client's feature counters (AcUsage, through the ticket desk as kind "usage"): one
-        /// JSON object, re-serialised here so only well-formed JSON reaches the log.</summary>
+        /// <summary>The client's feature counters: one JSON object, re-serialised here so only well-formed JSON reaches the log.</summary>
         internal static void Usage(Player p, string body)
         {
             try
@@ -143,8 +124,6 @@ namespace RevivalGuard
                 bool assist = doc.RootElement.TryGetProperty("kind", out var k) && k.ValueKind == System.Text.Json.JsonValueKind.String && k.GetString() == "assist";
                 string json = System.Text.Json.JsonSerializer.Serialize(doc.RootElement);
                 if (!assist) { Emit("usage", p, ",\"u\":" + json); return; }
-                // anonymous as disclosed (dev-notes 0.1.91, the wiki's Assistant page): the salted account hash and the staff and
-                // mercenary marks only, so no character name, guid or landblock is written beside it
                 string who = ",\"a\":\"" + Acct(p?.Account?.AccountId ?? p?.Character?.AccountId ?? 0) + "\""
                            + ((p?.Account?.AccessLevel ?? 0) > 0 ? ",\"staff\":1" : "") + (p != null && Mercenaries.IsMerc(p) ? ",\"merc\":1" : "");
                 Emit("assist", null, who + ",\"x\":" + json);
@@ -152,7 +131,7 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] telemetry usage: {e.Message}"); }
         }
 
-        /// <summary>Is this usage body the Assistant's batch (AcAssistUsageRule writes "kind" first)? For TicketDesk's own cap.</summary>
+        /// <summary>Is this usage body the Assistant's batch (AcAssistUsageRule writes "kind" first)?</summary>
         internal static bool IsAssist(string body) => body != null && body.StartsWith("{\"kind\":\"assist\"", StringComparison.Ordinal);
 
         static string KillsJson(Live l)
@@ -288,8 +267,7 @@ namespace RevivalGuard
             }
         }
 
-        // Die(lastDamager, topDamager), not OnDeath: every death passes through it with the killer, and
-        // @smite calls OnDeath() with no damager at all (Creature_Death.cs, Smite).
+        // Die, not OnDeath: every death passes through it with the killer, and @smite calls OnDeath with no damager at all.
         [HarmonyPatch(typeof(Creature), "Die", new[] { typeof(DamageHistoryInfo), typeof(DamageHistoryInfo) })]
         static class Kill
         {

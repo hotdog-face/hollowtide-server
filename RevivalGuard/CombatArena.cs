@@ -20,44 +20,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE DERETHIAN COMBAT ARENA (docs/COMBAT-ARENA.md). Retail's PK arena under Baishi, revived.
-    ///
-    /// ALMOST ALL OF IT IS ALREADY IN ACE'S WORLD DATA, AS EMOTES. The Arena Master (40772) and the
-    /// entrance (44823, "Derethian Combat Arena") stand at Baishi (0xCD41); both arenas are placed
-    /// (the Arena, landblock 0x00AB, and the Pit, 0x00AC, retail's September 2011 alternate); every
-    /// statue sits behind a linkable generator whose GeneratorEvent is one of the DCA* events; the
-    /// entrance's emotes check level 150, the 4 MMD toll (quest DCAAccess), tier 1/2 rare gems and PK
-    /// status, strip the Marks you carry, clear your statue timers, give you one Mark and teleport you
-    /// into whichever arena's event is on. The Statue of Death takes 10 Marks for a Durable Legendary
-    /// Key, 2 MMD and 1,000 luminance and marks you every 5 minutes for a 5% chance at a key; the
-    /// Statues of Illuminating Death pay 250 (High 584, Extreme 834) to the one player who holds each.
-    /// Marks are Slippery (Bonded -1), so ACE drops every one on death. ACE lists 0x00AB/0x00AC as
-    /// no-log landblocks (Player.NoLog_Landblocks): relog there and you wake at your lifestone.
-    ///
-    /// WHAT WAS MISSING, AND IS HERE:
-    ///  1. NOTHING TURNS THE EVENTS ON. Retail's Master rolled the week's arena from his Generation
-    ///     emote, which ACE fires only for a generator-spawned object, and he is a plain placement;
-    ///     the statue events (DCALum2..5, the bonus DCAExLum1) had a server-side schedule the data
-    ///     does not carry. So on this shard the entrance has always said "not open at this time".
-    ///     The tick below asserts the schedule every 10 s from the world loop (SeasonalCalendar's
-    ///     way; EventManager state is in memory only, so a restart re-derives it within seconds).
-    ///  2. RE-ENTRY PAYS FOR THE MARKS IT STRIPS (wiki: "any marks you have on you will be stripped and
-    ///     you'll be given 2 MMD for each one"); ACE's PreTeleport takes them for nothing. A player
-    ///     whose pack cannot take the notes is stopped at the entrance instead of losing them.
-    ///  3. THE MASTER TAKES ALL YOUR MARKS AT ONCE (wiki item interactions: "You hand over all of your
-    ///     Marks of a Kill."; ACE's TakeMarkLoop takes one per give), 2 MMD each, and counts them
-    ///     toward the four titles.
-    ///  4. A LUMINANCE HINT (ours): a statue's award is silently nothing to a character who has not
-    ///     done Nalicana's Test (MaximumLuminance unset), which reads as broken.
-    ///  5. STATUE NEWS (ours, owner 2026-11-21 "Yes, server-wide"): taking a luminance statue says
-    ///     "X has claimed a Statue of ... in the Combat Arena!" to everyone online. Switch
-    ///     `rg_arena_statue_news`, default ON; one line per player per 5 minutes.
-    ///
-    /// Switch `rg_combat_arena`, default OFF: with it off every hook returns at once and no event is
-    /// touched (ACE's own behaviour, the arena closed). Turning it off after it was on stops every
-    /// DCA/DCP event, which despawns the statues and closes the entrance.
-    /// </summary>
+    /// <summary>The derethian combat arena (docs/COMBAT-ARENA.md).</summary>
     public static class CombatArena
     {
         public const string P_ON = "rg_combat_arena";
@@ -73,8 +36,7 @@ namespace RevivalGuard
         static readonly string[] Q_ALL = { "DCAAccess", "DCADeathStatueTimeout", "DCADeathStatueCooldown",
             "DCALumStatueTimeout", "DCALumStatueCooldown", "DCALumStatueBitfield", Q_TURNED_IN };
 
-        /// <summary>Retail's titles for Marks handed in, from the Master's and the Statue's own
-        /// TitleRewards sets (AddCharacterTitle 677..680 at 100/200/300/400).</summary>
+        /// <summary>Retail's titles for Marks handed in, from the Master's and the Statue's own TitleRewards sets.</summary>
         static readonly (int at, uint title, string name)[] TITLES =
         {
             (100, 677, "Player Slayer"), (200, 678, "Bathed in Blood"), (300, 679, "I Am Darktide"), (400, 680, "Darkness in the Light"),
@@ -88,8 +50,7 @@ namespace RevivalGuard
         static readonly string[] EV_HILUM = { "DCAHiLum1Active", "DCAHiLum2Active" };
         static readonly string[] EV_ALL = new[] { EV_DCA, EV_DCP, EV_ALWAYS, EV_BONUS }.Concat(EV_NIGHT).Concat(EV_WEEKEND).Concat(EV_HILUM).ToArray();
 
-        /// <summary>The wiki gives the statue hours in EST ("3pm est to 3am est"); like SeasonalCalendar,
-        /// a fixed UTC-5 reproduces that without drifting an hour twice a year.</summary>
+        /// <summary>The wiki gives the statue hours in EST</summary>
         const int UTC_OFFSET_HOURS = -5;
         const int NIGHT_FROM = 15, NIGHT_TO = 3;
         const double TICK = 10.0;
@@ -132,14 +93,7 @@ namespace RevivalGuard
             public readonly HashSet<string> Want = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
 
-        /// <summary>Which events should be on at this moment. The wiki: one statue always, two more at
-        /// night (3 pm to 3 am EST), two more on weekends (its examples put Friday 1 pm in the weekend
-        /// and Thursday 10 pm out, so a day runs 3 am to 3 am and Friday..Sunday count), a bonus 834
-        /// statue that "has a chance to spawn whenever the nighttime statues are active" (rolled once
-        /// an hour, seeded by the hour so a restart keeps the same answer), and "some weeks the
-        /// current arena will be used and other weeks the new arena" (ISO week parity: even weeks the
-        /// Arena, odd weeks the Pit). The two Statues of High Illumination (584) have no rule in any
-        /// source, so they stand only when an admin forces them.</summary>
+        /// <summary>Which events should be on at this moment.</summary>
         internal static Plan Compute(DateTime utc)
         {
             var pl = new Plan { Local = utc.AddHours(UTC_OFFSET_HOURS) };
@@ -169,7 +123,7 @@ namespace RevivalGuard
 
         static bool IsOn(string ev) => EventManager.GetEventStatus(ev) == GameEventState.On;
 
-        /// <summary>Bring the event table to the plan. Returns the changes made.</summary>
+        /// <summary>Bring the event table to the plan.</summary>
         internal static List<string> Assert()
         {
             var changes = new List<string>();
@@ -210,8 +164,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ marks
 
-        /// <summary>At the entrance, before its emotes run: a player carrying Marks must have room for
-        /// the notes the strip pays, or they would be taken for nothing. False stops the use.</summary>
+        /// <summary>At the entrance, before its emotes run</summary>
         internal static bool EntranceGate(EmoteManager em, Creature activator)
         {
             if (!(activator is Player p) || p.Session == null) return true;
@@ -242,8 +195,7 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] CombatArena: {p.Name} re-entered carrying {Marks(taken)}: stripped, paid {taken * PAY_PER_MARK} MMD");
         }
 
-        /// <summary>A Mark given to the Arena Master: all of them go, 2 MMD each, and they count toward
-        /// the titles. False means handled (the original give does not run).</summary>
+        /// <summary>A Mark given to the Arena Master: all of them go, 2 MMD each, and they count toward the titles.</summary>
         internal static bool MasterTurnIn(Player p, WorldObject target, WorldObject item)
         {
             if (p?.Session == null || target == null || item == null) return true;
@@ -252,8 +204,7 @@ namespace RevivalGuard
             int n = p.GetNumInventoryItemsOfWCID(MARK);
             if (n <= 0) return true;
 
-            // Retail's line for an item shown, not taken, and the event that keeps the client's drag
-            // honest (the same pair ACE sends for a Refuse emote); the take below removes the Marks.
+            // Retail's line for an item shown, not taken, and the event that keeps the client's drag honest; the take below removes the Marks.
             p.Session.Network.EnqueueSend(new GameMessageSystemChat($"You allow {target.Name} to examine your {item.NameWithMaterial}.", ChatMessageType.Broadcast));
             p.Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(p.Session, item.Guid.Full, WeenieError.TradeAiRefuseEmote));
 
@@ -289,11 +240,7 @@ namespace RevivalGuard
             return after;
         }
 
-        /// <summary>THE ENTRANCE'S "Nullify All Rares" (5582) CANNOT BE RESISTED. ACE casts an emote's
-        /// CastSpellInstant with the emoter as caster, and the entrance is a creature with no magic
-        /// skill, so every player resisted it (staging, 2026-09-30: "You resist the spell cast by
-        /// Derethian Combat Arena") and walked in with their rare-gem buffs, the one thing the rare
-        /// check in front of it exists to stop. Cast without the resist roll. False = handled.</summary>
+        /// <summary>The entrance's "Nullify All Rares" (5582) cannot be resisted.</summary>
         internal static bool EntranceSpell(WorldObject entrance, PropertiesEmoteAction emote, WorldObject target, ref float result)
         {
             try
@@ -311,8 +258,7 @@ namespace RevivalGuard
 
         static readonly ConditionalWeakTable<Player, object> s_Hinted = new ConditionalWeakTable<Player, object>();
 
-        /// <summary>Ours: a statue's luminance is silently nothing to a character who cannot earn
-        /// luminance yet, or whose luminance is full. Say so, once a minute at most.</summary>
+        /// <summary>Ours: a statue's luminance is silently nothing to a character who cannot earn luminance yet, or whose luminance is full.</summary>
         internal static void LumHint(Player p, WorldObject statue)
         {
             if (p?.Session == null || statue == null || !LUM_STATUES.Contains(statue.WeenieClassId) || !On) return;
@@ -328,8 +274,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ statue news
 
-        /// <summary>The statue's own line for a fresh take (ace_world 80103 etc., category 13). "You regain
-        /// control" is the same holder after a lapse nobody used, so it stays quiet.</summary>
+        /// <summary>The statue's own line for a fresh take (ace_world 80103 etc., category 13).</summary>
         internal const string TAKE_LINE = "You now have control of this statue.";
         const double NEWS_COOLDOWN = 300;
         static readonly Dictionary<uint, double> s_NewsLast = new Dictionary<uint, double>();
@@ -378,7 +323,6 @@ namespace RevivalGuard
                     return Status();
                 case "plan":
                     {
-                        // @arena plan 2026-10-02 13:00: the schedule at a UTC-5 wall time (forces apply)
                         if (a.Length < 3 || !DateTime.TryParse(a[1] + " " + a[2], CultureInfo.InvariantCulture, DateTimeStyles.None, out var local))
                             return "[Arena] @arena plan <yyyy-mm-dd> <hh:mm> (UTC-5)";
                         var pl = Compute(DateTime.SpecifyKind(local.AddHours(-UTC_OFFSET_HOURS), DateTimeKind.Utc));
@@ -450,8 +394,7 @@ namespace RevivalGuard
             p?.Session?.Network.EnqueueSend(new GameMessageSystemChat(line, ChatMessageType.Broadcast));
     }
 
-    /// <summary>The schedule, from the world loop. Its Prepare registers the feature, so Mod.cs needs
-    /// no line for it.</summary>
+    /// <summary>The schedule, from the world loop.</summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     static class CombatArenaTick
     {
@@ -468,7 +411,7 @@ namespace RevivalGuard
     [HarmonyPatch(typeof(EmoteManager), nameof(EmoteManager.OnUse))]
     static class CombatArenaEntranceGate
     {
-        // every prefix here catches its own (Fable audit 2026-10-19, second pass item 3): a throw falls back to ACE
+        // every prefix here catches its own: a throw falls back to ACE
         static bool Prefix(EmoteManager __instance, Creature activator)
         {
             try { return CombatArena.EntranceGate(__instance, activator); }
@@ -476,8 +419,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Three emote actions: the entrance's TakeItems of Marks (paid for after), and a
-    /// statue's AwardLuminance (the hint) and its "now have control" line (the news). Every other action passes at the cost of two compares.</summary>
+    /// <summary>Three emote actions: the entrance's TakeItems of Marks, and a statue's AwardLuminance and its "now have control" line.</summary>
     [HarmonyPatch(typeof(EmoteManager), nameof(EmoteManager.ExecuteEmote))]
     static class CombatArenaEmote
     {

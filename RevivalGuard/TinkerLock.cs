@@ -18,27 +18,7 @@ using Bind = RevivalGuard.TinkerLockRule.Bind;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A RECIPE THAT LOCKS THE ITEM TO WHOEVER APPLIES IT ASKS FIRST (owner 2026-11-20, "yes do the fix so its more clear
-    /// to players how it works as well").
-    ///
-    /// Retail recipe data (Lucky White Rabbit's Foot 8751, the slayer skulls and stones, Luminous Amber, ivory, bow
-    /// handles, the Sword of Lost Light infusions...) carries a recipe_mods_i_i_d row that copies the player into the
-    /// item's AllowedWielder, and ACE's Player_Inventory then refuses every other character ("You do not own that item!").
-    /// None of these recipes has a skill, so ACE shows no dialog: on live two players applied a rabbit's foot and a skull
-    /// with a level 10 alt and found their level 220 weapons wieldable only by the alt.
-    ///
-    /// Now, before such a recipe runs, the player is asked with ACE's Yes/No dialog (TinkerLockRule.Ask); only Yes runs
-    /// it, through ACE's own path again (clap, and the skill-chance dialog where the recipe has one). An item already
-    /// locked to another character is refused outright, so it is never locked to the wrong character a second time. An
-    /// item already locked to the applier is not asked about: nothing about who can wield it changes.
-    ///
-    /// The recipes are read from the world database at start (every AllowedWielder row TinkerLockRule.Row counts), not a
-    /// list of ids; a recipe missing from that read (a load failure) is judged from its own cached mods.
-    /// </summary>
-    /// <para>PATCHED ON <c>RecipeManager</c>, which declares <c>UseObjectOnTarget</c> (one overload). Every use-with of a
-    /// cookbook recipe comes through it (WorldObject_Use.HandleActionUseOnTarget), and ACE's own craft confirmation calls it
-    /// again with confirmed = true, which this leaves alone.</para>
+    /// <summary>A recipe that locks the item to whoever applies it ASKS first.</summary>
     [HarmonyPatch(typeof(RecipeManager), nameof(RecipeManager.UseObjectOnTarget))]
     public static class TinkerLock
     {
@@ -124,14 +104,14 @@ namespace RevivalGuard
             }
             catch (Exception e)
             {
-                Mod.Log.Warn($"[RevivalGuard] TinkerLock: {e.Message}");      // never let the question break crafting
+                Mod.Log.Warn($"[RevivalGuard] TinkerLock: {e.Message}");
                 return true;
             }
         }
 
         internal static void Say(Player p, string text)
         {
-            // chat only: our client echoes a transient string into chat as well, so both read twice (box run 2026-11-20)
+            // chat only: our client echoes a transient string into chat as well, so both read twice
             p.Session.Network.EnqueueSend(new GameMessageSystemChat(text, ChatMessageType.Craft));
         }
 
@@ -146,8 +126,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>The Yes/No for a binding recipe. Yes runs ACE's UseObjectOnTarget again with the approval in hand; No or a
-    /// timeout says nothing was used.</summary>
+    /// <summary>The Yes/No for a binding recipe.</summary>
     public class Confirmation_TinkerLock : Confirmation
     {
         readonly ObjectGuid m_Source, m_Target;

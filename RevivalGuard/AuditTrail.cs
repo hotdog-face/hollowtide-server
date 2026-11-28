@@ -9,44 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// @AUDIT: THE AUDIT TRAIL YOU CAN READ IN GAME.
-    ///
-    /// From docs/ADMIN-AND-VENUE-IDEAS.md §2 item 4: "Every admin command already goes to the Audit
-    /// channel; a searchable view of it is what you will want the first time two admins disagree
-    /// about what happened." ACE's Audit channel is live chat only: whoever was not listening at the
-    /// time has nothing, and BroadcastToAuditChannel's own log line is commented out
-    /// (PlayerManager.cs). With full PvP and retail item loss on this shard, and admin verbs that
-    /// move and destroy things, there was no record of who did what.
-    ///
-    /// THREE SEAMS, ALL POSTFIXES, NONE OF THEM CHANGE WHAT ACE DOES:
-    ///
-    ///   cmd     CommandManager.GetCommandHandler, the one place every command passes through: the
-    ///           in-game path (GameActionTalk) and the console loop both call it before invoking the
-    ///           handler. A command whose handler is above Player level is recorded once it is
-    ///           authorised, with its parameters. Player-level verbs are not recorded.
-    ///   denied  The same seam when the answer was NotAuthorized: somebody tried a staff verb they do
-    ///           not hold. That only ever happens for staff verbs, so it is always worth a line.
-    ///   audit   PlayerManager.BroadcastToAuditChannel: the line ACE's own verbs post about what they
-    ///           did ("X has deleted 0x..:Name", "X used smite all"), plus ours (@reloadblock).
-    ///   pk      Player.CalculateDeathItems, after PkDeathLoot's transpiler has shaped the list: a PK
-    ///           or PKLite death, who killed whom, where, and every item that dropped. Normal deaths
-    ///           are not recorded; ACE's [CORPSE] log line covers those.
-    ///
-    /// STORAGE. Audit/YYYY-MM.log beside the mod dll (ModFolder), one tab-separated line per entry:
-    /// UTC time, kind, who, where (landblock or "console"), text. Append-only, flushed per entry, so
-    /// a crash loses nothing and the owner can grep it over ssh. The last MEMORY entries (this month
-    /// and last) are kept in memory for the verb; older months stay on disk.
-    ///
-    ///   @audit                     the last 20 entries
-    ///   @audit 50                  the last 50 (up to 100; the chat window shows about 24 lines)
-    ///   @audit smite               the last 20 whose text, who or kind contains "smite"
-    ///   @audit Name teleto 40  every word must match; a bare number is the count
-    ///   @audit file                where the files are
-    ///
-    /// A read of the trail is not itself recorded; browsing it would bury the entries. Sentinel
-    /// level, the same as @who and @tickets. Admin command feedback is ours, not retail's.
-    /// </summary>
+    /// <summary>@AUDIT: the audit trail you can read in game.</summary>
     public static class AuditTrail
     {
         const int MEMORY = 5000;
@@ -79,8 +42,7 @@ namespace RevivalGuard
 
         // ---- recording -------------------------------------------------------------------------
 
-        /// <summary>One entry: to memory and to this month's file. Never throws; the trail must not
-        /// be able to break the command it is watching.</summary>
+        /// <summary>One entry: to memory and to this month's file.</summary>
         public static void Record(string kind, string who, string where, string text)
         {
             try
@@ -104,7 +66,6 @@ namespace RevivalGuard
                         try { File.AppendAllText(MonthPath(e.At), line); }
                         catch (Exception ex)
                         {
-                            // once a minute, not once per entry: a full disk must not flood the log
                             if ((DateTime.UtcNow - s_WriteFailedAt).TotalSeconds > 60)
                             {
                                 s_WriteFailedAt = DateTime.UtcNow;
@@ -147,7 +108,6 @@ namespace RevivalGuard
             }
             catch (Exception ex)
             {
-                // a torn file must not take the mod down; whatever parsed is in memory
                 Mod.Log.Error($"[RevivalGuard] AuditTrail: could not read {path}: {ex.Message}");
             }
             return n;
@@ -221,8 +181,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Every command, in game or on the console, passes through GetCommandHandler before its
-    /// handler runs. Recorded once authorised, or when refused, for handlers above Player level.</summary>
+    /// <summary>Every command, in game or on the console, passes through GetCommandHandler before its handler runs.</summary>
     [HarmonyPatch(typeof(CommandManager), nameof(CommandManager.GetCommandHandler))]
     static class AuditTrailCommands
     {
@@ -253,7 +212,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>What ACE's verbs (and ours) say they did. Declared on PlayerManager, static.</summary>
+    /// <summary>What ACE's verbs (and ours) say they did.</summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.BroadcastToAuditChannel))]
     static class AuditTrailChannel
     {
@@ -264,8 +223,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>A PK or PKLite death and what it cost. CalculateDeathItems is declared on Player and
-    /// PkDeathLoot already transpiles it; this postfix reads the final list it returns.</summary>
+    /// <summary>A PK or PKLite death and what it cost.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.CalculateDeathItems))]
     static class AuditTrailPkDeath
     {

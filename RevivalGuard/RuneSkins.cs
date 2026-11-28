@@ -10,21 +10,8 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE RUNE SKIN SETS AS END-GAME ARMOUR (owner 2026-11-25: "definitely end game style items, hard to get";
-    /// docs/proposals/rune-skins-endgame.md, every number PROPOSED). One switch, rg_rune_skins, default OFF, covers:
-    ///   - the boss drop: a themed boss (RuneSkinsRule.Bosses) a player kills rolls once; a hit puts one piece of its set,
-    ///     slot at random, into the corpse. rune_skin_drop_force (0-100, default 0) replaces the rate, for tests.
-    ///   - the PK Night prize: one Cragstone Guise piece (slot at random) per recorded night, to the winner who stood on
-    ///     the hill longest (PkNight.GiveRunePrize; offline, at login through PkNight's owed list). Cragstone never drops.
-    ///   - the set bonus: EquipmentSetId 9150-9177 (not in the DAT's SpellTable) answered with retail item-set spells,
-    ///     RuneSkinsRule.Tier, as WardenforgedPlate does for 901.
-    ///   - the quests: the theme's creatures carry tokens (RuneSkinsRule.TokenFor, 10%), a set's boss kill stamps
-    ///     RuneSkinSlain<set> (also RuneSkinsRule.SlainCredit); the keepers' emotes are data (gen_rune_quests.py), placed
-///     by 2026-11-27-rune-keepers.sql.
-///   - the Bronze Statues Attack's living statues drop the three bronze skins (RuneSkinsRule.STATUE).
-    /// The end-game stats themselves are data (2026-11-25-rune-skins-endgame.sql).
-    /// </summary>
+    /// <summary> the rune skin SETS as end-game armour.
+    /// The end-game stats themselves are data.
     static class RuneSkins
     {
         internal const string P_ON = "rg_rune_skins", P_FORCE = "rune_skin_drop_force";
@@ -98,7 +85,7 @@ namespace RevivalGuard
             double chance = Force > 0 ? Math.Min(100, Force) / 100.0 : RuneSkinsRule.TOKEN_CHANCE;
             if (wcid == 0 || R() >= chance) return;
             var wo = WorldObjectFactory.CreateNewWorldObject(wcid);
-            if (wo == null) return;   // 2026-11-25-rune-quests.sql not applied
+            if (wo == null) return;
             if (!corpse.TryAddToInventory(wo)) { wo.Destroy(); return; }
             Mod.Log.Info($"[RevivalGuard] RuneSkins: {wo.Name} in the corpse of {c.Name}, killed by {player.Name}");
         }

@@ -4,18 +4,15 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of the chess lobby (ChessLobby.cs; no ACE types, tools/nettest compiles it by path, ChessLobbyCase.cs):
-    /// the record kept per character, which games count, the rating, the titles and when they are due, the ladder, the
-    /// spot a temporary board may stand on, and every player line. Ours, not retail (docs/DIVERGENCES.md "Chess lobby"):
-    /// ACE's chess (ChessMatch, ChessLogic, its rank) stays ACE's. Player text: plain, no em dashes.
-    /// </summary>
+    /// <summary>The pure part of the chess lobby</summary>
     public static class ChessLobbyRule
     {
-        /// <summary>Challenges are in person (owner 2026-11-25, like the allegiance swear): both within this many metres.</summary>
+        /// <summary>Challenges are in person: both within this many metres.</summary>
         public const float NEAR_M = 20f;
         /// <summary>A challenge waits this long for its answer (ACE's own Yes/No times out sooner, and that is a No).</summary>
         public const int CHALLENGE_S = 60;
+        /// <summary>How long an open "looking for a match" request stands.</summary>
+        public const int OPEN_S = 600;
         /// <summary>After a No, the same pair waits this long before another challenge.</summary>
         public const int DECLINED_WAIT_S = 120;
         /// <summary>One temporary board per player at a time; a new one no sooner than this after the last.</summary>
@@ -28,22 +25,18 @@ namespace RevivalGuard
         public const int MAX_LIFE_MIN = 120;
         /// <summary>A finished game's board stays this long so both sides see the end, then goes.</summary>
         public const int PUT_AWAY_S = 8;
-        /// <summary>A game counts for the record, ladder and titles only with at least this many moves (both sides', plies):
-        /// an instant resign between friends is not a win.</summary>
+        /// <summary>A game counts for the record, ladder and titles only with at least this many moves</summary>
         public const int MIN_PLIES = 10;
         /// <summary>Wins over the same opponent that count in one day (UTC): two friends cannot trade titles.</summary>
         public const int PAIR_WINS_PER_DAY = 3;
         public const int RATING_START = 1400, RATING_K = 32;
         public const int LADDER_ROWS = 10;
-        /// <summary>The board's footprint: ACE lays the 8x8 pieces 1 m apart around its centre (ChessMatch.CalculateWeeniePosition),
-        /// so the ground must be clear and flat this far out, and the board this far inside its landblock.</summary>
+        /// <summary>The board's footprint: ACE lays the 8x8 pieces 1 m apart around its centre</summary>
         public const float HALF_M = 5f, EDGE_M = 7f, FLAT_M = 1.0f, CLEAR_M = 6.5f, BUILDING_M = 16f, OTHER_BOARD_M = 14f;
 
         public const string EASY = "easy", NORMAL = "normal";
 
-        /// <summary>Retail titles nothing in the world grants (checked on the test shard's ace_world 2026-11-25: no
-        /// AddCharacterTitle emote carries them). Wins over players unlock the four; a first win over Normal, the fifth.
-        /// Ids are ACE.Entity.Enum.CharacterTitle (checked at startup, ChessLobby.CheckTitleIds).</summary>
+        /// <summary>Retail titles nothing in the world grants.</summary>
         public const uint T_TACTICAL_AID = 664, T_TRUE_TACTICIAN = 665, T_STRATEGIST = 427, T_TACTICAL_FANTASTICAL = 666, T_PUZZLEMASTER = 828;
 
         public static readonly (int wins, uint title, string name)[] MILESTONES =
@@ -75,7 +68,6 @@ namespace RevivalGuard
             public int W { get; set; }
             public int L { get; set; }
             public int D { get; set; }
-            /// <summary>Games against the computer (any board), kept apart: never the ladder, never the player titles.</summary>
             public int AiW { get; set; }
             public int AiL { get; set; }
             public int AiD { get; set; }
@@ -93,8 +85,7 @@ namespace RevivalGuard
 
         public enum Skip { None, SameAccount, SameAddress, TooShort, PairCap }
 
-        /// <summary>Whether a game between players counts for the record, the ladder and the titles. A draw or a loss is
-        /// never capped (only wins could be farmed).</summary>
+        /// <summary>Whether a game between players counts for the record, the ladder and the titles.</summary>
         public static Skip Counts(bool sameAccount, bool sameAddress, int plies, Result r, int winsOverThisOpponentToday)
         {
             if (sameAccount) return Skip.SameAccount;
@@ -164,8 +155,7 @@ namespace RevivalGuard
             return null;
         }
 
-        /// <summary>The ladder: characters with a counted game against a player, by rating, then wins, then fewer losses,
-        /// then name.</summary>
+        /// <summary>The ladder: characters with a counted game against a player, by rating, then wins, then fewer losses, then name.</summary>
         public static List<(int rank, Record rec)> Ladder(IEnumerable<Record> all, int rows = LADDER_ROWS)
         {
             var list = all.Where(r => r != null && r.Games > 0 && !string.IsNullOrEmpty(r.Name))
@@ -189,9 +179,7 @@ namespace RevivalGuard
 
         public enum Spot { Ok, Indoors, Edge, Uneven, Water, Building, Clutter, OtherBoard }
 
-        /// <summary>A temporary board's spot: outdoors, far enough inside the landblock that all 64 squares are in it, flat
-        /// (the 3x3 ground heights across the board within FLAT_M), dry, no building within BUILDING_M, no tree or rock
-        /// within CLEAR_M, no other chessboard within OTHER_BOARD_M.</summary>
+        /// <summary>A temporary board's spot: outdoors, far enough inside the landblock that all 64 squares are in it, flat, dry</summary>
         public static Spot Check(bool indoors, float x, float y, IList<float> groundZ, bool water,
             float nearestBuilding, float nearestClutter, float nearestBoard)
         {
@@ -250,10 +238,9 @@ namespace RevivalGuard
         public static string RatingLine(int rating, int delta) =>
             $"Your chess ladder rating is now {rating} ({(delta >= 0 ? "+" : "")}{delta}).";
 
-        // ------------------------------------------------------------------ in the game (F7 261125-0055..0058, owner extras)
+        // ------------------------------------------------------------------ in the game
 
-        /// <summary>Retail's Stalemate button is a draw offer. The computer takes one only when it is behind by this much
-        /// (ACE's EvaluateBoard: a pawn is 10, so three pawns) or neither side can mate.</summary>
+        /// <summary>Retail's Stalemate button is a draw offer.</summary>
         public const float AI_DRAW_BEHIND = 30f;
         /// <summary>A draw offer to a player waits this long; after a No (or to the computer) the same side waits this long.</summary>
         public const int DRAW_WAIT_S = 30, DRAW_RETRY_S = 20;
@@ -274,9 +261,7 @@ namespace RevivalGuard
             return int.TryParse(word.Substring(1), out int m) && CLOCKS.Contains(m) ? m : -1;
         }
 
-        /// <summary>Neither side can ever mate: kings alone, or a king and one bishop or knight against a bare king (FIDE's
-        /// dead positions that matter here). Pieces as (type, colour) in ACE's ChessPieceType: 1 pawn, 2 rook, 3 knight,
-        /// 4 bishop, 5 queen, 6 king.</summary>
+        /// <summary>Neither side can ever mate: kings alone, or a king and one bishop or knight against a bare king.</summary>
         public static bool Insufficient(IEnumerable<(int type, int color)> pieces)
         {
             int[] minors = new int[2];
@@ -288,11 +273,9 @@ namespace RevivalGuard
             return minors[0] + minors[1] <= 1;
         }
 
-        /// <summary>Does the computer take a draw? Only when it is losing (its own score, ACE's EvaluateBoard from its side)
-        /// or the position is dead.</summary>
+        /// <summary>Does the computer take a draw?</summary>
         public static bool AiTakesDraw(float aiScore, bool insufficient) => insufficient || aiScore <= -AI_DRAW_BEHIND;
 
-        /// <summary>A side's clock after <paramref name="elapsedMs"/> of its own time; never below 0.</summary>
         public static double ClockAfter(double leftMs, double elapsedMs) => Math.Max(0, leftMs - Math.Max(0, elapsedMs));
         public static bool Flagged(double leftMs, double elapsedMs) => leftMs - elapsedMs <= 0;
 
@@ -304,6 +287,10 @@ namespace RevivalGuard
         public static string ChallengeQuestion(string from, int level, int clock) =>
             clock <= 0 ? ChallengeQuestion(from, level)
                        : $"{from} (level {level}) challenges you to a game of chess with a {ClockName(clock)} each. Play now? A board will appear between you.";
+        public static string OpenPosted(int clock) =>
+            $"Your request is up: anyone online can accept it from the Game Center{(clock > 0 ? " (" + ClockName(clock) + " each)" : "")}. It stands {OPEN_S / 60} minutes. /chess cancel withdraws it.";
+        public const string OPEN_GONE = "That request is gone.";
+        public static string OpenAccepted(string name) => $"{name} accepted your request.";
         public static string DrawQuestion(string name) => $"{name} offers a draw. Accept? The game ends as a draw.";
         public static string DrawOffered(string name) => $"You offer {name} a draw. Waiting for an answer...";
         public static string DrawDeclined(string name) => $"{name} declines the draw. Play on.";
@@ -325,9 +312,7 @@ namespace RevivalGuard
         public const string WATCH_NONE = "That game has ended.";
         public static string Watching(string white, string black) => $"You are watching {white} (White) and {black} (Black). Close the Game Center to stop.";
 
-        /// <summary>The finished game in one line, as both players and watchers see it. <paramref name="winner"/>: 0 White,
-        /// 1 Black, -1 drawn, -2 ended with no result. <paramref name="why"/>: "mate", "resign", "time", "idle", "left",
-        /// "agreed", "stalemate" or "".</summary>
+        /// <summary>The finished game in one line, as both players and watchers see it.</summary>
         public static string ResultLine(int winner, string white, string black, string why)
         {
             if (winner == -1) return why == "agreed" ? "Draw agreed." : why == "stalemate" ? "Stalemate. The game is a draw." : "The game is a draw.";

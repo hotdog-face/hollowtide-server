@@ -7,19 +7,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// DARKTIDE TROPHIES (owner 2026-11-21, "yes all 1-5 ... the pk currency"; docs/findings/pk-server-plan-2026-11-21.md
-    /// move 2). Off until `pk_trophies_enabled` is true. An honourable kill, judged by the renown ladder's own rules
-    /// (PkCommon.Judge: a victim of level 15 or more, not far beneath the killer, not an ally, not the same account or
-    /// connection, no mercenary) and the FIRST of that victim by that killer inside pk_honor_repeat_hours, puts one
-    /// Darktide Trophy (908400, tools/gpubox-ace/pk-trophies.sql) in the killer's pack. A full pack keeps it owed to
-    /// the next login. Trophies are bonded: no trading, so a second account cannot buy them for a farmer.
-    /// They are the currency of the Bloodprice Trader in Arwic (ACE alternate currency, DID 57).
-    ///
-    /// THE COMBAT ARENA WRIT (908403, the Bloodprice Trader's stock): using it attunes a level 150+ character to the
-    /// Derethian Combat Arena (quest DCAAccess, docs/COMBAT-ARENA.md) as the Arena Master does for 4 MMD, with the
-    /// Master's own lines. Handled here so no retail weenie (the Master) changes.
-    /// </summary>
+    /// <summary>Darktide trophies.</summary>
     internal static class PkTrophies
     {
         internal const string P_ON = "pk_trophies_enabled", P_WCID = "pk_trophy_wcid";
@@ -57,8 +45,7 @@ namespace RevivalGuard
 
         static uint Wcid() => (uint)PkCommon.Long(P_WCID, TROPHY);
 
-        /// <summary>From PkRenown's PK-death hook, after the judgement. `prior` = this killer's kills of this victim
-        /// inside the repeat window before this one.</summary>
+        /// <summary>From PkRenown's PK-death hook, after the judgement.</summary>
         internal static void OnKill(Player killer, Player victim, PkCommon.Judgement j, int prior)
         {
             if (j.Verdict != PkCommon.Verdict.Honourable) return;
@@ -116,7 +103,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The Combat Arena Writ. Works whether or not trophies are on: a writ someone holds keeps its use.</summary>
+        /// <summary>The Combat Arena Writ.</summary>
         [HarmonyPatch(typeof(Gem), nameof(Gem.UseGem))]
         [HarmonyPriority(Priority.First)]   // before GemNoEffectGuard, which would call a gem with no spell useless
         static class UseWrit

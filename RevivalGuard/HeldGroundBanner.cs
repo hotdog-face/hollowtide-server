@@ -6,15 +6,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// BANNER OF THE HELD GROUND (owner 2026-11-20: "i want it to be a house hook item for players to use at their
-    /// allegance mansion. do C."; docs/proposals/pk-night-buff-item.md option C). The weenie (908120, a retail-style
-    /// Hooker) does the work in data: a 20 h quest timer and three level VI casts. ACE lets anyone the house admits use
-    /// a hooked Hooker (an open house admits everyone); this narrows THIS item to the house owner's allegiance (the
-    /// owner, their other characters, anyone under the same monarch). Rule: HeldGroundBannerRule (nettest heldbanner).
-    /// It runs after ACE's own checks, so the hook, house and permission answers ACE gives come first.
-    /// PkNight.cs hands the banner out.
-    /// </summary>
+    /// <summary>Banner of the HELD ground.</summary>
     static class HeldGroundBanner
     {
         [HarmonyPatch(typeof(Hooker), nameof(Hooker.CheckUseRequirements))]

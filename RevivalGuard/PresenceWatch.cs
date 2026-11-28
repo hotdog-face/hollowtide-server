@@ -11,43 +11,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// WHO IS ONLINE, AND WHO AMONG THEM HAS STOPPED MOVING.
-    ///
-    /// From docs/ADMIN-AND-VENUE-IDEAS.md §2, written at the owner's request for "a tool I'd likely
-    /// need as an admin and a tester before and while the game has lots of players using it":
-    ///
-    ///   1. A live population view. Who is online, where, level, account, how long since they moved.
-    ///   2. A "who is stuck" list. Players whose position has not changed and whose client is still
-    ///      talking. This is the single most common live-game support call and it can be DETECTED
-    ///      rather than reported.
-    ///
-    /// The second one is the point. ACE ships `@listplayers`, which gives names and access levels
-    /// and nothing else -- not where anyone is, and not whether they have moved since they logged
-    /// in. A stuck player is invisible to it, and a stuck player who does not know how to file a
-    /// ticket is invisible full stop: they log off and do not come back, and nothing anywhere
-    /// records that it happened.
-    ///
-    /// This project has now produced the wedge twice on its own bots (see
-    /// <see cref="TeleportWatchdog"/>), which is the argument for detecting it rather than waiting
-    /// to be told. The watchdog fixes the case it understands; this finds the ones it does not.
-    ///
-    ///   @who            everyone online: name, level, account, where, and how long since they moved
-    ///   @who <name>     just that one, with more detail
-    ///   @stuck          only those who have not moved in a while, or whose teleport never finished
-    ///   @stuck <mins>   a different threshold than the default five minutes
-    ///
-    /// HOW "HAS NOT MOVED" IS DECIDED. A sample of every online player's position, taken on the same
-    /// `PlayerManager.Tick` the teleport watchdog uses -- the world loop, which keeps running for a
-    /// player whose landblock has stopped ticking, and that is exactly the player we are looking for.
-    /// Sampling is throttled to once every ten seconds, because the question is "minutes since they
-    /// moved" and a finer answer costs work on every tick for no extra information.
-    ///
-    /// A MOVE IS 0.5 m. Small enough to catch someone shuffling on the spot, large enough that
-    /// floating-point noise in a saved position does not read as movement. Standing still is not the
-    /// same as being stuck -- someone can be reading, or away -- so this is a list to LOOK at, never
-    /// an alarm and never something that acts on a player by itself. It says who to ask.
-    /// </summary>
+    /// <summary>Who is online, and who among them HAS stopped moving.</summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class PresenceWatch
     {
@@ -108,9 +72,7 @@ namespace RevivalGuard
                         s.Cell = p.Location.Cell; s.MovedAt = now;
                     }
                 }
-                // Forget anyone who has logged off, so the table cannot grow without bound across a
-                // long uptime. Their next login starts a fresh sample, which is correct -- a login
-                // IS a move.
+                // Forget anyone who has logged off, so the table cannot grow without bound across a long uptime.
                 foreach (var gone in s_Seen.Keys.Where(k => !live.Contains(k)).ToList())
                     s_Seen.Remove(gone);
                 foreach (var gone in s_Hit.Keys.Where(k => !live.Contains(k)).ToList())
@@ -120,25 +82,15 @@ namespace RevivalGuard
 
         internal static void Register()
         {
-            // `@who`, NOT `@pop`. ACE already ships a `pop` command (PlayerCommands.cs:26, and it is
-            // AccessLevel.Player, so every player has it) which answers "Current world population: 1"
-            // -- one number, no positions, no idle times. Registering ours under the same name on
-            // 2026-09-21 did NOT override it: the deployed shard answered ACE's line, and the richer
-            // listing this class exists for was simply unreachable. Checked before renaming: ACE has
-            // no handler for who, online, players, roster, stuck, tickets, ticket or festival.
             CommandManager.TryAddCommand(Pop, "who", AccessLevel.Sentinel, CommandHandlerFlag.None,
                 "Who is online, where, and how long since they moved.", "[name]");
             CommandManager.TryAddCommand(Stuck, "stuck", AccessLevel.Sentinel, CommandHandlerFlag.None,
                 "Players who have stopped moving, or whose teleport never finished.", "[minutes]");
-            // Owner ticket 261106-0031: "an admin only feature i want is to see other players represented as dots on my
-            // map". Developer and up. The client's map asks this every few seconds while its admin switch is on and
-            // the map is open, and keeps the replies out of chat (AcStaffPlayerMap).
             CommandManager.TryAddCommand(WhoMap, "whomap", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld,
                 "Every online player's place, for the admin map's player dots (machine-readable).", "");
         }
 
-        /// <summary>`[WhoMap] begin N`, then lines of up to 8 `name|cell|x|y|kind` joined by `;` (kind o outdoors,
-        /// b in a building on the surface, d in a dungeon, whose block is not on the map), then `[WhoMap] end`.</summary>
+        /// <summary>`[WhoMap] begin N`, then lines of up to 8 `name|cell|x|y|kind` joined by `;`, then `[WhoMap] end`.</summary>
         static void WhoMap(Session session, params string[] parameters)
         {
             var online = PlayerManager.GetAllOnline().Where(p => p.Location != null && p.Name != null).ToList();
@@ -230,8 +182,7 @@ namespace RevivalGuard
             if (parameters.Length > 0 && double.TryParse(parameters[0], out var m) && m > 0) mins = m;
             var now = ACE.Common.Time.GetUnixTime();
 
-            // Teleporting is listed however recently they moved: an unfinished teleport is the one
-            // failure we KNOW locks a player out of acting, and it does not look like standing still.
+            // Teleporting is listed however recently they moved
             var hits = PlayerManager.GetAllOnline()
                 .Where(p => p.Teleporting || StillFor(p, now) >= mins * 60)
                 .OrderByDescending(p => StillFor(p, now))

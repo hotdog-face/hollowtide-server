@@ -13,22 +13,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// WHO IS ONLINE, ON THE CHARACTER SELECT SCREEN (owner, 2026-09-25: "a dev notes and view of
-    /// online friends section on the login", from the mac client). Ours. Retail and ACE send friends
-    /// only to a character in the world (GameEventFriendsListUpdate), and the select screen has none.
-    ///
-    /// ACE loads every character on the account with its friend list (ShardDatabase includes
-    /// CharacterPropertiesFriendList), so whenever the character list is sent -- at login and after
-    /// every logoff -- this sends "friends" on the mod channel: the union of the account's friends,
-    /// each {"n":name,"o":online}. It repeats every 20 s while the session sits at select, so a
-    /// friend logging in shows up.
-    ///
-    /// ONLY TO A CLIENT KNOWN TO READ IT. The mod channel's promise is that a retail client never
-    /// receives our opcode, and at select no "@revivalclient" has been said yet. So an ACCOUNT is
-    /// remembered as ours the first time its client says hello in the world (ModChannel), kept in
-    /// capable-accounts.txt beside the mod, and only those accounts get this.
-    /// </summary>
+    /// <summary>Who is online, on the character select screen.</summary>
     public static class FriendsAtSelect
     {
         static readonly HashSet<uint> s_Capable = new HashSet<uint>();
@@ -85,7 +70,7 @@ namespace RevivalGuard
             {
                 if (sb.Length > 1) sb.Append(',');
                 sb.Append("{\"n\":\"").Append(Esc(r.name)).Append("\",\"o\":").Append(r.on ? "true" : "false")
-                  .Append(",\"l\":").Append(r.lvl).Append('}');   // the level (owner, 2026-10-12: "show player level next to friends")
+                  .Append(",\"l\":").Append(r.lvl).Append('}');   // the level
             }
             sb.Append(']');
             ModChannel.Send(s, "friends", sb.ToString());
@@ -100,8 +85,6 @@ namespace RevivalGuard
             s_NextTick = DateTime.UtcNow.AddSeconds(20);
             if (!(s_SessionMap?.GetValue(null) is Session[] map)) return;
             foreach (var s in map.ToArray())
-                // at select, and IN THE WORLD too since 2026-10-12: the Friends tab shows each friend's level, which
-                // retail's FriendsListUpdate does not carry
                 if (s != null && (s.Player != null || s.State == ACE.Server.Network.Enum.SessionState.AuthConnected))
                     try { Send(s); } catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] friends at select: {e.Message}"); }
         }

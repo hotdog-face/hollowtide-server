@@ -5,11 +5,7 @@ using System.Text;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// /deaths, THE PURE HALF (no ACE types; tools/nettest compiles this file by path). Owner 2026-11-16, "Yes, add
-    /// /deaths", for Numero-uno's "how do I look up who killed me after log off". The record kept for each death, the
-    /// cap, the place words and every line a player reads. DeathLog.cs records on the world loop and answers the command.
-    /// </summary>
+    /// <summary>/deaths, the pure half (no ACE types; tools/nettest compiles this file by path).</summary>
     public static class DeathLogRule
     {
         public const int KEEP = 10;               // per character, newest first
@@ -27,8 +23,7 @@ namespace RevivalGuard
             public string Where { get; set; }      // "at 42.1N, 33.6E near Holtburg", "in the Holtburg Redoubt"
         }
 
-        /// <summary>Put a death at the front and keep the newest KEEP. ACE can run a death twice for one death
-        /// (BossTrophies, ForgeWarden): a second record within 3 s with the same cause and killer is dropped.</summary>
+        /// <summary>Put a death at the front and keep the newest KEEP.</summary>
         public static bool Add(List<Entry> list, Entry e)
         {
             if (list == null || e == null) return false;
@@ -42,8 +37,7 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>The cause, from what ACE hands Player.Die: the killer's guid and name, whether it is a player, the
-        /// victim's own guid, the pet owner's name if any, and whether a fall or /die is under way.</summary>
+        /// <summary>The cause, from what ACE hands Player.Die</summary>
         public static Cause Classify(bool haveKiller, uint killerGuid, uint selfGuid, bool killerIsPlayer, string petOwner, bool falling, bool suicide)
         {
             if (suicide) return Cause.Suicide;
@@ -57,8 +51,7 @@ namespace RevivalGuard
 
         // ---------------------------------------------------------------- where
 
-        /// <summary>Map coordinates the way /corpse prints them (retail's radar formatter, RadarHud.AcCoords:
-        /// metres / 240 - 101.95, one decimal, "N, E"). gx/gy are world metres (landblock * 192 + local).</summary>
+        /// <summary>Map coordinates the way /corpse prints them. gx/gy are world metres.</summary>
         public static string Coords(float gx, float gy, out float ns, out float ew)
         {
             ew = gx / 240f - 101.95f; ns = gy / 240f - 101.95f;
@@ -79,9 +72,7 @@ namespace RevivalGuard
             return best;
         }
 
-        /// <summary>The place words. cell = ACE's full cell id; x/y = the position inside the landblock (metres).
-        /// Outdoors: "at 42.1N, 33.6E" (+ " near Holtburg"). Inside a building on the surface: "indoors at ..." with the
-        /// same coordinates. A dungeon landblock: "in &lt;name&gt;" from the portal-destination table, else "in a dungeon".</summary>
+        /// <summary>The place words. cell = ACE's full cell id; x/y = the position inside the landblock (metres).</summary>
         public static string Where(uint cell, float x, float y, bool dungeon, string dungeonName, IList<(string, float, float)> towns)
         {
             if (cell == 0) return "at an unknown place";
@@ -105,7 +96,6 @@ namespace RevivalGuard
 
         static string N(int n, string unit) => n + " " + unit + (n == 1 ? "" : "s");
 
-        /// <summary>"Nov 16, 3:04 PM PST" from a Pacific wall-clock time and its UTC offset in hours.</summary>
         public static string Clock(DateTime pacificLocal, int offsetHours) =>
             pacificLocal.ToString("MMM d, h:mm tt", CultureInfo.InvariantCulture) + (offsetHours == -7 ? " PDT" : " PST");
 

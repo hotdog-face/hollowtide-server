@@ -4,13 +4,7 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// HOLIDAY TOWNSFOLK (owner 2026-11-24: "on the day of holidays can npcs in holtburg acknowledge and be aware of the
-    /// holidays? azamir's lines change, etc"). Pure: which holiday a Pacific date is, by each holiday's real rule for its
-    /// year, and the lines Holtburg's NPCs and Azimar say on it (docs/proposals/holiday-npcs.md, the owner reads them
-    /// there). Glue in HolidayNpcs (switch rg_holiday_npcs, default off); nettest HolidayNpcCase checks the dates.
-    /// Pool names: hol.KEY.town (ambient), hol.KEY.greet, hol.KEY.npc.NPC[.greet], hol.KEY.role.ROLE, hol.KEY.azimar.greet|idle.
-    /// </summary>
+    /// <summary>Holiday townsfolk.</summary>
     public static class HolidayNpcRule
     {
         public sealed class Holiday
@@ -37,8 +31,6 @@ namespace RevivalGuard
             return new DateTime(y, month, day);
         }
 
-        /// <summary>US Pacific local time from UTC: PST (UTC-8), PDT (UTC-7) from the second Sunday of March 2:00 local to the
-        /// first Sunday of November 2:00 local (US rule since 2007). Ours, so the date never hangs on the host's tz data.</summary>
         public static DateTime PacificFromUtc(DateTime utc)
         {
             int y = utc.Year;
@@ -64,7 +56,7 @@ namespace RevivalGuard
             new Holiday { Key = "christmas",    Name = "Christmas Day (Frostfell)",  Date = y => new DateTime(y, 12, 25) },
         };
 
-        /// <summary>The holiday on this Pacific calendar date, or null. Only the day itself (or a labelled eve).</summary>
+        /// <summary>The holiday on this Pacific calendar date, or null.</summary>
         public static Holiday On(DateTime pacificDate)
         {
             var d = pacificDate.Date;
@@ -187,7 +179,6 @@ namespace RevivalGuard
                 "I ate so much I had to loosen my robe. Do not get excited, it was the belt.",
             },
 
-            // ======== CHRISTMAS EVE and CHRISTMAS (Dec 24 eve, Dec 25): Frostfell, retail's winter festival ========
             ["hol.christmaseve.town"] = new[]
             {
                 "Frostfell Eve. Hang a sock by the fire, they say the Gift Gophers are about tonight.",
@@ -241,7 +232,6 @@ namespace RevivalGuard
                 "My gift to the ladies of Holtburg this year is me. Returns are not accepted.",
             },
 
-            // ======== NEW YEAR'S EVE (Dec 31, eve) and NEW YEAR'S DAY (Jan 1): retail's New Year fireworks ========
             ["hol.newyearseve.town"] = new[]
             {
                 "Last night of the year. Watch the sky at midnight.",
@@ -285,7 +275,6 @@ namespace RevivalGuard
                 "A new year. New roads, new foes, and the same old Light.",
             },
 
-            // ======== VALENTINE'S DAY (Feb 14) ========
             ["hol.valentines.town"] = new[]
             {
                 "A day for sweethearts. Somebody left roses on the well again.",
@@ -311,7 +300,6 @@ namespace RevivalGuard
                 "I am single, I am powerful, and I own a very large staff. Form an orderly line.",
             },
 
-            // ======== APRIL FOOLS' DAY (Apr 1): the shard's own April Fools festival ========
             ["hol.aprilfools.town"] = new[]
             {
                 "Someone told me the drudges have taken Yaraq. I am not falling for it today.",
@@ -356,7 +344,7 @@ namespace RevivalGuard
                 "The fields are green again. Spring is the one magic I never had to learn.",
             },
 
-            // ======== MOTHER'S DAY (second Sunday of May) ========
+            // ======== mother's day (second Sunday of May) ========
             ["hol.mothersday.town"] = new[]
             {
                 "A day for mothers. Go and see yours, if you can.",
@@ -376,7 +364,7 @@ namespace RevivalGuard
                 "Call your mother today, travellers. Mine still asks when I will settle down. I tell her I have a staff and a fountain, what more does a man need.",
             },
 
-            // ======== FATHER'S DAY (third Sunday of June) ========
+            // ======== father's day (third Sunday of June) ========
             ["hol.fathersday.town"] = new[]
             {
                 "A day for fathers. Mine taught me to swing a sword. Badly, but he tried.",
@@ -396,7 +384,6 @@ namespace RevivalGuard
                 "Happy Father's Day to every father in Dereth. And to the ones who do not know it yet, Holtburg has a long memory.",
             },
 
-            // ======== INDEPENDENCE DAY (Jul 4): midsummer fireworks ========
             ["hol.julyfourth.town"] = new[]
             {
                 "Fireworks over Holtburg tonight, they say. Keep the drudges away, if nothing else.",
@@ -416,7 +403,6 @@ namespace RevivalGuard
                 "Fireworks tonight! I set off a few of my own every year. The healers stopped asking.",
             },
 
-            // ======== HALLOWEEN (Oct 31): the last night of retail's Festival Season ========
             ["hol.halloween.town"] = new[]
             {
                 "Last night of Festival Season. Lock your door, the dead walk tonight.",

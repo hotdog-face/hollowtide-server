@@ -10,24 +10,7 @@ using ACE.Server.Network.GameMessages.Messages;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// @KEEP: A BROWSER GUEST KEEPS ITS CHARACTERS (docs/BROWSER-CLIENT-PLAN.md, "One click to play").
-    ///
-    /// The browser makes a guest account by itself ("guest" and ten letters and digits, a random password kept in
-    /// that browser), so a player is in the world with one click. Until they keep it, their characters live only in
-    /// that browser, and a guest unused for 30 days is deleted (owner, 2026-10-10). `@keep <account> <password>`
-    /// turns the guest account into an ordinary one: the account is renamed and given the password. Characters
-    /// belong to the account by id, so they come along untouched, and the name logs in from any device or the
-    /// desktop client. The session that asked is renamed with it (see the SetAccount note below).
-    ///
-    /// Only a guest account may do this, so no player can rename an account that already is somebody's. The new
-    /// name is 3 to 24 letters and digits, starts with a letter, is not taken, and may not itself look like a
-    /// guest's. The password is 6 to 64 characters, no spaces. Player-level commands are not recorded by
-    /// AuditTrail, so the password goes into no log. One attempt every 3 seconds per session.
-    ///
-    /// The browser client sends it from its "Keep your character" form and reads the answer, which starts with
-    /// <see cref="REPLY"/> ("[Keep] OK name" or "[Keep] reason").
-    /// </summary>
+    /// <summary>@KEEP: a browser guest keeps its characters (docs/BROWSER-CLIENT-PLAN.md, "One click to play").</summary>
     public static class KeepCharacter
     {
         public const string REPLY = "[Keep] ";
@@ -61,7 +44,6 @@ namespace RevivalGuard
                 if (!account.AccountName.StartsWith("guest", StringComparison.OrdinalIgnoreCase)) { Say(session, "This account is already yours to keep; nothing to do."); return; }
                 if (!NAME.IsMatch(name)) { Say(session, "Choose 3 to 24 letters and digits, starting with a letter."); return; }
                 if (name.StartsWith("guest")) { Say(session, "Choose a name that does not start with \"guest\"."); return; }
-                // the reserved prefixes (AccountCreationCap refuses them at login; a kept guest must not slip one in)
                 if (Mercenaries.IsReservedName(name))
                 {
                     Mod.Log.Warn($"[RevivalGuard] KeepCharacter: '{account.AccountName}' asked for the reserved name '{name}'; refused");
@@ -75,13 +57,7 @@ namespace RevivalGuard
                 account.AccountName = name;
                 account.SetPassword(pw);
                 DatabaseManager.Authentication.UpdateAccount(account);
-                // THE LIVE SESSION TAKES THE NEW NAME TOO (2026-10-16: Levistras and Deadlyflorists could not get back
-                // in). ACE's session keeps the name it logged in with, and three things read it: the login takeover
-                // (NetworkManager.Find(accountName)) boots the account's old session when it logs in again, and by the
-                // new name it found none, so a character left standing by the browser tab stayed "in the world"
-                // (CharacterError 0x0D, a portal loop on the desktop app) for as long as that tab lived; the
-                // CharacterEnterWorld/Create/Delete checks (clientString != session.Account) refuse the name the
-                // client now sends; LoginTokens looks the account up by it.
+                // The live session takes the new name too.
                 session.SetAccount(account.AccountId, account.AccountName, session.AccessLevel);
                 Mod.Log.Info($"[RevivalGuard] KeepCharacter: guest account '{was}' kept as '{name}'");
                 Telemetry.Emit("keep", session.Player, ",\"web\":1");   // the funnel's "kept their character"

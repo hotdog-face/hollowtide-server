@@ -3,14 +3,7 @@ using System.Collections.Generic;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// FallGuard's rule, pure (no ACE types), so tools/nettest compiles and checks it by path. ACE hurts a PK by its server
-    /// body's own downward speed at each touch of the ground (Player.HandleFallingDamage), so a body that bounces down a
-    /// cliff face is charged at every bounce, and a body that falls where the client did not is charged for a fall nobody
-    /// made. This caps a descent's damage at what the client's own reports show: a fall from the highest report since its
-    /// last ground report to its latest one (or to the landing report that ended it), plus the lift of a recent jump.
-    /// A hit the reports do not show yet is held (10 s) for the landing report; if none shows it, it is dropped.
-    /// </summary>
+    /// <summary>FallGuard's rule, pure (no ACE types), so tools/nettest compiles and checks it by path.</summary>
     public sealed class FallGuardState
     {
         public const float G = 9.8f;                       // PhysicsGlobals.Gravity
@@ -31,7 +24,7 @@ namespace RevivalGuard
         /// <summary>ACE's damage amount (before armour) for a landing at this downward speed.</summary>
         public static float AceAmount(float downSpeed) => Math.Max(0f, (downSpeed - JUMP_V - LEEWAY) / JUMP_V * UNIT);
 
-        /// <summary>The landing speed a fall of <paramref name="dropM"/> gives, starting with a jump's upward speed.</summary>
+        /// <summary>The landing speed a fall of dropM gives, starting with a jump's upward speed.</summary>
         public static float Speed(float dropM, float jumpVz) =>
             (float)Math.Sqrt(Math.Max(0f, jumpVz) * Math.Max(0f, jumpVz) + 2f * G * Math.Max(0f, dropM + SLACK_M));
 
@@ -71,7 +64,7 @@ namespace RevivalGuard
             float s = 0f; foreach (var c in _charged) s += c.amount; return s;
         }
 
-        /// <summary>ACE wants to hurt by <paramref name="aceAmount"/>: what to apply now. The rest waits for a report.</summary>
+        /// <summary>ACE wants to hurt by aceAmount: what to apply now.</summary>
         public float Hit(double t, float aceAmount)
         {
             float pay = Math.Max(0f, Math.Min(aceAmount, Allowed(t) - Charged(t)));
@@ -81,8 +74,7 @@ namespace RevivalGuard
             return pay;
         }
 
-        /// <summary>After a report: the held damage its drop now shows (0 if none). <paramref name="dropped"/> is the held
-        /// amount given up because no report showed the fall in time.</summary>
+        /// <summary>After a report: the held damage its drop now shows (0 if none).</summary>
         public float Settle(double t, out float dropped)
         {
             dropped = 0f;

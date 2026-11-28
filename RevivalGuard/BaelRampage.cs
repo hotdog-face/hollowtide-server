@@ -18,42 +18,19 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// BAEL'ZHARON'S RAMPAGE, REVIVED (retail Dec 2000, Fourth Sending; owner 2026-11-21 "Yes, build it"; docs/EVENT-TESTS/
-    /// bz-rampage.md). Nov 24 to 30, leading into Lightbringer's Week. Retail's was a developer at the keyboard; ours is
-    /// scheduled. What he says and casts is only what Turbine's own video of his client shows
-    /// (docs/findings/event-video-transcripts-2026-11-21.md section 2).
-    ///
-    ///   WHEN    the Event Director runs one "bz-&lt;town&gt;" entry (EventDirector catalogue, festival "bzrampage") at most
-    ///           once every 10 hours (EventDirectorRules.BZ_APART_S; about two a day), never while the world boss Bael'Zharon is up.
-    ///   ARRIVE  he appears in the town's square (8503's retail body, level 899, XP 0) in a portal storm, says his line
-    ///           ("My master has eaten worlds...") and his darkness falls on the town.
-    ///   IDLE    nobody hitting him: retail's joke emotes (rest, teapot, YMCA, snow angel, curtsey, bow) now and then, his
-    ///           line again every few minutes. He never starts a fight and never moves.
-    ///   STRUCK  he cannot be hurt (Invincible: blows are evaded, spells resisted, as in the video). Whoever strikes him is
-    ///           cursed in turn: Demon Fists, Sparking Fury, Electric Blaze, Electric Discharge, Fuming Acid, Weight of
-    ///           Eternity (not Portal to Teth: see CURSES); "Face me, weaklings!" when a fight starts. His spells kill, as
-    ///           retail's did (rg_bz_rampage_lethal, default on; off leaves a struck player at 1 health).
-    ///   LEAVE   the director's time is up (30 minutes) or it is stopped: he vanishes in black madness.
-    /// No loot, no corpse, no XP, nothing saved. Off by default: rg_bz_rampage (the admin panel's Events buttons) and the
-    /// datafix's rows (2026-11-24-bz-rampage-1-rows.sql) both needed.
-    ///   @rampage [status | on | off | visit [town] | leave]     (Admin)
-    /// </summary>
+    /// <summary>Bael'zharon's rampage, REVIVED.</summary>
     static class BaelRampage
     {
         internal const string FESTIVAL = "bzrampage", P_ON = "rg_bz_rampage", P_LETHAL = "rg_bz_rampage_lethal", KEY_PREFIX = "bz-";
-        const uint BODY = 8503;            // retail Bael'Zharon, never placed: level 899, war magic 900, XP 0, his spellbook
+        const uint BODY = 8503;
         const float RANGE = 60f;           // who hears him and who may be cursed
         const double TICK_S = 0.5, FOE_FORGET_S = 30, CAST_S = 4.0, CAST_WIND_S = 1.2, LINE_EVERY_S = 6 * 60,
                      TAUNT_EVERY_S = 120, JOKE_MIN_S = 50, JOKE_MAX_S = 90, RESPAWN_TRY_S = 20, MUSE_MIN_S = 100, MUSE_MAX_S = 160;
 
-        // the video's lines (transcript section 2): the monologue verbatim; the taunt's start had scrolled off ("...face me,
-        // weaklings!"); the green line only its first sentence (its middle is unreadable)
+        // the video's lines: the monologue verbatim; the taunt's start had scrolled off; the green line only its first sentence
         internal const string MONOLOGUE = "My master has eaten worlds. It has sucked the light from stars. Its power is in me. You have no chance, children.";
         internal const string TAUNT = "Face me, weaklings!";
 
-        // OURS, NOT RETAIL (owner 2026-11-21 "Fill it out"; he reviews every one before live): more of him, in the voice of
-        // the recorded lines (the video's comic, condescending Hopeslayer), so a 30-minute visit does not repeat one line.
         internal static readonly string[] MUSINGS =
         {
             "So this is where the little ones hide. How small you are.",
@@ -94,13 +71,11 @@ namespace RevivalGuard
             (2035, 2),   // Electric Discharge
             (2036, 2),   // Fuming Acid
             (2043, 2),   // Weight of Eternity
-            // Portal to Teth (2046, the wiki's) is left out: retail's landing point is 770 m up, and with FallGuard off on live
-            // (checked 2026-11-21) the drop cost a test character 180 health, enough to kill a new one
+            // Portal to Teth is left out
         };
 
         internal sealed class Town { public string Key, Name; public float Ns, Ew; }
-        // Fort Tethana, Kara and Arwic are the wiki's; the other thirteen are ours (retail said "and more"). Map points:
-        // Assets/StreamingAssets/map-places.json "town" entries.
+        // Fort Tethana, Kara and Arwic are the wiki's; the other thirteen are ours (retail said "and more").
         internal static readonly Town[] TOWNS =
         {
             new Town { Key = "fort-tethana", Name = "Fort Tethana", Ns = 1.6f,   Ew = -71.8f },
@@ -110,7 +85,7 @@ namespace RevivalGuard
             new Town { Key = "zaikhal",      Name = "Zaikhal",      Ns = 13.7f,  Ew = 0.6f },
             new Town { Key = "shoushi",      Name = "Shoushi",      Ns = -33.5f, Ew = 72.8f },
             new Town { Key = "yaraq",        Name = "Yaraq",        Ns = -21.5f, Ew = -1.6f },
-            // ours too (owner 2026-11-21 "Fill it out"): more of Dereth's towns, all levels, Holtburg (owner 2026-11-21) away from its lifestone and raid points
+            // ours too: more of Dereth's towns, all levels, Holtburg away from its lifestone and raid points
             new Town { Key = "hebian-to",    Name = "Hebian-To",    Ns = -39.1f, Ew = 83.2f },
             new Town { Key = "rithwic",      Name = "Rithwic",      Ns = 10.6f,  Ew = 58.3f },
             new Town { Key = "al-arqas",     Name = "Al-Arqas",     Ns = -31.3f, Ew = 13.6f },
@@ -119,9 +94,6 @@ namespace RevivalGuard
             new Town { Key = "tufa",         Name = "Tufa",         Ns = -14.2f, Ew = 5.4f },
             new Town { Key = "lytelthorpe",  Name = "Lytelthorpe",  Ns = 0.6f,   Ew = 51.2f },
             new Town { Key = "samsur",       Name = "Samsur",       Ns = -2.9f,  Ew = 19.5f },
-            // owner 2026-11-21 "add holtberg": (84, 75) in A9B4 metres, 63 m north of the lifestone where new players arrive
-            // (TownRaid.json noSpawnNearLifestone 60) and 60 m or more from every raid side's point in town; a visit and a
-            // Holtburg raid never overlap (EventDirector.Blocked waits on TownRaid.Running; TownRaid pauses on "bz-holtburg")
             new Town { Key = "holtburg",     Name = "Holtburg",     Ns = 42.3625f, Ew = 33.6f },
         };
         internal static Town TownOf(string directorKey) =>
@@ -208,8 +180,7 @@ namespace RevivalGuard
                 // gone (his landblock unloaded with nobody there): back when someone comes near the town
                 if (now < v.NextSpawnTry) return;
                 v.NextSpawnTry = now + RESPAWN_TRY_S;
-                // only into a landblock that is loaded with someone near: a spawn at boot into an unloaded block hung a
-                // landblock worker at 100% on shard2 (2026-11-21), so he waits for the first player the broadcast brings
+                // only into a landblock that is loaded with someone near
                 if (AnyoneNear(v.Town) && LandblockManager.IsLoaded(new LandblockId(Ground(v.Town.Ns, v.Town.Ew).LandblockId.Raw))) Arrive(v, now);
                 return;
             }
@@ -292,7 +263,6 @@ namespace RevivalGuard
         static void Arrive(Visit v, double now)
         {
             if (!(WorldObjectFactory.CreateNewWorldObject(BODY) is Creature c)) { Mod.Log.Warn($"[RevivalGuard] BaelRampage: weenie {BODY} missing"); return; }
-            // a visitor, not a monster: he can be struck (and evades it), never hurt, never starts a fight, never rots or saves
             c.SetProperty(PropertyBool.Attackable, true);
             c.Invincible = true;
             c.SetProperty(PropertyInt.Tolerance, (int)Tolerance.NoAttack);
@@ -314,7 +284,7 @@ namespace RevivalGuard
             if (!v.Greeted)
             {
                 v.Greeted = true;
-                v.NextLineAt = now + 4;     // his words a moment after the storm
+                v.NextLineAt = now + 4;
                 v.DarknessAt = now + 10;
                 v.NextJokeAt = now + 40;
                 v.NextMuseAt = now + 75;
@@ -492,8 +462,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>A blow or arrow on him: evaded ("Bael'Zharon evaded your attack", as players read in 2000), and the striker
-    /// is marked for a curse.</summary>
+    /// <summary>A blow or arrow on him: evaded, and the striker is marked for a curse.</summary>
     [HarmonyPatch(typeof(DamageEvent), nameof(DamageEvent.CalculateDamage))]
     static class BaelRampageEvade
     {
@@ -509,8 +478,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>A war spell's projectile reaching him: marked, and ACE's monster wake-up (which would set him on the caster)
-    /// is skipped.</summary>
+    /// <summary>A war spell's projectile reaching him: marked, and ACE's monster wake-up (which would set him on the caster) is skipped.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.OnAttackMonster))]
     static class BaelRampageAttacked
     {
@@ -532,7 +500,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>No monster AI: he never chases, swings or goes home; BaelRampage acts for him.</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.Monster_Tick))]
     static class BaelRampageNoAi
     {

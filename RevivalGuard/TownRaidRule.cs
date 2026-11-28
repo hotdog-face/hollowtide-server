@@ -5,11 +5,7 @@ using System.Text.Json;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// HOLTBURG RAIDS, THE PURE HALF (no ACE types; tools/nettest compiles it by path, TownRaidCase). Ours, not retail
-    /// (owner 2026-11-15; docs/DIVERGENCES.md). The data (TownRaid.json), the schedule roll, the tier and wave size, the
-    /// kind and side, the end of a raid, and the reward rolls. TownRaid.cs runs it on the server.
-    /// </summary>
+    /// <summary>Holtburg raids, the pure half (no ACE types; tools/nettest compiles it by path, TownRaidCase).</summary>
     public static class TownRaidRule
     {
         // ---- the data file --------------------------------------------------------------------------------------------
@@ -49,8 +45,6 @@ namespace RevivalGuard
             public double WarningSeconds { get; set; } = 60;
             public double IdleTimeoutMinutes { get; set; } = 10;
             public double MaxMinutes { get; set; } = 25;
-            // never mid-fight (owner 2026-11-21: big raids must not vanish while people fight them): past MaxMinutes, or
-            // with the town empty, a raid withdraws only once no raider has been hit for this long
             public double FightGraceSeconds { get; set; } = 120;
             public double EmptyTownMinutes { get; set; } = 3;
             public double HeldShare { get; set; } = 0.75;
@@ -94,14 +88,11 @@ namespace RevivalGuard
             public double PerPlayer { get; set; } = 2;
             public int Max { get; set; } = 12;
             public uint Treasure { get; set; }                 // a retail death treasure (TreasureDeath) id: the reward roll's table
-            public int ProtectBelow { get; set; }              // raiders never pick a player under this level who has not hit them
+            public int ProtectBelow { get; set; }
             public uint[] Adds { get; set; } = Array.Empty<uint>();  // the weaker pack that runs in with each wave (same family)
         }
 
-        /// <summary>A festival's monsters make the raid while that festival runs (owner 2026-11-20: "add spawns of turkeys
-        /// and similar themed monsters to the raids for every event"; then "for now turkeys should be what raids are made
-        /// of. and christams is snowmans"). Retail weenies only, unchanged; a tier the theme has nothing for gets the
-        /// ordinary raid. Replace (the default): the whole raid is the theme's (Themed); else Share of each group mixed in.</summary>
+        /// <summary>A festival's monsters make the raid while that festival runs.</summary>
         public sealed class Theme
         {
             public string Festival { get; set; }               // SeasonalCalendar key ("fowlplay")
@@ -124,25 +115,18 @@ namespace RevivalGuard
             public uint[] AddsOrWave => Adds != null && Adds.Length > 0 ? Adds : Wave;
         }
 
-        /// <summary>A raid comes in waves (owner 2026-11-16: "need more smaller adds in addition to the group that comes
-        /// and a few waves. there were only 4 drudges"): the main group each wave, a pack of weaker adds with it, the
-        /// next wave once most of the last is down (or after a while, if someone is fighting), the leader with the last.</summary>
-        /// <summary>Into the town (owner F7 261125-0022: "raids arent going to town any more. turkeys are standing idle"):
-        /// a raider at its side's point with nobody to fight marches on the nearest player in town; its Home moves with
-        /// it, so the leash and the walk back after a fight stay in the square, not at the town's edge.</summary>
+        /// <summary>A raid comes in waves: the main group each wave, a pack of weaker adds with it</summary>
         public sealed class AdvanceDef
         {
             public bool On { get; set; } = true;
             public float StopShort { get; set; } = 3;           // metres short of the player
             public float ReAimMeters { get; set; } = 8;         // a player who moved this far is marched on again
-            public double ReAimSeconds { get; set; } = 6;       // never re-aimed more often than this
+            public double ReAimSeconds { get; set; } = 6;
             public float AlertMeters { get; set; } = 12;        // this close to a player it may pick, it picks them
             public double StuckSeconds { get; set; } = 5;       // no headway this long on the straight walk: by the streets
             public float LegReach { get; set; } = 4;            // a street waypoint this close counts as reached
             public float JoinMeters { get; set; } = 14;         // street waypoints this close are joined
-            // Holtburg's walked streets (A9B4 metres): the Royal Guards' patrol rounds and raid musters (HoltburgGuards
-            // ROUTES, TownRaid.json musterPath/guardsFrom), every leg checked on the retail walk grid; side points join by
-            // JoinMeters. Box 2026-11-25: north mosswarts walking straight for the lifestone stuck on the town at 84,139.
+            // Holtburg's walked streets
             public List<float[][]> Streets { get; set; } = new List<float[][]>
             {
                 new[] { new[] { 9.9f, 114.1f }, new[] { 38f, 119f }, new[] { 51f, 142f }, new[] { 88f, 145f }, new[] { 50f, 144f } },
@@ -233,9 +217,7 @@ namespace RevivalGuard
         public static bool InBox(Config c, float x, float y, float margin) =>
             x >= c.TownBox[0] - margin && x <= c.TownBox[2] + margin && y >= c.TownBox[1] - margin && y <= c.TownBox[3] + margin;
 
-        /// <summary>Where a raider with nobody to fight marches: the nearest player (players: positions in town; a raider
-        /// prefers ones it may pick, else any, so the raid is seen), StopShort metres short of them, inside the town box.
-        /// Null: nobody in town.</summary>
+        /// <summary>Where a raider with nobody to fight marches: the nearest player, StopShort metres short of them, inside the town box.</summary>
         public static float[] AdvancePoint(Config c, float rx, float ry, IList<float[]> mayPick, IList<float[]> anyone)
         {
             var pool = mayPick != null && mayPick.Count > 0 ? mayPick : anyone;
@@ -254,9 +236,7 @@ namespace RevivalGuard
             return new[] { x, y };
         }
 
-        /// <summary>The streets from <paramref name="from"/> to <paramref name="to"/>: the waypoint nearest each end and the
-        /// shortest way between them over Advance.Streets (consecutive points, and any two within JoinMeters), ending at
-        /// <paramref name="to"/>. Just [to] when both ends share a waypoint or there are no streets.</summary>
+        /// <summary>The streets from from to to</summary>
         public static List<float[]> StreetRoute(Config c, float[] from, float[] to)
         {
             var nodes = new List<float[]>();
@@ -310,7 +290,6 @@ namespace RevivalGuard
             return result;
         }
 
-        /// <summary>March again: never aimed, or the new point is ReAimMeters from the last and ReAimSeconds have gone.</summary>
         public static bool ReAim(Config c, float[] last, double since, float[] next) =>
             next != null && (last == null || since >= c.Advance.ReAimSeconds && Dist(last, next) >= c.Advance.ReAimMeters);
 
@@ -318,8 +297,7 @@ namespace RevivalGuard
 
         // ---- who is in town, and the tier -----------------------------------------------------------------------------
 
-        /// <summary>The tier the town's players call for: the lower median of their levels against the floors (1..n).
-        /// A median, not the top: one high character among newcomers does not bring the hardest raiders.</summary>
+        /// <summary>The tier the town's players call for: the lower median of their levels against the floors (1..n).</summary>
         public static int TierFor(IList<int> levels, int[] floors)
         {
             if (levels == null || levels.Count == 0 || floors == null || floors.Length == 0) return 1;
@@ -330,7 +308,7 @@ namespace RevivalGuard
             return tier;
         }
 
-        /// <summary>How many raiders: base plus so many per player in town, up to the tier's max (a big wave half again).</summary>
+        /// <summary>How many raiders: base plus so many per player in town, up to the tier's max.</summary>
         public static int WaveSize(TierDef t, int players, bool big, double bigFactor)
         {
             double n = t.Base + t.PerPlayer * Math.Max(1, players);
@@ -339,8 +317,7 @@ namespace RevivalGuard
             return Math.Max(1, size);
         }
 
-        /// <summary>The kind of raid: weighted among the kinds that have this tier (or the nearest lower one they have);
-        /// drudges when nothing else fits.</summary>
+        /// <summary>The kind of raid: weighted among the kinds that have this tier; drudges when nothing else fits.</summary>
         public static (Kind kind, TierDef tier) PickKind(Config c, int tier, double r, string forceKind = null)
         {
             var options = new List<(Kind k, TierDef t)>();
@@ -384,10 +361,7 @@ namespace RevivalGuard
 
         public static int WaveCount(WaveDef w, bool big) => Math.Max(1, big ? w.BigCount : w.Count);
 
-        /// <summary>One wave: the main group (the first full size, later ones LaterFactor of it; a big raid's all half again),
-        /// the adds (base plus so many per player, up to AddsMax; none when the tier has no adds), the leader with the last
-        /// wave (always for a big raid, else when rolled), and a big raid's escorts with it. MaxTotal, shared among the
-        /// waves, trims the adds first.</summary>
+        /// <summary>One wave: the main group, the adds, the leader with the last wave, and a big raid's escorts with it.</summary>
         public static (int main, int adds, bool leader, int escorts) PlanWave(Config c, TierDef t, int players, bool big, int wave, int waves, bool leaderRolled, int spawnedSoFar)
         {
             var w = c.Waves;
@@ -407,8 +381,7 @@ namespace RevivalGuard
             return (main, adds, leader, escorts);
         }
 
-        /// <summary>The festival theme for a raid at this tier: weighted among the themes whose festival is on and that have
-        /// something for the tier; null when none. Staff may force one by festival key (on or not); "none" forces none.</summary>
+        /// <summary>The festival theme for a raid at this tier</summary>
         public static (Theme theme, ThemeTier tier) PickTheme(Config c, int tier, Func<string, bool> festivalOn, double r, string force = null)
         {
             if (c.Themes == null || c.Themes.Count == 0 || string.Equals(force, "none", StringComparison.OrdinalIgnoreCase)) return (null, null);
@@ -425,8 +398,7 @@ namespace RevivalGuard
             return options[options.Count - 1];
         }
 
-        /// <summary>A raid made of the theme's monsters: the tier's sizes, treasure and newcomer guard, the theme's weenies
-        /// (its leader or none).</summary>
+        /// <summary>A raid made of the theme's monsters: the tier's sizes, treasure and newcomer guard, the theme's weenies.</summary>
         public static TierDef Themed(TierDef def, ThemeTier tt) => new TierDef
         {
             Tier = def.Tier, Base = def.Base, PerPlayer = def.PerPlayer, Max = def.Max, Treasure = def.Treasure,
@@ -434,8 +406,6 @@ namespace RevivalGuard
             Escort = tt.Escort ?? Array.Empty<uint>(),
         };
 
-        /// <summary>How many of n become the theme's: the share rounded, at least one of any group, never all of a group
-        /// of two or more (the raid's own kind still leads it).</summary>
         public static int ThemedCount(int n, double share)
         {
             if (n <= 0 || share <= 0) return 0;
@@ -443,8 +413,7 @@ namespace RevivalGuard
             return Math.Max(1, Math.Min(k, n >= 2 ? n - 1 : 1));
         }
 
-        /// <summary>A wave's weenies: the leader and escorts as the kind's; ThemedCount of the main group and of the adds
-        /// from the theme. pick(n) is a random index below n.</summary>
+        /// <summary>A wave's weenies: the leader and escorts as the kind's</summary>
         public static List<(uint wcid, bool add, bool themed)> WaveWeenies(TierDef def, ThemeTier theme, double share,
             int main, int adds, bool leader, int escorts, Func<int, int> pick)
         {
@@ -461,9 +430,6 @@ namespace RevivalGuard
             return list;
         }
 
-        /// <summary>The next wave comes once NextAtShare of the last one is down, or NextAfterSeconds after it if a raider
-        /// was hit since it came (an idle town is not piled on); never sooner than MinGapSeconds, never when it would put
-        /// more than MaxAlive on the field (unless none stand).</summary>
         public static bool NextWaveDue(int lastWave, int lastWaveAlive, double sinceWave, bool hitSince, int aliveNow, int nextSize, WaveDef w)
         {
             if (sinceWave < w.MinGapSeconds) return false;
@@ -474,9 +440,7 @@ namespace RevivalGuard
 
         // ---- the schedule ---------------------------------------------------------------------------------------------
 
-        /// <summary>The chance a raid starts in this minute: none within the minimum gap of the last one; after it, a
-        /// steady chance (mean MeanExtraMinutes at full weight), lower in the dead hours (Pacific), higher with more
-        /// players online. With the defaults, about 11 a day when people are on.</summary>
+        /// <summary>The chance a raid starts in this minute</summary>
         public static double ChancePerMinute(ScheduleDef s, double minutesSinceLast, int pacificHour, int online)
         {
             if (minutesSinceLast < s.MinGapMinutes) return 0;
@@ -486,8 +450,7 @@ namespace RevivalGuard
             return Math.Clamp(p, 0, 1);
         }
 
-        /// <summary>No raid may begin when it could still be running at the nightly restart: from QuietBeforeRestart
-        /// minutes before it to QuietAfterRestart after.</summary>
+        /// <summary>No raid may begin when it could still be running at the nightly restart</summary>
         public static bool QuietForRestart(DateTime utc, ScheduleDef s)
         {
             if (string.IsNullOrWhiteSpace(s.RestartUtc) || !TimeSpan.TryParse(s.RestartUtc, out var at)) return false;
@@ -508,10 +471,7 @@ namespace RevivalGuard
 
         public enum Outcome { Running, Held, Withdrew, Faded }
 
-        /// <summary>How a raid stands: held only when every raider spawned died (a later wave still to come keeps it
-        /// running; the idle clock restarts with each wave); faded when raiders are gone without dying (a stop, a block taken down); withdrawn when nobody has
-        /// hit a raider for the idle timeout, the town has stood empty for EmptyTownMinutes, or the raid passed its
-        /// longest time. (Box 2026-11-16: the town emptied, the raiders dropped off the live list and a raid read as held.)</summary>
+        /// <summary>How a raid stands: held only when every raider spawned died</summary>
         public static Outcome Judge(int spawned, int alive, int killed, bool moreToCome, double sinceSpawn, double sinceLastHit, ScheduleDef s, double emptyFor = 0)
         {
             if (spawned == 0) return Outcome.Running;
@@ -524,16 +484,14 @@ namespace RevivalGuard
             return Outcome.Running;
         }
 
-        /// <summary>AdminSpawn's cleanup: a creature the admin made stays until killed, or until nobody has been within
-        /// AdminSpawnNearMetres of it for an hour.</summary>
+        /// <summary>AdminSpawn's cleanup: a creature the admin made stays until killed</summary>
         public const float AdminSpawnNearMetres = 100f;
         public static bool AdminSpawnStale(double secondsSinceSomeoneNear) => secondsSinceSomeoneNear >= 3600;
 
         /// <summary>A raider standing outside town is stuck only when it is not fighting (one in a fight stands still).</summary>
         public static bool StuckOutside(double stillFor, bool fighting, ScheduleDef s) => !fighting && stillFor >= s.StuckOutsideSeconds;
 
-        /// <summary>Kills that hold the town once no raider is left: HeldShare of those spawned (a raider stuck outside
-        /// town is taken away, box 2026-11-16: 11 of 12 killed read as faded).</summary>
+        /// <summary>Kills that hold the town once no raider is left: HeldShare of those spawned.</summary>
         public static int HeldAt(int spawned, ScheduleDef s) => Math.Max(1, (int)Math.Ceiling(spawned * s.HeldShare));
 
         /// <summary>Raiders ignore a player below the tier's protection level unless that player has hurt them.</summary>
@@ -541,8 +499,7 @@ namespace RevivalGuard
 
         // ---- rewards --------------------------------------------------------------------------------------------------
 
-        /// <summary>Each defender's reward rolls on a held town, by their share of the damage dealt to the raiders: one
-        /// for taking part (at least MinDamage), two from ShareFor2 of it, three from ShareFor3.</summary>
+        /// <summary>Each defender's reward rolls on a held town, by their share of the damage dealt to the raiders</summary>
         public static Dictionary<uint, int> Rolls(IDictionary<uint, double> damage, RewardDef r)
         {
             var res = new Dictionary<uint, int>();

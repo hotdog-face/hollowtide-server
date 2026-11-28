@@ -14,36 +14,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ASHERON AND BAEL'ZHARON AT CRAGSTONE, the Lightbringer week's scene (owner OK 2026-10-28; docs/REVIVAL-PLAN-2026-10-28.md
-    /// section 4). Retail's was a live dev performance in Dec 2000 with no script in the data (wiki "Bael'Zharon's Defeat",
-    /// Dialog, and "Bael'Zharon's Rampage"); this is ours, retail-styled, its lines adapted from that dialogue.
-    ///
-    ///   cadence    every 4 hours from 00:00 UTC-5 while the "lightbringer" festival runs (SeasonalCalendar), warned at 30,
-    ///              10 and 2 minutes like a world boss, and drawn on the map as one (WorldBossSchedule's "worldboss" payload,
-    ///              key "lightbringer"; the client gives it its own icon)
-    ///   opening    Asheron (902616, a copy of retail's 8675) in the red water below the rock at 24.0N 49.2E; Bael'Zharon
-    ///              (902614, a copy of 8821 that never attacks) on the rock's top. Their exchange, then Bael's meteors
-    ///              (MeteorStrike 4246) on the players and Asheron in the water below, then "Stand back, citizens!" and he
-    ///              leaps down (gone from the rock, landed in the water by Asheron: a teleport with ACE's own effects)
-    ///   the fight  the landed Bael (902615, an ordinary monster) fights the players; Asheron and he trade bolts and words.
-    ///              He cannot die here (healed each tick, no hit takes his last point), and no hit of his takes more than
-    ///              a share of a player's health (MAX_SHARE per WINDOW_S), so it stings, it does not wipe
-    ///   2000's rules  a player who strikes him is cursed (Demon Fists, Demon's Tongues, Weight of Eternity; the last lifted
-    ///              after WEIGHT_S); a player who talks to him without having struck him gets one of his gifts (Bile of the
-    ///              Hopeslayer, Boon of the Demon, Demonskin), lifted when the scene ends
-    ///   the end    Bael withdraws "to gather his strength", Asheron points the way to the Chosen and leaves
-    ///   one Bael   the world boss Bael'Zharon (WorldBoss.cs) keeps his own rhythm; each scene is placed at least an hour
-    ///              clear of his windows, warnings included (LightbringerSceneRule, the list the Event Director keeps clear),
-    ///              moved up to 2 hours (or, failing that, skipped), and waits while he is up. The scene's Bael cannot die and drops nothing
-    ///   Elysa      Elysa Strathelar (902618, a copy of retail's 20194) beside the Cragstone Chosen for the last 5 minutes
-    ///              before each scene, rallying players in lines adapted from her Dec 2000 words; she leaves as it begins
-    ///   Ilservian  when A Shadow of Black Ferah (8822) dies, the Remnants of Ilservian (9000) in the Sepulcher speak three
-    ///              lines of regret as Ilservian Palacost
-    ///
-    /// Admin @lbscene (Developer): status | start [seconds of warning, default 60] | stop. A start works outside the week too
-    /// (for tests); the schedule runs only inside it.
-    /// </summary>
+    /// <summary>Asheron and bael'zharon at cragstone, the Lightbringer week's scene.</summary>
     static class LightbringerScene
     {
         internal const uint BAEL_ROCK = 902614, BAEL_FIGHT = 902615, ASHERON = 902616, ELYSA = 902618;
@@ -56,8 +27,7 @@ namespace RevivalGuard
         static Position RockTop() => new Position(CELL_ROCK, 180f, 84f, 19.65f, 0f, 0f, 0f, 1f);          // faces north, to Asheron
         static Position Landing() => Safe(LightbringerSceneRule.SAFE[0]);   // (180, 103): clear of the rock (0024)
         static Position Safe((double x, double y) p) => new Position(CellOf(p.x, p.y), (float)p.x, (float)p.y, 1.12f, 0f, 0f, 0f, 1f);
-        /// <summary>The outdoor cell of local (x, y) in landblock 0xBC9D: an exact cell, not ACE's guess from cell 0 (Bael's
-        /// home was set from one and his return home jumped him 37 m, box test 2026-10-28).</summary>
+        /// <summary>The outdoor cell of local (x, y) in landblock 0xBC9D: an exact cell, not ACE's guess from cell 0.</summary>
         static uint CellOf(double x, double y) => 0xBC9D0000u | (uint)(((int)Math.Clamp(x, 0, 191.9) / 24) * 8 + (int)Math.Clamp(y, 0, 191.9) / 24 + 1);
         static Position AsheronSpot() => new Position(CellOf(180, 114), 180f, 114f, 1.11f, 0f, 0f, 1f, 0f);     // faces south, to the rock
         const double MAP_NS = 24.0, MAP_EW = 49.2;
@@ -116,8 +86,7 @@ namespace RevivalGuard
         static double Anchor() =>
             (DateTime.SpecifyKind(new DateTime(2026, 1, 1).AddHours(-UTC_OFFSET_HOURS), DateTimeKind.Utc) - DateTime.UnixEpoch).TotalSeconds;
 
-        /// <summary>The next scene start at or after this moment: each 4-hour slot placed clear of the world boss's windows
-        /// (LightbringerSceneRule; a slot that cannot be placed is skipped). The schedule ignores the week; the caller asks InWeek.</summary>
+        /// <summary>The next scene start at or after this moment: each 4-hour slot placed clear of the world boss's windows.</summary>
         static double NextStart(double after)
         {
             double best = double.NaN;
@@ -135,7 +104,6 @@ namespace RevivalGuard
         static IEnumerable<(double from, double to)> BaelWindows(double from, double to) =>
             WorldBossSchedule.WindowsBetween(from, to).Where(w => w.name == "Bael'Zharon").Select(w => (w.from, w.to));
 
-        /// <summary>The world boss himself standing in the world right now (any rule raised him): never two at once.</summary>
         static bool s_TestRun;   // @lbscene start ... force test: the one-Bael wait is skipped (admin box tests only)
 
         static bool WorldBaelUp()
@@ -219,12 +187,10 @@ namespace RevivalGuard
             else if (s_Bael != null && !s_Bael.IsDestroyed && !s_Bael.IsDead)
             {
                 var b = s_Bael;
-                HealCheck(now, b);   // he cannot be worn down here, and the players see why (ticket 261028-0014)
-                // A monster made by EnterWorld sleeps until a player moves near it: the landed Bael goes for the players
-                // in the water at once (the box test 2026-10-28: he stood 2 m from one and never swung)
+                HealCheck(now, b);   // he cannot be worn down here, and the players see why
+                // A monster made by EnterWorld sleeps until a player moves near it: the landed Bael goes for the players in the water at once
                 if (b.WeenieClassId == BAEL_FIGHT && b.Location != null) Unstick(now, b);
-                // Scripted melee (owner 2026-10-28, after ACE's AI could not be made to chase this body reliably): the scene
-                // moves him, draws, swings and lands capped hits. His own AI is off (Tolerance NoAttack on 902615).
+                // Scripted melee: the scene moves him, draws, swings and lands capped hits.
                 if (b.WeenieClassId == BAEL_FIGHT) Melee(now, b);
                 if (s_AshOn && b.WeenieClassId == BAEL_FIGHT) AsheronTick(now, b);
                 if (b.WeenieClassId == BAEL_FIGHT && t >= FIGHT_FROM) FightTick(now, t, b);
@@ -282,7 +248,7 @@ namespace RevivalGuard
             };
             for (int i = 0; i < talk.Length; i++) { var (w, s) = talk[i]; Line(130 + i * 45, w, s); }
 
-            // his going is warned ~30 s ahead and played out (ticket 261028-0017: "beal randomly dissapeared")
+            // his going is warned ~30 s ahead and played out
             Line(487, Who.Bael, "This cursed light gnaws at me. Savor these moments, Yalain. They will not last.");
             At(488, "waver", () => Local("Bael'Zharon's form begins to waver. He will not hold this place much longer."));
             Line(505, Who.Asheron, "I found a way to imprison you once. You may be again.");
@@ -332,8 +298,7 @@ namespace RevivalGuard
         }
 
         // ------------------------------------------------------------------ Ilservian, after the Sepulcher's kill
-        /// <summary>When A Shadow of Black Ferah dies, the Remnants of Ilservian (9000, in the Sepulcher) speak as Ilservian
-        /// Palacost: regret, answering Asheron's "we are the same man" (owner 2026-10-28).</summary>
+        /// <summary>When A Shadow of Black Ferah dies, the Remnants of Ilservian speak as Ilservian Palacost</summary>
         static readonly string[] ILSERVIAN_LINES =
         {
             "The shadow is gone, and for a moment the voice is quiet. I remember my own name.",
@@ -364,8 +329,7 @@ namespace RevivalGuard
             return InWeek ? $"in {Minutes(n - Now())}" : "in the next Lightbringer's Week";
         }
 
-        /// <summary>Bael's going, played out: he raises his arms (the cast gesture), the dark storms around him, a burst, and
-        /// he is gone four seconds later (ticket 261028-0017).</summary>
+        /// <summary>Bael's going, played out: he raises his arms, the dark storms around him, a burst, and he is gone four seconds later.</summary>
         static void Exit(Creature b)
         {
             if (b == null || b.IsDestroyed) return;
@@ -394,17 +358,11 @@ namespace RevivalGuard
             Act(at, () => at.EnqueueBroadcast(new GameMessageSystemChat(text, ChatMessageType.Broadcast), SPEECH_RANGE));
         }
 
-        // ------------------------------------------------------------------ nothing of a scene is ever left behind (ticket 261028-0024)
-        // The owner logged in after a stopped test scene and met Bael on the rock and a shadow, with Asheron gone: their
-        // timed removal (an action on the object itself) never ran, and only their 15-minute Lifespan took them. Now every
-        // actor is tracked: one that is retired is removed from the world thread if it is still there GRACE seconds on,
-        // and while no scene runs any scene actor left in Cragstone (902614-902618) is removed.
+        // nothing of a scene is ever left behind
         static readonly List<WorldObject> s_Spawned = new List<WorldObject>();
         static readonly Dictionary<WorldObject, double> s_Retired = new Dictionary<WorldObject, double>();
         static double s_NextSweep;
 
-        /// <summary>Never saved to the shard: ACE keeps any dynamic object a generator did not make, so after a restart the
-        /// scene's Bael (on the rock), Asheron and the shadows came back with no scene around them (ticket 261028-0024).</summary>
         internal static bool NeverSave(WorldObject o)
         {
             if (o == null) return false;
@@ -452,20 +410,7 @@ namespace RevivalGuard
             }
         }
 
-        // ------------------------------------------------------------------ Bael's scripted melee
-        // ACE's monster AI fought this body at every turn (box tests 2026-10-28: it stalled, went home, took Asheron as a
-        // target it cannot fight, and his sword stance has no run). The scene does it all, the way the slam and bolts are
-        // done: every tick he picks the nearest player within ENGAGE m (not on the rock), or Asheron when there is none;
-        // out of reach he sheathes to peace (his body runs only there) and runs in; within reach he takes the sword stance,
-        // turns and swings every SWING_EVERY s, and a player still in reach SWING_DELAY later takes SWING_FRAC of max health
-        // (through the scene's cap). Asheron takes the blows as a show (he takes no damage).
-        // Owner's replay 2026-10-29 (ticket 261029-0003): "beal stood there not attacking for a good amount of the fight ... i
-        // want him killing everyone." Why he stood: every move goal was clamped to a box (x 158 to 190, y 102 to 130), so a
-        // player outside it (the north shore, the west bank) gave a goal where he already stood, out of reach, for good. Now
-        // the only limit is the rock's footprint, he runs to SWING_AT m of his target, and a watchdog (WATCHDOG_S without an
-        // attack while a player is within ENGAGE) closes the gap at once (a blink to his target) and swings. He hits hard:
-        // SWING_FLAT + SWING_FRAC of max health, at most SWING_MAX, so a low-level player falls in a hit or two and a high one
-        // feels it. Players beyond FAR_AT get a spell from him between swings, every FAR_EVERY s.
+        // Bael's scripted melee
         const float REACH = 8f, SWING_AT = 4f, FAR_AT = 14f;
         const double SWING_EVERY = 2.2, SWING_DELAY = 0.6, MOVE_EVERY = 1.0;   // damage: LightbringerFightRule.SwingFrac
         const double WATCHDOG_S = 3.0, FAR_EVERY = 7.0;
@@ -474,7 +419,6 @@ namespace RevivalGuard
         static int s_RateSwings, s_RateHits, s_RateSpells, s_RateDogs;
         static readonly MotionCommand[] SWINGS = { MotionCommand.AttackHigh1, MotionCommand.AttackMed1, MotionCommand.AttackLow1 };
 
-        /// <summary>A spot SWING_AT m short of the target on Bael's side, never in the rock (north of it instead).</summary>
         static Position Approach(Creature b, WorldObject target, float stop)
         {
             var tp = target.Location.Pos; var bp = b.Location.Pos;
@@ -520,7 +464,7 @@ namespace RevivalGuard
                 s_NextSwing = now;   // and swings at once
             }
 
-            // a player far off gets a spell between swings (they were never touched while he fought the near ones)
+            // a player far off gets a spell between swings
             if (!duel && now >= s_NextFar && now >= s_NextSwing)
             {
                 var far = PlayersNear(b, RANGED).Where(p => p.Location.DistanceTo(b.Location) > FAR_AT && !LightbringerSceneRule.InRock(p.Location.PositionX, p.Location.PositionY)).ToList();
@@ -579,7 +523,7 @@ namespace RevivalGuard
             chain.EnqueueChain();
         }
 
-        /// <summary>Bael's attacks in the last minute, in the log (owner 261029-0003: "always be a threat").</summary>
+        /// <summary>Bael's attacks in the last minute, in the log.</summary>
         static void RateLog(double now)
         {
             if (s_NextRate == 0) { s_NextRate = now + 60; return; }
@@ -589,10 +533,7 @@ namespace RevivalGuard
             s_RateSwings = s_RateHits = s_RateSpells = s_RateDogs = 0;
         }
 
-        // ------------------------------------------------------------------ he draws to fight, sheathes to chase
-        // Bael's body (retail 8821's motion table) has no run in a sword stance: with the sword in hand he stood still while
-        // players were 15 m off (box test 2026-10-28; unarmed he ran to them). So the blade goes to his pack when his target
-        // is out of reach, he runs in, and he draws it again within reach. At most one change every 3 s.
+        // he draws to fight, sheathes to chase
         const float DRAW_AT = 8f, SHEATHE_AT = 11f;   // he stops to swing ~6 m out, center to center (scale 3)
         static double s_NextBlade;
 
@@ -618,7 +559,6 @@ namespace RevivalGuard
             }
         }
 
-        // ------------------------------------------------------------------ Bael never stuck in the rock (0024)
         static readonly LightbringerSceneRule.StuckWatch s_Stuck = new LightbringerSceneRule.StuckWatch();
         static double s_LastUnstick, s_NextTrail, s_LastEngageLog, s_NextDuel;
         internal static int s_Unsticks;
@@ -638,12 +578,10 @@ namespace RevivalGuard
             var safe = LightbringerSceneRule.NearestSafe(p.X, p.Y);
             if (!LightbringerSceneRule.InRock(p.X, p.Y))
             {
-                // Out of the rock, a stall is his AI pausing between swings or casts (it read as stuck and cost him his
-                // target mid-chase, box test 2026-10-28): only a target standing on the rock, which he cannot reach, is let go
+                // Out of the rock, a stall is his AI pausing between swings or casts: only a target standing on the rock, which he cannot reach, is let go
                 var tg = b.AttackTarget;
                 if (tg?.Location == null || !LightbringerSceneRule.InRock(tg.Location.PositionX, tg.Location.PositionY)) return;
-                // already on open ground, his target out of reach (on the rock): he lets that one go instead of blinking
-                // in place every 3 s (box test 2026-10-28)
+                // already on open ground, his target out of reach (on the rock): he lets that one go instead of blinking in place every 3 s
                 var gone = b.AttackTarget;
                 Act(b, () => { if (b.AttackTarget == gone) b.AttackTarget = null; });
                 return;
@@ -684,8 +622,6 @@ namespace RevivalGuard
             c.Location = at;
             c.Lifespan = 900;   // gone by itself if a stop is ever missed
             lock (s_Lock) s_Spawned.Add(c);
-            // ACE puts a creature's wield list in its pack and equips it later from the monster AI, which a non-attacking
-            // NPC never reaches: Asheron's staff and Bael's sword are put in their hands before they enter (0019, 0021)
             try { c.EquipInventoryItems(); } catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] LightbringerScene: equip {wcid}: {e.Message}"); }
             WorldManager.EnqueueAction(new ActionEventDelegate(() =>
             {
@@ -716,11 +652,7 @@ namespace RevivalGuard
             chain.EnqueueChain();
         }
 
-        // ------------------------------------------------------------------ timed actions on the world thread
-        // The scene's timed actions used to be ActionChains on the creatures themselves. On a fighting creature some never
-        // ran: Bael's heal below 40% in the owner's 22:30 playtest (261028-0026, -0027), and the removal of Bael and a
-        // shadow after a stopped scene (0024). Now every step goes into this queue, run from the world thread
-        // (WorldManager.EnqueueAction, as spawns already were), each at its due time.
+        // timed actions on the world thread
         sealed class Seq
         {
             readonly List<(double at, WorldObject wo, Action a)> m_Steps = new List<(double, WorldObject, Action)>();
@@ -736,7 +668,7 @@ namespace RevivalGuard
         static readonly object s_LaterLock = new object();
         static readonly List<(double at, WorldObject wo, Action a)> s_Later = new List<(double, WorldObject, Action)>();
 
-        /// <summary>Runs the due steps, in order, on the world thread. Called every world tick (not throttled).</summary>
+        /// <summary>Runs the due steps, in order, on the world thread.</summary>
         internal static void RunLater()
         {
             List<(double at, WorldObject wo, Action a)> due = null;
@@ -786,7 +718,6 @@ namespace RevivalGuard
             Act(bael, () => bael.TryCastSpell(new Spell(METEOR), target, bael, null, false, false, false));
         }
 
-        /// <summary>He leaves the rock and lands in the water before Asheron: the rock's Bael never fights, the landed one does.</summary>
         static void Leap()
         {
             var rock = s_Bael;
@@ -811,7 +742,7 @@ namespace RevivalGuard
             if (from == Who.Bael && Closing(src)) return;                // closing on a player: no turn toward Asheron
             var ids = from == Who.Bael ? BAEL_BOLTS : ASHERON_BOLTS;
             uint id = ids[s_Rng.Next(ids.Length)];
-            // the cast is seen: in the magic stance, turned to the other, the cast gesture, then the bolt (ticket 261028-0013)
+            // the cast is seen: in the magic stance, turned to the other, the cast gesture, then the bolt
             var chain = new Seq();
             chain.AddAction(src, () =>
             {
@@ -832,8 +763,7 @@ namespace RevivalGuard
             chain.EnqueueChain();
         }
 
-        /// <summary>Asheron keeps 8 to 16 m from Bael with a clear line to him; otherwise he runs to a spot 11 m from Bael on
-        /// his own side (his bolts flew into the rock in the owner's playtest, 261028-0020). True: he can cast from here.</summary>
+        /// <summary>Asheron keeps 8 to 16 m from Bael with a clear line to him; otherwise he runs to a spot 11 m from Bael on his own side.</summary>
         static bool InPosition(Creature a, Creature b) => CanCast(a, b, out bool sees) || MoveToCast(a, b, sees);
 
         static bool CanCast(Creature a, Creature b, out bool sees)
@@ -859,12 +789,8 @@ namespace RevivalGuard
             return false;
         }
 
-        // ------------------------------------------------------------------ his knock-back slam (owner 2026-10-28)
-        // "some bosses have knock-back. i think this boss should also have it." The Unbound Queen's pattern: the shadowfall
-        // telegraph (BossWarning.Warn) and a line, SLAM_DELAY to step clear, then every player within SLAM_RADIUS is hit
-        // (SLAM_FRAC of max health, through the scene's damage cap) and knocked back (Knockback.PushFrom: our client moves;
-        // retail clients are not sent it). Never toward the rock: a push whose landing would be in its footprint goes north.
-        const float ENGAGE = 40f, RANGED = 45f;   // he duels Asheron only with no player within ENGAGE (261029-0003)
+        // his knock-back slam
+        const float ENGAGE = 40f, RANGED = 45f;   // he duels Asheron only with no player within ENGAGE
         const double SLAM_DELAY = 2.0, SLAM_RADIUS = 7.0, SLAM_FRAC = 0.08, SLAM_PUSH_M = 4.5;
         const float SLAM_H = 7f, SLAM_UP = 3f;
 
@@ -872,7 +798,6 @@ namespace RevivalGuard
             b?.Location == null ? null : PlayersNear(b, ENGAGE).Where(p => !LightbringerSceneRule.InRock(p.Location.PositionX, p.Location.PositionY))
                                                               .OrderBy(p => p.Location.DistanceTo(b.Location)).FirstOrDefault();
 
-        /// <summary>A player within ENGAGE (not on the rock): Bael's AI is closing to melee and must not be turned.</summary>
         static bool Closing(Creature b) =>
             b?.Location != null && PlayersNear(b, ENGAGE).Any(p => !LightbringerSceneRule.InRock(p.Location.PositionX, p.Location.PositionY));
 
@@ -918,14 +843,12 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] LightbringerScene: Bael's slam, {hit} hit");
         }
 
-        /// <summary>Bael's own spells at the players around him, every 10 s once landed (ticket 261028-0021): his Nether
-        /// Streak and Arc, or Demon's Tongues; capped like his blows (MAX_SHARE per WINDOW_S).</summary>
+        /// <summary>Bael's own spells at the players around him, every 10 s once landed</summary>
         static void BaelSpell()
         {
             var b = s_Bael;
             if (b == null || b.IsDestroyed || b.WeenieClassId != BAEL_FIGHT || b.CurrentLandblock == null) return;
-            // A scripted cast turns him and plays a gesture, which cancels the walk his AI just started: while a player is
-            // within ENGAGE he is closing to melee, so the scripted spells wait (box test 2026-10-28)
+            // A scripted cast turns him and plays a gesture, which cancels the walk his AI just started
             if (Closing(b)) return;
             // his reach: players beyond his blade (more than 6 m) first, up to RANGED m; anyone near if none is farther
             var near = PlayersNear(b, RANGED).ToList();
@@ -941,7 +864,7 @@ namespace RevivalGuard
             chain.EnqueueChain();
         }
 
-        /// <summary>Asheron takes his stance against the landed Bael (he stood idle in the owner's playtest, 261028-0013).</summary>
+        /// <summary>Asheron takes his stance against the landed Bael.</summary>
         static void AsheronReady()
         {
             var a = s_Asheron; var b = s_Bael;
@@ -949,16 +872,7 @@ namespace RevivalGuard
             Act(a, () => { if (a.CombatMode != CombatMode.Magic) a.SetCombatMode(CombatMode.Magic); if (b != null && !b.IsDestroyed) Face(a, b); });
         }
 
-        // ------------------------------------------------------------------ Asheron, scripted (owner 2026-10-28)
-        // "asheron didnt fight very well. he didnt even face bael for much of the fight. also can he heal players around
-        // him? i want asheron casting spells the whole time." ACE's Creature.TurnTo(WorldObject) never turns the server's
-        // own heading, so the next position update snapped him back to where he had been looking. Now the scene drives
-        // him like Bael's melee: each cycle he faces Bael (a heading turn the server keeps, Face), plays the spell's own
-        // windup and cast gestures as a player mage does (its scarabs and talisman, at the player cast speed), and looses
-        // a retail war spell (bolt, streak or arc) on Bael, his share capped as before (CapOnActor). Out of his 8 to 16 m
-        // with a clear line he runs to a spot that has one first. Every ASH_HEAL_EVERY s or so the cycle is a heal on the
-        // most wounded player within ASH_HEAL_RANGE m instead: the Heal Other gestures, the heal effect, ASH_HEAL_FRAC of
-        // their max health, and now and then a line. Never on Bael.
+        // Asheron, scripted
         static bool s_AshOn;
         static double s_AshBusy, s_AshNextMove, s_AshNextHeal, s_AshNextLine;
         static int s_AshHeals, s_AshLine;
@@ -979,8 +893,7 @@ namespace RevivalGuard
             "Be whole again, and strike true.",
         };
 
-        /// <summary>Turns c to face t with a heading the server keeps (ACE's TurnTo(Position) sets Location's rotation when
-        /// the turn completes). Returns the turn's time.</summary>
+        /// <summary>Turns c to face t with a heading the server keeps.</summary>
         static float Face(Creature c, WorldObject t)
         {
             if (c.Location == null || t?.Location == null) return 0f;
@@ -1076,14 +989,9 @@ namespace RevivalGuard
             }
         }
 
-        // ------------------------------------------------------------------ the fight's rules (owner 2026-10-29)
-        // Approved: (1) Shards of Light rise in the red water; carried to Asheron (or brought close to Bael) each weakens
-        // him in visible stages, his heal fading; (2) win or lose: enough shards and Asheron banishes him, everyone who
-        // fought earns Asheron's Defender; too few and he withdraws mocking; (3) Asheron shields a player about to die near
-        // him, once a fight; (4) telegraphed meteors fall on the fighters; (5) a second phase from the halfway mark. All of
-        // it scales to who is fighting (LightbringerFightRule): "a real threat that a group of the players present can beat".
+        // the fight's rules
         const double FIGHT_FROM = 94, PHASE2_AT = 290, SHARDS_UNTIL = 478;
-        const float SHARD_SCALE = 9.0f, SHARD_LIFT = 0.4f;   // 3x read as a blip at 30 m and 6x as a small blob (box captures 2026-10-29)
+        const float SHARD_SCALE = 9.0f, SHARD_LIFT = 0.4f;   // 3x read as a blip at 30 m and 6x as a small blob
         const double SHARD_PULSE = 2.5;   // every second pulse also raises retail's level-up pillar of light (a beam to see from afar)
         static double s_NextPulse; static int s_Pulse;
         const uint SHARD_BASE = 31879;            // retail's Radiant Shard: its look; the name and purpose are the scene's
@@ -1131,11 +1039,10 @@ namespace RevivalGuard
             {
                 var holder = (o.Container as Player) ?? (o.Container?.Container as Player);
                 if (holder == null || holder.IsDead || holder.Location == null) continue;
-                // the first pickup explains itself (owner 2026-10-29: "why am i getting them")
+                // the first pickup explains itself
                 if (s_ShardTold.Add(holder.Guid.Full))
                     holder.SendMessage("A Shard of Light! Carry it to Asheron to weaken Bael'Zharon.", ChatMessageType.Broadcast);
-                // given to Asheron only, by walking up to him (it left his pack at once near Bael before: "they seem to
-                // leave my inventory after being picked up")
+                // given to Asheron only, by walking up to him
                 bool toAsh = s_Asheron?.Location != null && holder.Location.DistanceTo(s_Asheron.Location) <= DELIVER_ASHERON;
                 if (toAsh) Deliver(holder, o, true, b);
                 if (s_Won) return;
@@ -1178,19 +1085,14 @@ namespace RevivalGuard
         {
             var wo = WorldObjectFactory.CreateNewWorldObject(SHARD_BASE);
             if (wo == null) { Mod.Log.Warn($"[RevivalGuard] LightbringerScene: shard weenie {SHARD_BASE} missing"); return; }
-            // Where players fight. The owner asked for the shallows (261029-0012: "shards are hard to see in the red
-            // water"), but ACE's terrain data has no shallows here: every cell from the rock to 30 m north of Asheron is
-            // entirely water (the map is logged at each scene's start; the shore is 30-50 m north and far west). So the
-            // shards stay in the fight and are made visible instead: three times their size, a light pulse every 2.5 s.
+            // Where players fight.
             for (int tries = 0; tries < 12; tries++)
             {
                 float x = 166f + (float)s_Rng.NextDouble() * 24f, y = 103f + (float)s_Rng.NextDouble() * 25f;
                 if (LightbringerSceneRule.InRock(x, y)) continue;
                 var at = new Position(CellOf(x, y), x, y, 1.15f, 0f, 0f, 0f, 1f);
                 if (b.Location.DistanceTo(at) < 6f) continue;   // not under his feet
-                // above the water, not under it (owner 2026-10-29, a screenshot: the red surface drew over them). The water
-                // is drawn at the terrain plane (AcWaterFx.Depth; retail draws it where the terrain is) and bodies sink
-                // below it, so 1.15 (the players' feet here) was under the surface (about 2.0): float SHARD_LIFT over it.
+                // above the water, not under it.
                 try { at.PositionZ = at.GetTerrainZ() + SHARD_LIFT; } catch { at.PositionZ = 2.0f + SHARD_LIFT; }
                 wo.Location = at;
                 break;
@@ -1200,7 +1102,7 @@ namespace RevivalGuard
             wo.LongDesc = "A shard of Asheron's light, torn from the red water. Carry it to Asheron and he will turn its light against the Hopeslayer.";
             wo.Value = 0;
             wo.Lifespan = 600;   // it crumbles by itself in any pack it is left in
-            wo.ObjScale = SHARD_SCALE;   // big enough to read from across the water (261029-0012)
+            wo.ObjScale = SHARD_SCALE;   // big enough to read from across the water
             wo.GravityStatus = false;    // it hovers where it is put
             lock (s_Lock) s_ShardItems.Add(wo);
             WorldManager.EnqueueAction(new ActionEventDelegate(() =>
@@ -1224,8 +1126,7 @@ namespace RevivalGuard
             var w = Water(cell);
             if (w == 'P') return true;
             if (w != 'N') return false;
-            // a land cell beside a water one: the water's edge, on the land side (box 2026-10-29: no part-water cell in
-            // the fight's area, so the first rule never matched)
+            // a land cell beside a water one: the water's edge, on the land side
             int i = (int)(cell & 0xFFFF) - 1, cx = i / 8, cy = i % 8;
             for (int dx = -1; dx <= 1; dx++)
                 for (int dy = -1; dy <= 1; dy++)
@@ -1358,6 +1259,7 @@ namespace RevivalGuard
                     p.QuestManager.Stamp(WIN_STAMP);
                     p.AddTitle(TITLE_DEFENDER);
                     given++;
+                    LookItems.LightbringerWon(p);
                     p.SendMessage(had ? "You stood with Asheron again, and Bael'Zharon was driven off."
                                       : "You stood with Asheron, and Bael'Zharon was driven off. You have earned the title Asheron's Defender.", ChatMessageType.Broadcast);
                 }
@@ -1400,8 +1302,7 @@ namespace RevivalGuard
             s_Fogged.Clear();
         }
 
-        /// <summary>A meteor's telegraph on the chosen player (the shadowfall on our client, a red glow and words on any),
-        /// then METEOR_WARN later the spot is struck: everyone still within METEOR_RADIUS of it is hit.</summary>
+        /// <summary>A meteor's telegraph on the chosen player, then METEOR_WARN later the spot is struck</summary>
         static void MeteorFall(Creature b, Player target)
         {
             var spot = new Position(target.Location);
@@ -1432,8 +1333,7 @@ namespace RevivalGuard
                 if (p.Session != null && ModChannel.Capable(p.Session)) ModChannel.Send(p.Session, "vfx", payload);
         }
 
-        /// <summary>Any blow on a player during the fight: a killing one, near Asheron, is turned aside once per player per
-        /// fight (his shield, SHIELD_S of safety, back to SHIELD_TO of max health).</summary>
+        /// <summary>Any blow on a player during the fight: a killing one, near Asheron, is turned aside once per player per fight.</summary>
         internal static void Shield(Player p, ref float amount)
         {
             if (s_Steps == null || s_Won || amount <= 0 || p == null) return;
@@ -1491,7 +1391,7 @@ namespace RevivalGuard
             s_ShardItems.Clear();
         }
 
-        // ------------------------------------------------------------------ he heals himself, visibly (ticket 261028-0014)
+        // ------------------------------------------------------------------ he heals himself, visibly
         static double s_LastHeal, s_LastHealLine;
         static int s_Heals, s_AsheronBolts, s_AsheronHits;
         /// <summary>For @lbscene status: degrees between Asheron's server heading and Bael.</summary>
@@ -1500,7 +1400,7 @@ namespace RevivalGuard
             try { return s_Asheron?.Location != null && s_Bael?.Location != null ? $"{s_Asheron.GetAngle(s_Bael):F0}" : "-"; } catch { return "?"; }
         }
         static int s_HealLine;
-        const double HEAL_BELOW = 0.4, HEAL_EVERY = 45, HEAL_LINE_EVERY = 0;   // rare and meaningful (ticket 261028-0022)
+        const double HEAL_BELOW = 0.4, HEAL_EVERY = 45, HEAL_LINE_EVERY = 0;   // rare and meaningful
         static readonly string[] HEAL_LINES =
         {
             "Your blows are nothing. The Nameless mends what you break.",
@@ -1508,12 +1408,9 @@ namespace RevivalGuard
             "Did you think me so easily wounded? Again!",
         };
 
-        /// <summary>Below half health (or near the floor), at most every HEAL_EVERY s: the cast gesture, a heal effect, a line
-        /// now and then, and he is whole again. Never silently each tick, as the first build did.</summary>
+        /// <summary>Below half health, at most every HEAL_EVERY s</summary>
         static void HealCheck(double now, Creature b)
         {
-            // One rule, no fast path: the floor case (every 3 s at 10%) chained six heals in a row in the owner's second
-            // playtest. At 1 health he simply cannot be hurt further (CapOnActor) until the heal comes round.
             double frac = (double)b.Health.Current / Math.Max(1u, b.Health.MaxValue);
             if (frac >= HEAL_BELOW || now - s_LastHeal < HEAL_EVERY) return;
             double scale = LightbringerFightRule.HealScale(s_Stage);
@@ -1546,7 +1443,7 @@ namespace RevivalGuard
             chain.EnqueueChain();
         }
 
-        // ------------------------------------------------------------------ his shadows (ticket 261028-0015)
+        // ------------------------------------------------------------------ his shadows
         static readonly uint[] SHADOWS = { 23564, 23091 };   // Tenebrous Shadow (100), Shadow Wraith (135): retail's shadow creatures
         static readonly List<Creature> s_Adds = new List<Creature>();
 
@@ -1556,7 +1453,7 @@ namespace RevivalGuard
             if (b == null || b.IsDestroyed || b.WeenieClassId != BAEL_FIGHT || b.Location == null) return;
             s_Adds.RemoveAll(c => c == null || c.IsDestroyed || c.IsDead);
             int players = PlayersNear(b, 60f).Count();
-            int n = Math.Min(LightbringerFightRule.Shadows(Math.Max(players, s_FightN), s_Phase), 16 - s_Adds.Count);   // scaled (owner 2026-10-29), at most 16 up
+            int n = Math.Min(LightbringerFightRule.Shadows(Math.Max(players, s_FightN), s_Phase), 16 - s_Adds.Count);   // scaled, at most 16 up
             if (n <= 0) return;
             Act(b, () =>
             {
@@ -1578,12 +1475,8 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] LightbringerScene: {n} shadow(s) summoned ({players} player(s) near)");
         }
 
-        // ------------------------------------------------------------------ no drudges in the water while he is there (261028-0015)
+        // ------------------------------------------------------------------ no drudges in the water while he is there
         const uint DRUDGE_GEN_GUID = 0x7BC9D003;   // Drudge Stalker/Ravener generator (35445) beside the rock, landblock 0xBC9D
-        // Owner 2026-10-29: "drudges are still showing in the middle of the fight". The first hold paused one generator
-        // (by its guid) and cleared drudges once, at the start: other drudge generators in and around 0xBC9D kept spawning,
-        // and drudges walked in. Now every generator whose profile makes a Drudge, in 0xBC9D and the eight landblocks around
-        // it, is held for the whole scene, and any drudge within DRUDGE_CLEAR m of the rock is removed every few seconds.
         const float DRUDGE_CLEAR = 110f;
         static readonly List<ACE.Server.Entity.GeneratorProfile> s_HeldProfiles = new List<ACE.Server.Entity.GeneratorProfile>();
         static double s_NextDrudgeSweep; static int s_DrudgesCleared;
@@ -1734,11 +1627,10 @@ namespace RevivalGuard
             s_Taken[p.Guid.Full] = (e.since, e.taken + amount);
         }
 
-        /// <summary>Damage to the scene's Bael or Asheron: Asheron takes none; Bael never takes his last point.</summary>
         internal static void CapOnActor(Creature c, ref float amount, WorldObject source = null)
         {
             if (c.WeenieClassId == ASHERON) { amount = 0; return; }
-            if (source?.WeenieClassId == ASHERON) { s_AsheronHits++; amount = Math.Min(amount, c.Health.MaxValue * 0.04f); }   // Asheron wears him down, never alone
+            if (source?.WeenieClassId == ASHERON) { s_AsheronHits++; amount = Math.Min(amount, c.Health.MaxValue * 0.04f); }
             float room = Math.Max(0, (int)c.Health.Current - 1);
             if (amount > room) amount = room;
         }
@@ -1830,7 +1722,6 @@ namespace RevivalGuard
                 }
                 else if (verb == "stuck")
                 {
-                    // test the watchdog: put the landed Bael at the foot of the rock where the owner found him (169.7, 79)
                     var bb = s_Bael;
                     if (bb == null || bb.WeenieClassId != BAEL_FIGHT) { Reply(session, "Needs the landed Bael (after the leap)."); return; }
                     Act(bb, () => bb.FakeTeleport(new Position(CellOf(169.7, 79.0), 169.7f, 79.0f, 1.11f, 0f, 0f, 0f, 1f)));
@@ -1838,8 +1729,7 @@ namespace RevivalGuard
                 }
                 else if (verb == "curse" || verb == "gift")
                 {
-                    // test the rules on yourself as if you had struck him / spoken to him (the hooks are DamageHistory.Add
-                    // and Player.HandleActionTalk; this calls what they call)
+                    // test the rules on yourself as if you had struck him / spoken to him
                     var me = session?.Player;
                     if (me == null || s_Bael == null || s_Bael.IsDestroyed) { Reply(session, "Needs a running scene and a character in the world."); return; }
                     if (verb == "curse") { s_CursedAt.Remove(me.Guid.Full); OnHit(s_Bael.WeenieClassId == BAEL_FIGHT ? s_Bael : null, me); }
@@ -1908,9 +1798,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Bael has 23 spells, so ACE's AI often chose a spell and, in spell range, only turned to face his target:
-    /// he stood and cast while players were close (owner 2026-10-28, "he doesnt come to me to fight when im in range").
-    /// The scene's Bael fights hand to hand with anyone within ENGAGE m (he closes in), and casts at those farther out.</summary>
+    /// <summary>Bael has 23 spells, so ACE's AI often chose a spell and, in spell range, only turned to face his target</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.GetNextAttackType))]
     static class LightbringerSceneAttackType
     {
@@ -1924,12 +1812,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Asheron moving near Bael "alerted" him (Creature.AlertMonster sets the monster's AttackTarget to the mover),
-    /// so every reposition turned Bael from the players to Asheron, an NPC ACE's AI cannot fight: he walked into him and
-    /// stalled (box test 2026-10-28). The scene's actors never alert one another.</summary>
-    /// <summary>ACE's FindNextTarget (every 5 s) found no target it liked and sent the landed Bael home mid-chase
-    /// (MoveToHome: he snapped back to (180, 103), box test 2026-10-28). The scene chooses his foe (the nearest player within
-    /// ENGAGE m, not on the rock); with one, that is his target and he is not sent home.</summary>
+    /// <summary>Asheron moving near Bael "alerted" him, so every reposition turned Bael from the players to Asheron</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.FindNextTarget))]
     static class LightbringerSceneFindTarget
     {
@@ -2041,9 +1924,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>The landed Bael is level 899 (retail 8821's body) and resisted every bolt, so Asheron's casts and the players'
-    /// war spells did nothing and his self-heal never showed (box test 2026-10-28). Projectiles that hit him are not
-    /// resisted; the damage caps and his visible heal keep him standing.</summary>
     [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.TryResistSpell))]
     static class LightbringerSceneResist
     {
@@ -2055,9 +1935,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>ACE lets no creature hurt another (only combat pets): Asheron's bolts flew and did nothing, so Bael never
-    /// needed to heal. The scene's Asheron and Bael may damage each other; Asheron's share is capped (CapOnActor) and
-    /// Asheron himself takes none.</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.CanDamage))]
     static class LightbringerSceneCanDamage
     {

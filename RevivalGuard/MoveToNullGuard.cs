@@ -6,17 +6,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A FINISHED MOVE-TO WITH NO PARAMETERS CANNOT CRASH THE SERVER (live crash 2026-10-18 14:42 UTC). Player.OnMoveComplete
-    /// calls OnMoveComplete_MoveTo2 whenever IsPlayerMovingTo2 is set, and that reads MoveToParams.Callback with no null
-    /// check. CheckMoveToParams (a new use or a cancel) clears MoveToParams without clearing IsPlayerMovingTo2, so a server
-    /// move that completed after it threw NullReferenceException on the physics thread and the process died.
-    ///
-    /// The patch is on OnMoveComplete, not OnMoveComplete_MoveTo2: the crash's stack has no frame for the inner method,
-    /// so the JIT inlined it and a patch there could be skipped. With no parameters there is nothing to call back, so an
-    /// empty MoveToParams (no callback) is put in its place: ACE's own "Callback == null" path then finishes the move,
-    /// and the spell half of OnMoveComplete still runs. Logged once per player.
-    /// </summary>
+    /// <summary>A finished move-to with no parameters cannot crash the server.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.OnMoveComplete))]
     static class MoveToNullGuard
     {

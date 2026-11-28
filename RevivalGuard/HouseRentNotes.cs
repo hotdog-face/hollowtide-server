@@ -11,22 +11,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// TRADE NOTES PAY THE PYREAL PART OF HOUSE MAINTENANCE, WITH CHANGE. Ours, not retail. Owner, 2026-10-01:
-    /// "we should allow players to pay maintenance with mmds".
-    ///
-    /// Stock ACE already lets a note into the rent (HousePayment.GetConsumeItems counts PromissoryNotes toward
-    /// wcid 273, and HouseProfile.SetPaidItems counts a note in the slumlord at its Value), but it takes whole
-    /// notes and caps Paid at the rent: one 250,000 MMD against 50,000 owed vanished 200,000 pyreals. So when the
-    /// payment carries notes, this replaces the payment:
-    ///   - the non-note items go through ACE's own GetConsumeItems / TryConsumeItemForRent, as before;
-    ///   - each note pays its face value toward the PYREAL rent still owed (smallest notes first); the slumlord
-    ///     is credited in pyreals (coin stacks in its inventory, which is what IsRentPaid, ProcessRent and the
-    ///     house panel all read), and any overpayment comes back as notes and pyreals;
-    ///   - the change is checked against the pack first: no room, no payment, the note stays.
-    /// Trade-good rent items still need the real items. A note given (dragged) onto an owned house's slumlord
-    /// is routed into the same payment.
-    /// </summary>
+    /// <summary>Trade notes pay the pyreal part of house maintenance, with change.</summary>
     static class HouseRentNotes
     {
         const uint PYREAL = 273;
@@ -40,7 +25,7 @@ namespace RevivalGuard
         static int UnitValue(WorldObject note) =>
             note.StackUnitValue ?? ((note.Value ?? 0) / Math.Max(1, note.StackSize ?? 1));
 
-        /// <summary>The whole maintenance payment when notes are in it. Runs on the player's own action thread.</summary>
+        /// <summary>The whole maintenance payment when notes are in it.</summary>
         internal static void Pay(Player p, SlumLord slumlord, List<WorldObject> others, List<(WorldObject note, int units)> notes)
         {
             bool consumed = false;
@@ -72,8 +57,7 @@ namespace RevivalGuard
             Say(p, $"Maintenance {(slumlord.IsRentPaid() ? "" : "partially ")}paid.");
         }
 
-        /// <summary>Pays notes toward the pyreal rent owed. Returns pyreals credited, 0 when none were owed,
-        /// -1 when refused (the reason already told).</summary>
+        /// <summary>Pays notes toward the pyreal rent owed.</summary>
         static long PayWithNotes(Player p, SlumLord slumlord, List<(WorldObject note, int units)> notes)
         {
             if (notes.Count == 0) return 0;

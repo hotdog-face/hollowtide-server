@@ -19,56 +19,7 @@ using EntityBiota = ACE.Entity.Models.Biota;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// @SNAPSHOT: A COPY OF A CHARACTER YOU CAN PUT BACK.
-    ///
-    /// From docs/ADMIN-AND-VENUE-IDEAS.md §2 item 5: "Before you let someone test a risky thing, take
-    /// a copy; if it goes wrong, put it back." Deletes on this shard are not restorable
-    /// (char_delete_time=0), PvP costs real items, and @copychar (ACE's starting point) makes a NEW
-    /// character with a new id, which breaks everything keyed on the old one. This keeps the id.
-    ///
-    /// WHAT A SNAPSHOT IS. Everything the database holds for one character, read back through ACE's
-    /// own loaders (the same calls @copychar and the login path make) and written as JSON beside the
-    /// mod dll: the player biota (stats, skills, spells, enchantments, position, options), every
-    /// possession's biota (worn and in packs, nested packs included) and the character rows (quest
-    /// flags, titles, friends, shortcuts, spell bars, contracts, fill-comp book, squelches,
-    /// gameplay options). Snapshots/&lt;id&gt;_&lt;Name&gt;/&lt;UTC stamp&gt;.json. An online character
-    /// is saved first, so the file is what the database would hold if they logged out now.
-    ///
-    /// A snapshot is refused if it does not survive its own round trip (serialise, deserialise,
-    /// serialise, compare): a file that cannot be read back exactly must not be offered for restore.
-    ///
-    /// WHAT RESTORE DOES, and what it deliberately does not:
-    ///
-    ///   * The character must be OFFLINE, with NO SESSION on the account (a client at the character
-    ///     list holds stale objects that would be written back on login), NOT deleted or pending
-    ///     deletion, and NOT in an allegiance (AllegianceManager keeps its own reference to the
-    ///     offline player object and would save the old state over the new).
-    ///   * The player's own row keeps its id and is updated in place through SaveBiota, the path
-    ///     every save takes.
-    ///   * Possessions: an item the character still holds (same id) is updated in place. An item the
-    ///     character no longer holds comes back as a NEW COPY under a fresh guid, never under the old
-    ///     id: ACE re-issues freed ids from sequence gaps, and an item that was traded or looted is
-    ///     now somebody else's row. Their copy is not touched; the restored character gets a
-    ///     duplicate. That is a dupe by construction, so the verb is Admin only, needs a confirm, and
-    ///     names every re-issued item in the Audit channel. An item the character holds now that the
-    ///     snapshot does not know is removed.
-    ///   * Character rows are reconciled row by row on the tracked object (update in place, remove,
-    ///     add), which is how ACE's own CharacterExtensions erase quests, and saved with
-    ///     SaveCharacter. Name, account, deleted flags and login counters are kept as they are now.
-    ///   * The in-memory OfflinePlayer is swapped, because the login path takes the player biota
-    ///     from PlayerManager's offline copy, not from the database (WorldManager.PlayerEnterWorld).
-    ///     Without the swap a restore would be silently undone on login.
-    ///
-    ///   @snapshot take &lt;name&gt;[, label]      write one (online or offline)
-    ///   @snapshot list &lt;name&gt;               what is on disk, oldest first, numbered
-    ///   @snapshot restore &lt;name&gt; &lt;n&gt;         stage a restore: shows what would change, changes nothing
-    ///   @snapshot confirm                     do the staged restore (within two minutes)
-    ///   @snapshot cancel                      drop it
-    ///
-    /// Take and list are Sentinel; restore is Admin. Everything runs on the database thread, in
-    /// order with any save already queued. Admin command feedback is ours, not retail's.
-    /// </summary>
+    /// <summary>@SNAPSHOT: a copy of a character you can put back.</summary>
     public static class CharacterSnapshot
     {
         const int VERSION = 1;
@@ -132,8 +83,7 @@ namespace RevivalGuard
         static Staged s_Console;
         static readonly object s_Lock = new object();
 
-        // PlayerManager's offline dictionaries, private static, by name. Resolved once at Register:
-        // restore refuses when any is missing rather than finding out inside the database thread.
+        // PlayerManager's offline dictionaries, private static, by name.
         static Dictionary<uint, OfflinePlayer> s_Offline;
         static Dictionary<string, IPlayer> s_Names;
         static Dictionary<uint, Dictionary<uint, IPlayer>> s_Accounts;
@@ -157,10 +107,7 @@ namespace RevivalGuard
             if (!s_CanSwap)
                 Mod.Log.Error("[RevivalGuard] CharacterSnapshot: PlayerManager.offlinePlayers/playerNames/playerAccounts/playersLock not all found; @snapshot restore will refuse, take and list still work");
 
-            // No RequiresWorld: CommandManager refuses a RequiresWorld command when session is null,
-            // which is every command from the console FIFO. Take, list and restore run on
-            // PlayerManager and the database, never on a landblock, so the console may use them
-            // (2026-09-22: a console "snapshot take" of the owner's character was silently refused).
+            // No RequiresWorld: CommandManager refuses a RequiresWorld command when session is null, which is every command from the console FIFO.
             CommandManager.TryAddCommand(Handle, "snapshot", AccessLevel.Sentinel, CommandHandlerFlag.None,
                 "Take a copy of a character to disk, list the copies, or (Admin) stage and confirm putting one back.",
                 "take <name>[, label] | list <name> | restore <name> <n> | confirm | cancel");
@@ -243,8 +190,7 @@ namespace RevivalGuard
             var name = target.Name;
             var by = Who(session);
 
-            // The database is the source, so the live state goes there first. Both saves queue on
-            // the serialized shard database, ahead of the reads below.
+            // The database is the source, so the live state goes there first.
             if (online && target is Player p)
                 p.SavePlayerToDatabase();
             else if (target is OfflinePlayer op && op.ChangesDetected)
@@ -280,7 +226,7 @@ namespace RevivalGuard
                     };
                     snap.Level = snap.Player.PropertiesInt != null && snap.Player.PropertiesInt.TryGetValue(PropertyInt.Level, out var lvl) ? lvl : 0;
 
-                    // The round trip is the proof the file can be restored from. Refuse otherwise.
+                    // The round trip is the proof the file can be restored from.
                     var json = JsonSerializer.Serialize(snap, s_Json);
                     var again = JsonSerializer.Serialize(JsonSerializer.Deserialize<SnapshotFile>(json, s_Json), s_Json);
                     if (json != again)
@@ -394,8 +340,7 @@ namespace RevivalGuard
             lock (s_Lock) { if (s == null) s_Console = null; else s_Staged.Remove(s); }
         }
 
-        /// <summary>The conditions a restore needs, checked at stage and again at confirm. Null when
-        /// all hold, otherwise the reason in plain words.</summary>
+        /// <summary>The conditions a restore needs, checked at stage and again at confirm.</summary>
         static string Refusal(IPlayer target, bool online, SnapshotFile snap)
         {
             if (!s_CanSwap) return "this ACE build's PlayerManager does not expose its offline player list, so the restore could be undone on login; refused";
@@ -604,9 +549,7 @@ namespace RevivalGuard
                     if (swaps.TryGetValue(e.CasterObjectId, out var nv)) e.CasterObjectId = nv;
         }
 
-        /// <summary>Row-by-row onto the tracked Character: update what is there, remove what the file
-        /// lacks, add what it has. Never remove-then-add the same key in one save; EF still tracks the
-        /// removed row and refuses a second instance with its key.</summary>
+        /// <summary>Row-by-row onto the tracked Character: update what is there, remove what the file lacks, add what it has.</summary>
         static void Apply(CharacterRows s, Character c, Dictionary<uint, uint> swaps)
         {
             c.CharacterOptions1 = s.CharacterOptions1;

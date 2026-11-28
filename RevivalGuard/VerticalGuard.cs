@@ -8,20 +8,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// FLOATING (outside audit 2026-10-16, owner: "yes build the guard"). MovementGuard budgets the 2D distance only,
-    /// and ACE's own z-check (Player_Tick.cs, "z-pos hacking") compares against LastGroundPos and acts only while the
-    /// player is jumping, so a modified client that claims ground contact while it rises is never stopped: it can
-    /// stand in the air above a fight or a wall.
-    ///
-    /// Outdoors (a landscape cell, index under 0x100) the ground under the player is known on the server
-    /// (Landblock.GetZ, the terrain polygon). A player more than vertical.height metres above it for longer than
-    /// vertical.seconds is floating: a jump or a fall off a cliff is over in two or three seconds. Roofs, towers and
-    /// bridges are why the height is generous and why this starts as LOG ONLY: vertical.enforce (Tunables, off by
-    /// default) turns on the snap back to the last place the player stood within the height. The log line carries
-    /// the place, so a few days of logs show which structures honest players stand on before it enforces.
-    /// Indoors (dungeons, building interiors) is left to the cell's own walls and ACE's transition. Staff are exempt.
-    /// </summary>
+    /// <summary>Floating.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.UpdatePlayerPosition))]
     static class VerticalGuard
     {
@@ -38,8 +25,6 @@ namespace RevivalGuard
             {
                 var p = __instance;
                 if (forceUpdate || p == null || newPosition == null || p.Teleporting) return;
-                // ACCEPTED, NOT __result: UpdatePlayerPosition returns "crossed into another landblock", so a guard on
-                // __result saw almost nothing (box test 2026-10-17). An accepted update is one ACE copied into Location.
                 var at = p.Location;
                 if (at == null || at.Cell != newPosition.Cell || System.Numerics.Vector3.DistanceSquared(at.Pos, newPosition.Pos) > 0.0001f) return;
                 // staff are exempt, unless vertical.test_staff is set (box tests drive an admin character)

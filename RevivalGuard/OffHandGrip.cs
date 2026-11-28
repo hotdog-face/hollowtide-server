@@ -8,15 +8,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE OFF-HAND GRIP AS RETAIL SENT IT (owner 2026-10-24, "a spear held as a dual-wield sword";
-    /// docs/findings/weapon-audit-2026-10.md). ACE hangs every off-hand weapon on LeftWeapon with the
-    /// RightHandNonCombat placement; the retail captures show RightHandCombat for all of them and LeftUnarmed for a
-    /// cestus or nekode (OffHandGripRule). Both clients draw what the server says, so the fix is here.
-    /// ACE's "is the shield slot free" check (WieldedLocationIsAvailable via GetEquippedItems) compares hold points,
-    /// so with two off-hand hold points it is widened to anything already in the shield slot.
-    ///   @modifybool offhand_retail_grip false   ACE's grip
-    /// </summary>
+    /// <summary>The off-hand grip as retail sent it.</summary>
     static class OffHandGrip
     {
         internal const string P_ON = "offhand_retail_grip";

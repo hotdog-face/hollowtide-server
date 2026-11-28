@@ -8,22 +8,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AZIMAR'S VOICE (owner 2026-10-19, docs/findings/FINDINGS-buff-npc.md). NOT RETAIL. His emote table
-    /// (gen_buff_zefir.py) keeps the ceremony, timing and spells; this rule only picks WHAT he says, for the three
-    /// things ACE emotes cannot test: the hour (server clock), the player's level band, and not repeating himself.
-    /// A Say/Tell/DirectBroadcast step of his whose TestString is "AzimarLines:&lt;kind&gt;" is spoken with a line picked
-    /// from his own GotoSet emote sets named "AzimarLines:&lt;pool&gt;" (inert: nothing Gotos them), so lines are data and
-    /// a datafix changes them without a restart. Without this rule the step's own Message plays (a plain fallback).
-    /// Visits: the AzimarBlessingWait quest his ceremony already stamps (count and last time per character).
-    /// Also: a Use while a ceremony runs starts a second one (ACE drops a Use on a busy NPC), the paced spells stop
-    /// if their player logs off, and idle lines play only with a player within IDLE_RANGE, at most one per IDLE_GAP.
-    /// His weapon blessings (2026-11-02): the "AzimarWeapon" step casts them (AzimarWeaponBlessing, its own switches).
-    /// The tell after them ("AzimarLines:weapon") stays quiet when an enchantable weapon is wielded or none were cast,
-    /// else says they wait on the player (weapon.none) or the weapon refuses them (weapon.proof).
-    ///   @modifybool azimar_voice false     his plain fallback lines; ACE's busy rule
-    ///   @modifylong azimar_hour_offset N   hours added to the server clock for his time of day (box/OVH are UTC)
-    /// </summary>
+    /// <summary>Azimar's voice.</summary>
     static class AzimarVoice
     {
         internal const string P_ON = "azimar_voice", P_HOUR = "azimar_hour_offset";
@@ -78,9 +63,7 @@ namespace RevivalGuard
             return l;
         }
 
-        /// <summary>The tell after his weapon auras: null (quiet) when an enchantable weapon or wand is wielded (the auras
-        /// work on it), "weapon.none" when none is, "weapon.proof" when what is wielded refuses enchantment (ACE adds the
-        /// wielder's auras only to an IsEnchantable weapon). Wielded = equipped in a selectable slot, a weapon or caster.</summary>
+        /// <summary>The tell after his weapon auras</summary>
         internal static string WeaponPool(Creature p)
         {
             var held = p.EquippedObjects.Values.Where(i => (i.ItemType & (ItemType.Weapon | ItemType.Caster)) != 0
@@ -114,8 +97,7 @@ namespace RevivalGuard
             return d;
         }
 
-        /// <summary>A line from one of the named pools (each pool equally likely), avoiding what this pool said lately and what this player
-        /// heard lately; when both cannot hold, the pool's own rule wins.</summary>
+        /// <summary>A line from one of the named pools, avoiding what this pool said lately and what this player heard lately</summary>
         static string Pick(Dictionary<string, List<string>> pools, IEnumerable<string> names, uint player)
         {
             var cands = new List<(string pool, string line)>();
@@ -279,8 +261,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>ACE ignores a Use while an NPC's emotes run; his ceremony is paced (~14 s), so a second player's Use
-    /// starts its own chain beside the first (ExecuteEmoteSet nested, as ACE's own InqQuest branches do).</summary>
+    /// <summary>ACE ignores a Use while an NPC's emotes run</summary>
     [HarmonyPatch(typeof(EmoteManager), nameof(EmoteManager.OnUse))]
     static class AzimarVoiceUse
     {

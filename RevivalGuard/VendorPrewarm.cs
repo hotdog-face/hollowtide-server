@@ -13,21 +13,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A BIG VENDOR'S STOCK IS MADE OFF THE WORLD THREAD (owner 2026-11-06, "yes look into the lag please").
-    ///
-    /// Live 2026-11-06: the Staff Base (0x576B) stalled the whole world 2-6 s at a time ("slow landblock tick ... RunActions
-    /// 6480"), each time the owner first used one of its vendors after the block loaded. ACE's Vendor.LoadInventory makes
-    /// every shop item (WorldObjectFactory + CalculateObjDesc) inside the use, on the landblock's tick: the Curators hold
-    /// 447-453 items, the Dev Vault 161-299, Jeeves 356 (retail vendors hold tens). M5 shard: one first use 677-895 ms;
-    /// OVH's slower cores make it seconds, and every landblock waits for the slowest.
-    ///
-    /// SO: when a vendor with at least `vendor.prewarm_min_items` (default 60) shop entries enters the world, its stock is
-    /// made on a worker thread exactly as LoadInventoryItem makes it (ACE already makes WorldObjects on many landblock
-    /// threads at once), then handed over in one action on the vendor's landblock: added to DefaultItemsForSale and the
-    /// vendor marked loaded, so ACE's LoadInventory returns at once. If a player got there first (ACE loaded it itself),
-    /// the worker's copies are dropped. Smaller vendors keep ACE's path; it costs them little.
-    /// </summary>
+    /// <summary>A big vendor's stock is made off the world thread.</summary>
     static class VendorPrewarm
     {
         static int MinItems => (int)Tunables.L("vendor.prewarm_min_items", 60);
@@ -43,7 +29,6 @@ namespace RevivalGuard
         static void Start(Vendor v)
         {
             if (s_Loaded == null || Loaded(v)) return;
-            // copy the list on this thread: the worker never touches the vendor itself
             var list = v.Biota.PropertiesCreateList.Where(x => x.DestinationType == DestinationType.Shop)
                 .Select(x => (wcid: x.WeenieClassId, palette: x.Palette, shade: x.Shade, stack: x.StackSize)).ToList();
             uint vendorGuid = v.Guid.Full;

@@ -4,15 +4,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AN ATTUNED TROPHY ON YOUR OWN HOOK (ticket 261104-0023, Mastacho: Windreave Stalker Plaque would not go on a wall hook).
-    /// ACE's Player.HandleActionPutItemInContainer_Verify refuses any attuned item moved to a container that is not the
-    /// player's ("AttunedItem"), and a hook is one. Retail allowed the house owner to hang attuned housing items (the AC
-    /// wiki's housing plaques: "Attuned ... Can be placed on house wall hooks"). While the verify runs for a move onto a hook
-    /// of a house the mover owns, that one item answers "not attuned"; every other check (hook type, HookTypeGuard; the hook
-    /// limits; containers) is unchanged, and nothing else is waived anywhere else (the drop, trade and give checks run
-    /// outside the verify). Rule: AttunedHookRule (nettest attunedhook).
-    /// </summary>
+    /// <summary>An attuned trophy on your own hook.</summary>
     static class AttunedOnOwnHook
     {
         [ThreadStatic] static uint t_Waive;

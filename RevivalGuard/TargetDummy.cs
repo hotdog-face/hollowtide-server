@@ -14,27 +14,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// RETAIL'S PYREAL TARGET DRUDGE AS A DAMAGE METER (owner 2026-11-22: "look for existing things turbine made in the game
-    /// that let players test damage and re-use it"). Weenie 24888: 10,000 health, Tolerance NoAttack (never fights back),
-    /// XpOverride 0, no loot, neutral resistances; retail stood rows of them in the Society strongholds. Placed in Holtburg
-    /// and outside Arwic's south gate by the 2026-11-25 target-dummies datafix; every retail placement reports too.
-    ///
-    /// With rg_target_dummy on: every damage a player does to one (melee, missile, war and life projectiles, harm spells,
-    /// damage over time: all pass DamageHistory.Add) is summed per player and per dummy, and 5 s after that player's last
-    /// damage (or evaded swing, or resisted spell) they get two lines: total, time, damage per second, hits, biggest hit,
-    /// critical hits, ticks over time, evaded, resisted. Testers on one dummy each get their own. The dummy's health is
-    /// topped up around every hit, so it never dies (Die and OnDeath are refused as a last guard, @smite included): no
-    /// kill, no XP, no corpse, and the next tester finds it whole. A single blow counts at most its 10,000 health (ACE
-    /// records what the vital lost). When nobody is testing on it any more, its enchantments (a tester's vulnerabilities
-    /// and DoTs) are cleared. Off: ACE as is (the drudge can be killed; 0 XP, no loot). Proven on shard2 2026-11-22.
-    ///
-    /// Every finished run also goes to the event log as dummy_dps (owner 2026-11-27, balance review "measure damage"):
-    /// build (the skill that did most of it: melee, 2h, missile, war, void, life, summon; TargetDummyRule), template (the
-    /// player's specialized combat skills), damage, seconds, damage per second, hits, crits, over time, evaded, resisted,
-    /// biggest, damage by source and the buffed skill. A pet's hits count for its owner (build summon).
-    /// tools/reports/kill_speed_weekly.py tables it per build each week.
-    /// </summary>
+    /// <summary>Retail's pyreal target drudge as a damage meter.</summary>
     public static class TargetDummy
     {
         internal const string P_ON = "rg_target_dummy";
@@ -63,8 +43,7 @@ namespace RevivalGuard
         // (dummy guid, player guid) -> that player's run on that dummy
         static readonly Dictionary<(uint, uint), Run> s_Sessions = new Dictionary<(uint, uint), Run>();
 
-        // Set by the hit that is about to reach DamageHistory.Add on this thread (melee/missile TakeDamage, a projectile's
-        // DamageTarget); an Add with neither is damage over time or a harm spell.
+        // Set by the hit that is about to reach DamageHistory.Add on this thread; an Add with neither is damage over time or a harm spell.
         [ThreadStatic] static bool t_Crit;
         [ThreadStatic] static bool t_Direct;
         [ThreadStatic] static Skill t_Skill;   // a projectile's school (its caster may have left Magic mode by the time it lands)
@@ -198,7 +177,7 @@ namespace RevivalGuard
 
         static void Fail(string where, Exception e) => TickGuard.Report("TargetDummy." + where, e);
 
-        /// <summary>Every damage a creature records. The meter, and the top-up that keeps the dummy alive.</summary>
+        /// <summary>Every damage a creature records.</summary>
         [HarmonyPatch(typeof(DamageHistory), nameof(DamageHistory.Add))]
         static class Damage
         {
@@ -221,8 +200,6 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Melee and missile hits (and the combined DoT tick, source null): full health before the blow lands, so
-        /// the hit is measured whole and Health never reaches 0; the crit flag for the meter.</summary>
         [HarmonyPatch(typeof(Creature), nameof(Creature.TakeDamage), new[] { typeof(WorldObject), typeof(DamageType), typeof(float), typeof(bool) })]
         static class Hit
         {

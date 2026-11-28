@@ -18,32 +18,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE FORGE-WARDEN OF ISPAR (weenie 900300), the boss of the Empyrean Vault: season beat 4,
-    /// docs/VAULT-AND-FORGE-WARDEN.md. Owner-confirmed 2026-09-27. NOT RETAIL: a new boss, so its
-    /// chat lines are ours (labelled nowhere as retail) and carry no em dashes.
-    ///
-    /// Three mechanics on top of an ordinary ACE monster, all driven from its own tick:
-    ///   FORGE SUMMONS  every forge_warden_summon_s while awake, an Aetherium Golem (the family's own
-    ///                  900211-900213, heavier as its health falls) steps out of an Empyrean Forge
-    ///                  (900321) in the room and goes for the Warden's target; at most
-    ///                  forge_warden_max_adds alive.
-    ///   CRYSTAL SHIELD at forge_warden_shield_1 and _2 of its health it spawns a Forge Crystal
-    ///                  (900322) at every forge and takes no damage until all of them are broken
-    ///                  (TakeDamage prefix for weapons, a heal-back each tick for everything else).
-    ///   OVERLOAD PULSE under forge_warden_overload it warns, waits forge_warden_pulse_warn_s, then
-    ///                  hits every player in the room it can SEE (ACE's own IsDirectVisible, which the
-    ///                  Ward-Statues 900323 block) for forge_warden_pulse_frac of their max health;
-    ///                  again every forge_warden_pulse_s.
-    /// On death every player in its damage history gets the retail title Golem Slayer (248) and the
-    /// quest stamp ForgeWardenSlain; the trophy is TrophyMounts' job. When it goes back to sleep the
-    /// adds and crystals are removed and the phases reset.
-    ///
-    /// Hooks, all declared on Creature (AGENTS.md): Monster_Tick postfix, TakeDamage prefix, OnDeath
-    /// postfix, Sleep postfix. Every hook returns at once unless the creature is weenie 900300 (or one
-    /// of its crystals), and an exception is logged, never thrown. Registered from Prepare, so Mod.cs
-    /// is not touched. Admin command @forgewarden (status | hp &lt;percent&gt; | reset | pulse | kill).
-    /// </summary>
+    /// <summary>The forge-warden of ispar, the boss of the Empyrean Vault: season beat 4, docs/VAULT-AND-FORGE-WARDEN.md.</summary>
     static class ForgeWarden
     {
         internal const uint WARDEN = 900300, FORGE = 900321, CRYSTAL = 900322, STATUE = 900323, TROPHY = 900345;
@@ -88,8 +63,7 @@ namespace RevivalGuard
                 foreach (var (key, def, desc) in s_Doubles) if (!d.ContainsKey(key)) d[key] = new Property<double>(def, desc);
             }
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] ForgeWarden: switches not registered with @modify* ({e.Message}); defaults apply"); }
-            // The trophy: TrophyMounts inscribes a boss's trophy with its killer. Its table is private and
-            // other sessions edit that file, so the Warden's row is added here rather than there.
+            // The trophy: TrophyMounts inscribes a boss's trophy with its killer.
             try
             {
                 if (AccessTools.Field(typeof(TrophyMounts), "s_Boss")?.GetValue(null) is Dictionary<uint, uint> bosses)
@@ -134,7 +108,7 @@ namespace RevivalGuard
             st.Adds.RemoveAll(a => a == null || a.IsDestroyed || (a is Creature c && c.IsDead));
             st.Crystals.RemoveAll(a => a == null || a.IsDestroyed || (a is Creature c && c.IsDead));
 
-            // CRYSTAL SHIELD
+            // Crystal shield
             if (st.Shielded)
             {
                 if (st.Crystals.Count == 0) DropShield(w, st);
@@ -147,14 +121,14 @@ namespace RevivalGuard
             else if (st.ShieldsDone < 2 && hp <= (st.ShieldsDone == 0 ? Shield1 : Shield2))
                 RaiseShield(w, st, now);
 
-            // FORGE SUMMONS
+            // Forge summons
             if (now >= st.NextSummon)
             {
                 st.NextSummon = now + Math.Max(10, SummonS);
                 if (st.Adds.Count < MaxAdds) Summon(w, st, hp);
             }
 
-            // OVERLOAD PULSE
+            // Overload pulse
             if (!st.Shielded && hp <= OverloadAt)
             {
                 if (!st.Overload)
@@ -187,8 +161,7 @@ namespace RevivalGuard
         static float Dist(WorldObject a, WorldObject b) =>
             a.Location.Landblock == b.Location.Landblock ? Vector3.Distance(a.Location.Pos, b.Location.Pos) : float.MaxValue;
 
-        /// <summary>A point <paramref name="step"/> metres from a forge towards the Warden's home, in
-        /// the forge's own cell (the forge room's corner cells are 10 m square).</summary>
+        /// <summary>A point step metres from a forge towards the Warden's home, in the forge's own cell.</summary>
         static ACE.Entity.Position InFrontOf(WorldObject forge, Creature w, float step)
         {
             var home = w.Home ?? w.Location;
@@ -269,10 +242,7 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] ForgeWarden: overload pulse, {hit} hit, {safe} in cover");
         }
 
-        /// <summary>COVER. ACE's IsDirectVisible did not stop at the Ward-Statues on staging (a bot 2.8 m
-        /// behind one, dead in line with the Warden, was hit), so the statues are also tested here:
-        /// a statue whose footprint (its cylinder, r 0.5 x scale, plus 0.3 m) crosses the line from the
-        /// Warden to the player on the floor plane is cover.</summary>
+        /// <summary>Cover.</summary>
         static bool BehindStatue(Creature w, Player p, List<WorldObject> statues)
         {
             var a = new Vector2(w.Location.Pos.X, w.Location.Pos.Y);
@@ -301,10 +271,6 @@ namespace RevivalGuard
 
         static void Cleanup(St st)
         {
-            // DEFERRED, NEVER INLINE. Destroying an add from inside the Warden's tick or Sleep took the
-            // staging shard down (2026-09-28): the landblock's parallel tick had already listed the
-            // add, ran its Monster_Tick after Destroy nulled its physics, and UpdatePosition threw an
-            // unhandled NullReferenceException on the world thread. An ActionChain runs at a safe point.
             foreach (var o in st.Adds.Concat(st.Crystals).ToList())
             {
                 if (o == null || o.IsDestroyed || (o is Creature c && c.IsDead)) continue;
@@ -384,7 +350,7 @@ namespace RevivalGuard
                     return;
                 case "kill":
                     Say(session, "[ForgeWarden] smiting the Warden (death, loot, trophy and title as a real kill)");
-                    Cleanup(st);                 // the shield zeroes all damage, a smite included (audit second pass item 1)
+                    Cleanup(st);                 // the shield zeroes all damage, a smite included
                     w.Smite(me, true); return;   // through TakeDamage, so the kill is credited like a real one
                 case "pulse":
                     Pulse(w); Say(session, "[ForgeWarden] pulse fired"); return;
@@ -424,8 +390,7 @@ namespace RevivalGuard
     [HarmonyPatch(typeof(Creature), nameof(Creature.OnDeath), new[] { typeof(DamageHistoryInfo), typeof(DamageType), typeof(bool) })]
     static class ForgeWardenDeath
     {
-        // A PREFIX: Creature.OnDeath resets the damage history on its way out, so a postfix saw no
-        // damagers (staging, 2026-09-28: "0 damagers credited").
+        // A prefix: Creature.OnDeath resets the damage history on its way out, so a postfix saw no damagers.
         static void Prefix(Creature __instance, DamageHistoryInfo lastDamager)
         {
             if (__instance.WeenieClassId != ForgeWarden.WARDEN) return;

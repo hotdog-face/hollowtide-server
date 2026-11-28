@@ -6,20 +6,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AN UNWIELD INTO A FULL PACK LEAVES THE ITEM IN THE HAND. Reports 261025-0025/0026 (an admin character): "have a
-    /// weapon equipped but fighting with unarmed combat", then "Source item not found!" x10.
-    ///
-    /// ACE's `DoHandleActionPutItemInContainer` dequips a wielded item first, then adds it to the named container
-    /// main-pack-only. When that is full it falls back to `itemRootOwner.TryAddToInventory` (side packs); when those
-    /// are full too it only logs "failed to re-add to original location". The item is then in no list: the server
-    /// fights bare-handed, the client still draws it wielded, and every later move of it is "Source item not found!"
-    /// until relog (the database still has it wielded). Hit 5 times by the mercs on 2026-10-25 too.
-    ///
-    /// Prefix: a wielded item whose target cannot take it (the same capacity test ACE's add makes) is refused before
-    /// the dequip, with ACE's own refusal text. Retail never sends such a move (ItemHolder::AttemptToPlaceInContainer
-    /// @00588140); the client now refuses it locally as well (BRIDGE-NOTES.md note 122).
-    /// </summary>
+    /// <summary>An unwield into a full pack leaves the item in the hand.</summary>
     [HarmonyPatch(typeof(Player), "DoHandleActionPutItemInContainer")]
     static class UnwieldToFullPack
     {

@@ -9,13 +9,7 @@ using ACE.Server.Network.GameMessages.Messages;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// HOLIDAY TOWNSFOLK, the glue (HolidayNpcRule holds the dates and lines). On a holiday's Pacific date Holtburg's town
-    /// NPCs (TownLife) and Azimar (AzimarVoice) mix the day's lines into their greetings and ambient talk; the next day
-    /// their usual lines are all there is again. Nothing is written anywhere: it reads the date each time.
-    ///   @modifybool rg_holiday_npcs true          on (default off, needs the owner's yes)
-    ///   @holidaynpcs [status | date yyyy-mm-dd | date auto | lines &lt;key&gt;]   (Developer; date forces the day for tests)
-    /// </summary>
+    /// <summary>Holiday townsfolk, the glue (HolidayNpcRule holds the dates and lines).</summary>
     static class HolidayNpcs
     {
         internal const string P_ON = "rg_holiday_npcs";

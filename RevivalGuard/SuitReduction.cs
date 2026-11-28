@@ -8,28 +8,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// OWNER-APPROVED DEPARTURE FROM RETAIL (owner, 2026-11-08, report 261109-0006): "i want dapper suit and other
-    /// suits to be able to be reduced to single slot. this breaks retail parody i think. but i want players to use
-    /// it as a tailor." Retail's Armor Reduction Tools work on "loot generated multi-slot armor" only, and full robes
-    /// and guises cannot be tailored at all (RobeTailoring). Here a full-body OUTFIT can be reduced like a loot
-    /// hauberk, so its look can then be taken with an Armor Tailoring Kit and put on armour.
-    ///
-    /// WHAT COUNTS AS AN OUTFIT. Not loot (no workmanship), covers all six body armour slots (Chest|Abdomen|UpperArm|
-    /// LowerArm|UpperLeg|LowerLeg, the RobeTailoring test), and carries NO spells. In ace_world that is the Dapper
-    /// Suit, Sleek Dress, Trench Coat, Bathrobes, Wedding Gown/Raiment/Cyclas, the plain gowns and dresses, the plain
-    /// society robes (Faran/Dho/Suikan/Vestiri Robe), the Festival Robe and the no-spell guises. Robes with spells
-    /// (every mage robe, Aerfalle's Pallium, Siraluun dresses, Empyrean robes...) stay as retail: reducing one to the
-    /// chest would let its spells sit under a full armour set.
-    ///
-    /// THE TOOLS DO WHAT THEY DO ON A HAUBERK (ACE's TailorReduceArmor order): Main keeps the chest (ValidLocations
-    /// 0x200, ClothingPriority OuterwearChest), Middle keeps the upper legs (0x2000, OuterwearUpperLegs), Lower is
-    /// refused (ACE refuses it on anything covering the chest). The tool is used up, the piece is then chest- or
-    /// leg-only, so RobeTailoring no longer sees a full robe and an Armor Tailoring Kit takes its look (the chest
-    /// intermediate). ReducedTailoring treats it as reduced like any reduced loot piece.
-    ///
-    ///   @modifybool suit_reduction false   retail: outfits cannot be reduced
-    /// </summary>
     static class SuitReduction
     {
         internal const string P_ON = "suit_reduction";

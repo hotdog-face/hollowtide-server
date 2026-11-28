@@ -7,24 +7,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A MELEE ATTACK THAT NEVER SWINGS AND BLOCKS EVERY LATER ONE (ticket 261114-0019, Money Maker: "I stop attacking on
-    /// the macro and I can't attack again until I tap space to jump"). ACE's HandleActionTargetedMeleeAttack sets
-    /// MeleeTarget, then reaches the target through CreateMoveToChain2 (a FastTick move-to or turn-to with no timeout), and
-    /// MoveToManager.BeginTurnToHeading does nothing while the body IsAnimating. A body whose motion queue stopped moving
-    /// (MotionQueueWatchdog) never turns, so the callback never comes, MeleeTarget stays set on a live monster, and every
-    /// later attack request returns at "already in melee loop?" with no AttackDone: the Assistant re-sends to nothing. A
-    /// jump frees it (HandleActionJump clears the link animations and calls StopExistingMoveToChains2).
-    /// MeleeLatchRule decides: latched (live target, no swing, move-to pending, body still) for melee.latch_seconds
-    /// (default 4; a turn in reach takes about 1 s) and the guard finishes it: a queue that did not move during the latch
-    /// is drained (MotionQueueWatchdog.Finish), the move-to is cancelled and its callback answered false, which is ACE's
-    /// OnAttackDone (AttackDone to the client, MeleeTarget cleared), so the next request starts a fresh attack. One log
-    /// line per latch. rg_melee_latch_mode: 0 off, 1 log only (default), 2 log and finish.
-    /// NOT SEEN YET (shard2, 2026-11-14): with a stuck head forced into a PK body's queue (@stuckqueuetest hard), its
-    /// melee move-to still reached the target and swung, as the client reports its own positions; eating or a stance
-    /// change mid-swing, and a jump mid-swing, never stuck the queue either. So it ships logging: the line (and the
-    /// ticket's server_busy "melee on" part) shows whether this latch is what the next "stops attacking" report hit.
-    /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class MeleeLatchGuard
     {
@@ -64,8 +46,6 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>@stuckqueuetest: the live state of 261114-0019 on demand: the body's link animations gone (as
-        /// HandleActionJump leaves them) and a SlashMed entry still pending at the head with nothing to finish it.</summary>
         static void StuckQueueTest(ACE.Server.Network.Session session, params string[] parameters)
         {
             var args = (parameters ?? new string[0]).ToList();
@@ -83,11 +63,10 @@ namespace RevivalGuard
                     + $"callback {p.MoveToParams?.Callback != null}, chain {p.IsPlayerMovingTo}, charging {p.IsMoving}, restart pending {MeleeRestart.Pending(p)}, velocity {po.Velocity.Length():0.00}, fast tick {p.FastTick}, latched {IsLatched(p)}; {BusyLedger.Describe(p)}");
                 return;
             }
-            // "hard": a head no later animation can finish (box 2026-11-14: a SlashMed/1 head was finished by the next link)
+            // "hard": a head no later animation can finish
             bool hard = verb == "hard";
             po.RemoveLinkAnimations();
-            // both halves: the table's entry (nothing left to finish it) and the interpreter's pending motion, which is what
-            // IsAnimating reads (MotionInterp.add_to_queue / MotionDone)
+            // both halves: the table's entry and the interpreter's pending motion, which is what IsAnimating reads
             mtm.PendingAnimations.AddFirst(new ACE.Server.Physics.Animation.AnimNode((uint)ACE.Entity.Enum.MotionCommand.SlashMed, hard ? 1000u : 1u));
             po.get_minterp().add_to_queue(0, (uint)ACE.Entity.Enum.MotionCommand.SlashMed, ACE.Entity.Enum.WeenieError.None);
             var b = MotionQueueWatchdog.Snapshot(p);
@@ -157,8 +136,7 @@ namespace RevivalGuard
             var b = MotionQueueWatchdog.Snapshot(p);
             string body = MeleeLatchRule.DrainQueue(b.count, ReferenceEquals(b.head, head0), b.counter == counter0)
                 ? "body " + MotionQueueWatchdog.Finish(p) : $"body queue {b.count} (moving)";
-            // ACE's own ways out: cancel_moveto (OnMoveComplete -> OnMoveComplete_MoveTo2 keeps the callback for the tick),
-            // then the pending callback answered false, which for melee is OnAttackDone.
+            // ACE's own ways out: cancel_moveto, then the pending callback answered false, which for melee is OnAttackDone.
             p.PhysicsObj?.cancel_moveto();
             p.IsPlayerMovingTo2 = false;
             if (p.MoveToParams != null) p.CheckMoveToParams();

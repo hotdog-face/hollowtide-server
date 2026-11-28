@@ -9,23 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AN ITEM'S PALETTE TEMPLATE WHEN ITS CLOTHING TABLE HAS NO ENTRY FOR ITS OWN BODY (report 261024-0035,
-    /// "Shadow statue is a half naked bald woman"). Weenie 19748, the Commemorative Bronze Statue of a Shadow, is
-    /// the human female setup 0x0200004E with ClothingBase 0x10000393 and PaletteTemplate 25. That table has
-    /// ClothingBaseEffects only for crystal setups (0x02000700, 0x020008F9 ...), and stock ACE applies the
-    /// ClothingSubPalEffects only inside its "table knows this setup" test, so the statue went out with no
-    /// recolour and drew skin and underwear. Template 25 recolours the whole palette (offset 0, 2048 colours) with
-    /// PaletteSet 0x0F0000B2: the solid bronze figure of retail's own screenshot (AC wiki, "Commemorative Bronze
-    /// Statue (Shadow)", Live Image).
-    ///
-    /// ONE WEENIE, NOT A RULE (audit 2026-10-24, docs/findings/clothing-palette-audit-2026-10-24.md). 535 items share the
-    /// gap (a ClothingBase with no entry for their setup, plus a template or shade). For the ones retail screenshots
-    /// show, the colours they draw WITHOUT the recolour are retail's (shards green/white/red/blue, pyreal ingots gold,
-    /// the Olthoi Claw blue-black) and the recolour would turn them brown, red or magenta. So retail's server did not
-    /// recolour across setups in general; this statue is the exception its screenshot shows, kept to its weenie.
-    /// Switch `rg_clothing_palette_any_setup`, default on.
-    /// </summary>
+    /// <summary>An item's palette template when its clothing table HAS no entry for its own body.</summary>
     static class ClothingPaletteAnySetup
     {
         const string P_ON = "rg_clothing_palette_any_setup";

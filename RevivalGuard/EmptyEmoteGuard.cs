@@ -6,13 +6,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AN EMOTE SET WITH NO STEPS CANNOT CRASH THE SERVER (live crash 2026-10-16 23:16 UTC). EmoteManager.Enqueue reads
-    /// action emoteIdx of the chosen set with ElementAt and no check; a heartbeat set left empty by a datafix (the Hotel
-    /// Swank pets' talk lines removed) threw ArgumentOutOfRange on the world thread and the process died. A set with no
-    /// step at that index is now finished instead, the way Enqueue finishes a null set (Nested--), and logged once per
-    /// object kind.
-    /// </summary>
+    /// <summary>An emote set with no steps cannot crash the server.</summary>
     [HarmonyPatch(typeof(EmoteManager), nameof(EmoteManager.Enqueue))]
     static class EmptyEmoteGuard
     {

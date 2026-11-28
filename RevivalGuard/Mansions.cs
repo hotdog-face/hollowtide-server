@@ -18,32 +18,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE ALLEGIANCE HALL (owner, 2026-09-27: mansions are "mostly useless inside"; he approved the
-    /// mansion ideas and wanted "the best ones to start"). Ours; docs/MANSIONS-AND-PK.md.
-    ///
-    /// Everything here is built from what a mansion already has, so nothing is added to the world
-    /// database: a storage chest becomes the ALLEGIANCE BANK (MansionBank.cs), and two hook items the
-    /// monarch makes with a command and hangs like any other decoration:
-    ///
-    ///   Allegiance Hall Board  a Plaque (wcid 11970, a wall-hook Book). Reading it shows the
-    ///                          allegiance's name, monarch, message of the day, the roster with who is
-    ///                          online, and the kills on the mansion's grounds (MansionPk.cs). The
-    ///                          pages are written at read time and never stored.
-    ///   Allegiance Hall Portal a portal device (wcid 26588, a floor/yard-hook Hooker in HookGroup
-    ///                          PortalItems, so ACE's own rule keeps it working only in a mansion).
-    ///                          It sends the user to the spot the monarch set with /mansion portal set.
-    ///
-    ///     /mansion                       what is set up, and the commands
-    ///     /mansion board | portal device the two hook items (monarch owning a mansion)
-    ///     /mansion portal [set | clear]  where the portal leads; set = where you stand
-    ///     /mansion bank [on | off | rank 1-3 | log]
-    ///     /mansion kills                 the kills on your allegiance's mansion grounds
-    ///
-    /// Our client sends an unknown slash command to the server as "@..." (bridge, Program.AcClient.Net),
-    /// so /mansion and @mansion are the same command. State lives in Mansions/mansions.json beside the
-    /// dll (ModFolder): bank designations and logs, portal destinations, kill records.
-    /// </summary>
+    /// <summary>The allegiance hall.</summary>
     public static class Mansions
     {
         internal const uint BOARD_WCID = 11970;      // "Plaque", Book, HookType Wall, 1 page of 1000
@@ -104,8 +79,7 @@ namespace RevivalGuard
             return h;
         }
 
-        /// <summary>The allegiance of the player who owns a root house, and that owner. Null
-        /// allegiance for a monarch whose vassals have all left.</summary>
+        /// <summary>The allegiance of the player who owns a root house, and that owner.</summary>
         internal static Allegiance AllegianceOfOwner(uint ownerGuid, out IPlayer owner)
         {
             owner = ownerGuid != 0 ? PlayerManager.FindByGuid(ownerGuid) : null;
@@ -219,14 +193,10 @@ namespace RevivalGuard
             if (p.PKTimerActive) { p.Session.Network.EnqueueSend(new GameEventWeenieError(p.Session, WeenieError.YouHaveBeenInPKBattleTooRecently)); return; }
             if (p.RecallsDisabled) { p.Session.Network.EnqueueSend(new GameEventWeenieError(p.Session, WeenieError.ExitTrainingAcademyToUseCommand)); return; }
             if (p.Teleporting || p.Location == null) { Say(p, "You cannot do that while travelling."); return; }
-            // NOT ON ANYONE'S HOUSING GROUNDS: a portal onto a rival's lawn would drop a whole
-            // allegiance on a mansion in one step. Raids walk or recall in, as they always have.
             if (MansionIndex.HasHouses(p.Location.LandblockId.Landblock))
             { Say(p, "You cannot tie the hall portal to a place where dwellings stand."); return; }
 
-            // OUTDOORS ONLY (Fable audit 2026-10-19, docs/findings/FINDINGS-server-mod-audit.md item 4): the portal
-            // checks no level, quest or portal restriction, so a destination inside a dungeon handed every visitor the
-            // dungeon's gate for free. Out on the landscape there is no gate to skip.
+            // Outdoors only: the portal checks no level, quest or portal restriction
             if ((p.Location.Cell & 0xFFFF) >= 0x100)
             { Say(p, "The hall portal can only be tied to a place out under the sky."); return; }
 
@@ -243,10 +213,7 @@ namespace RevivalGuard
 
         // ---------------------------------------------------------------- the hall portal, in use
 
-        /// <summary>The portal device is a Hooker whose weenie casts a fixed portal spell from its Use
-        /// emote. Ours is handled here instead, before any of that: ACE's own Hooker checks (hooked,
-        /// the house's permission, portal items only in a mansion), then the recall rules a portal
-        /// device answers to (PK timer, busy, the Academy), then the teleport.</summary>
+        /// <summary>The portal device is a Hooker whose weenie casts a fixed portal spell from its Use emote.</summary>
         [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.OnActivate))]
         static class PortalUse
         {
@@ -289,8 +256,7 @@ namespace RevivalGuard
 
         // ---------------------------------------------------------------- the hall board
 
-        /// <summary>The pages, written for this reader now. Both ways a book is read end here: a use
-        /// (from the pack, or through a hook with hooks off) and the client's own BookData request.</summary>
+        /// <summary>The pages, written for this reader now.</summary>
         internal static List<PropertiesBookPageData> BoardPages(Book board, Player reader, out string title)
         {
             uint ownerGuid = 0, root = 0;
@@ -372,10 +338,6 @@ namespace RevivalGuard
         {
             var pages = BoardPages(board, reader, out var title);
             // authorId = the board itself, so the client titles the window with the inscription
-            // (gmBookUI::OpenBook: title = inscription when scribeID != 0); maxPages = the pages
-            // written, so turning past the end asks for no new page. The scribe NAME is sent too:
-            // our client's reader keys the same rule on the name (the bridge carries no scribe id),
-            // and with it empty a hooked board drew a blank title bar (seen live 2026-09-28).
             reader.Session.Network.EnqueueSend(new GameEventBookDataResponse(reader.Session, board.Guid.Full,
                 1000, pages.Count, pages, title, board.Guid.Full, "Allegiance Hall Board", false));
         }
@@ -458,14 +420,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// WHICH LANDBLOCKS ARE A MANSION'S GROUNDS. HouseCell.RootGuids (ACE's own table) names every
-    /// house instance and its root, so its keys give the landblocks that hold any dwelling; the
-    /// world's cached instances for a landblock say which of those houses are mansions (weenie
-    /// HouseType 3). A mansion's landscape block (the house, lawn and yard) and its basement block
-    /// both map to the same root house. Only the world database's own cache is read, so this is
-    /// safe from any thread, and a landblock is looked up once.
-    /// </summary>
+    /// <summary>Which landblocks are a mansion's grounds.</summary>
     internal static class MansionIndex
     {
         static HashSet<ushort> s_HouseBlocks;
@@ -500,8 +455,7 @@ namespace RevivalGuard
             return root;
         }
 
-        /// <summary>The character who owns this root house, from every character's HouseInstance
-        /// (refreshed each 30 s; a purchase or abandon shows within that).</summary>
+        /// <summary>The character who owns this root house, from every character's HouseInstance.</summary>
         internal static uint OwnerOf(uint rootGuid)
         {
             if (rootGuid == 0) return 0;

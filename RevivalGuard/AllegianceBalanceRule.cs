@@ -4,26 +4,14 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of the allegiance directory and the small-allegiance bonus (owner 2026-11-25: "it should list all the
-    /// allegiances that exist", "only one major ali. it needs to curb that issue"; docs/proposals/allegiance-balance.md).
-    /// No ACE types: tools/nettest compiles it by path (AllegianceBalanceCase.cs). Ours, not retail.
-    ///
-    ///   The bonus: a small allegiance's members pass up more XP and earn more luminance; the bonus is full up to
-    ///   FULL_UP_TO members and fades in a straight line to nothing at ZERO_AT. Nobody is forced out, nothing is capped.
-    ///   The directory: every player allegiance, small and active ones first (and the first of those is "suggested").
-    ///   The request: which online members of an allegiance are asked to take a new vassal.
-    /// </summary>
+    /// <summary>The pure part of the allegiance directory and the small-allegiance bonus.</summary>
     public static class AllegianceBalanceRule
     {
-        // ------------------------------------------------------------------ the small-allegiance bonus
-        // Defaults of the server properties (SmallAllegianceBonus registers them; rg_small_alleg_bonus switches it on).
+        // the small-allegiance bonus
         public const long FULL_UP_TO = 10, ZERO_AT = 40;
-        public const double PASSUP_MAX = 0.25, LUM_MAX = 0.12;   // owner 2026-11-25: +50%/+25% "seems too high"
+        public const double PASSUP_MAX = 0.25, LUM_MAX = 0.12;
 
-        /// <summary>The bonus fraction for an allegiance of <paramref name="members"/> (monarch included): <paramref
-        /// name="max"/> up to <paramref name="fullUpTo"/> members, falling in a straight line to 0 at <paramref
-        /// name="zeroAt"/> and beyond. Bad settings (zeroAt not above fullUpTo, max not positive) give 0.</summary>
+        /// <summary>The bonus fraction for an allegiance of members</summary>
         public static double Bonus(int members, long fullUpTo, long zeroAt, double max)
         {
             if (members < 2 || max <= 0 || double.IsNaN(max) || zeroAt <= fullUpTo || fullUpTo < 1) return 0;
@@ -35,7 +23,6 @@ namespace RevivalGuard
         public static double PassupBonus(int members) => Bonus(members, FULL_UP_TO, ZERO_AT, PASSUP_MAX);
         public static double LumBonus(int members) => Bonus(members, FULL_UP_TO, ZERO_AT, LUM_MAX);
 
-        /// <summary>An amount with the bonus on, rounded down, never below the amount and never past ulong.</summary>
         public static ulong Apply(ulong amount, double bonus)
         {
             if (bonus <= 0 || amount == 0) return amount;
@@ -46,17 +33,12 @@ namespace RevivalGuard
         public static long Apply(long amount, double bonus) =>
             amount <= 0 ? amount : (long)Math.Min(long.MaxValue, Apply((ulong)amount, bonus));
 
-        // ------------------------------------------------------------------ accounts, not characters (owner 2026-11-27)
-        // "Alt-proof alleg bonus": an allegiance's size and activity are its distinct ACCOUNTS, so one player's alts do not
-        // make it look bigger or busier, and a main and its alts alone (one account) get no bonus at all; pass-up between
-        // two characters of one account never gets the bonus.
+        // accounts, not characters
 
-        /// <summary>One member for the count: its account (0 = unknown, then it counts as an account of its own) and
-        /// whether it played this week.</summary>
+        /// <summary>One member for the count: its account and whether it played this week.</summary>
         public struct Who { public uint Guid, Account; public bool Active; }
 
-        /// <summary>(distinct accounts, distinct accounts with a member active this week). Unknown accounts count by
-        /// character.</summary>
+        /// <summary>(distinct accounts, distinct accounts with a member active this week).</summary>
         public static (int accounts, int active) Accounts(IEnumerable<Who> members)
         {
             var all = new HashSet<ulong>();
@@ -87,8 +69,7 @@ namespace RevivalGuard
             public uint Monarch; public string Name; public int Members, Active, Online; public double Fit = 1;
         }
 
-        /// <summary>How small an allegiance is, for its place in the list: 1 up to FULL_UP_TO members, falling to 0.2 at
-        /// 50 and beyond (a big allegiance still shows, lower).</summary>
+        /// <summary>How small an allegiance is, for its place in the list: 1 up to FULL_UP_TO members, falling to 0.2 at 50 and beyond.</summary>
         public static double Smallness(int members)
         {
             if (members <= FULL_UP_TO) return 1.0;
@@ -102,8 +83,7 @@ namespace RevivalGuard
         /// <summary>Activity counts up to this in the score: past a handful of active members, size decides.</summary>
         public const int SCORE_ACT_CAP = 5;
 
-        /// <summary>The order's score: activity (up to SCORE_ACT_CAP) weighted by smallness and the reader's level fit. An
-        /// allegiance nobody played this week scores 0 (it sorts last, smaller first).</summary>
+        /// <summary>The order's score: activity (up to SCORE_ACT_CAP) weighted by smallness and the reader's level fit.</summary>
         public static double Score(Row r)
         {
             int act = Activity(r.Active, r.Online);
@@ -117,8 +97,7 @@ namespace RevivalGuard
                 .OrderByDescending(Score).ThenByDescending(r => r.Online).ThenBy(r => r.Members)
                 .ThenBy(r => r.Name ?? "", StringComparer.OrdinalIgnoreCase).ThenBy(r => r.Monarch).ToList();
 
-        /// <summary>The one suggestion (the panel's "Suggested" tag and the newcomer hint): the first row that is active
-        /// this week, under ZERO_AT members, and not the reader's own; 0 when none.</summary>
+        /// <summary>The one suggestion: the first row that is active this week, under ZERO_AT members, and not the reader's own</summary>
         public static uint Suggested(IList<Row> sorted, uint readersMonarch)
         {
             foreach (var r in sorted ?? new List<Row>())
@@ -137,25 +116,19 @@ namespace RevivalGuard
             public uint Guid; public bool Online, BotOrStaff, IgnoresRequests, IsMonarch, IsContact; public int Level, Vassals, OfficerRank;
         }
 
-        /// <summary>Can this member take the asker as a vassal now? Online, a player, room for a vassal (ACE: 11), not
-        /// ignoring allegiance requests (retail's option, which ACE's swear checks too), at least the asker's level (ACE
-        /// passes no XP up to a patron of lower level: ExistedBeforeAllegianceXpChanges), and on a locked allegiance only a
-        /// Castellan (ACE's lock bypass).</summary>
+        /// <summary>Can this member take the asker as a vassal now?</summary>
         public static bool CanTake(Member m, uint asker, int askerLevel, bool locked) =>
             m != null && m.Online && !m.BotOrStaff && m.Guid != asker && m.Vassals < MAX_VASSALS && !m.IgnoresRequests
             && m.Level >= Math.Max(1, askerLevel) && (!locked || m.OfficerRank >= CASTELLAN);
 
-        /// <summary>Who is asked, in order, at most PROMPT_MAX: the listing's contact, the monarch, officers by rank, then the
-        /// members with the fewest vassals (spreading new vassals out), highest level first among equals.</summary>
+        /// <summary>Who is asked, in order, at most PROMPT_MAX</summary>
         public static List<uint> Prompted(IEnumerable<Member> members, uint asker, int askerLevel, bool locked) =>
             (members ?? Enumerable.Empty<Member>()).Where(m => CanTake(m, asker, askerLevel, locked))
                 .OrderByDescending(m => m.IsContact).ThenByDescending(m => m.IsMonarch).ThenByDescending(m => m.OfficerRank)
                 .ThenBy(m => m.Vassals).ThenByDescending(m => m.Level).ThenBy(m => m.Guid)
                 .Take(PROMPT_MAX).Select(m => m.Guid).ToList();
 
-        // ------------------------------------------------------------------ what a member may do from the panel
-        // ACE's AllegiancePermissionLevel (Player_Allegiance.cs, from the retail officer rules): 1 Speaker sets the MOTD,
-        // 2 Seneschal locks, 3 Castellan names the allegiance, 4 the monarch everything.
+        // what a member may do from the panel
 
         public const int SPEAKER = 1, SENESCHAL = 2, MONARCH = 4;
 
@@ -163,7 +136,7 @@ namespace RevivalGuard
         public static bool MayLock(int perm) => perm >= SENESCHAL;
         public static bool MayName(int perm) => perm >= CASTELLAN;
 
-        // ------------------------------------------------------------------ lines (no em dashes, never the Borg)
+        // ------------------------------------------------------------------ lines
 
         public static string BonusLine(int passupPct, int lumPct) =>
             $"Small allegiance bonus: +{passupPct}% XP passed up, +{lumPct}% luminance.";

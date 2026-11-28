@@ -8,35 +8,7 @@ using ACE.Server.Network.GameMessages.Messages;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// @BROADCAST: A WORLD-WIDE MESSAGE WITH A LOOK BEFORE IT GOES, BECAUSE A TYPO GOES TO EVERYONE.
-    ///
-    /// From docs/ADMIN-AND-VENUE-IDEAS.md §2 item 3: "@gamecast with a confirmation".
-    ///
-    /// RETAIL'S PRESENTATION. Player transcripts of live events on the community wiki record world
-    /// messages exactly as the client showed them, and they all have one shape:
-    ///
-    ///     Broadcast from +Leo Netherlands> An emissary of the royal guard has appeared ...
-    ///                                                      (AC-Wiki, "2005 Live Events", line 102)
-    ///     Broadcast from +Lord Cynreft Mhoire> Powerful and corrupted undead have taken over ...
-    ///                                                      (AC-Wiki, "2012 Live Events", line 109)
-    ///
-    /// "Broadcast from " + the sender's character name (retail staff names carried a leading +) +
-    /// "> " + the text, on the World_Broadcast chat type (0x14 in the client's LogTextTypeEnum). That
-    /// is the format ACE's own @gamecast reproduces (AdminCommands.HandleGamecast), so the send goes
-    /// through HandleGamecast itself: same text, same chat type, same broadcast log entry. Nothing in
-    /// this file changes what a player sees; it only adds the look-first step for the sender.
-    ///
-    ///   @broadcast <message>     stage it: the sender sees the exact line, as everyone would
-    ///   @broadcast send          send the staged line to everyone online
-    ///   @broadcast cancel        drop it
-    ///   @broadcast               show what is staged
-    ///
-    /// A staged line is dropped after EXPIRE_SECONDS so a forgotten draft cannot be sent by a later
-    /// "send" typed for something else. Staging is per session (the console has its own slot). The
-    /// verb is Envoy, the same level ACE gives @gamecast, which stays available for anyone who wants
-    /// no confirmation. Admin command feedback is ours, not retail's; the broadcast line itself is not.
-    /// </summary>
+    /// <summary>@BROADCAST: a world-wide message with a look before it goes, because a typo goes to everyone.</summary>
     public static class Broadcast
     {
         const double EXPIRE_SECONDS = 120;
@@ -121,8 +93,7 @@ namespace RevivalGuard
                     return;
                 }
                 Clear(session);
-                // ACE's own world broadcast: the retail line, ChatMessageType.WorldBroadcast, and the
-                // AllBroadcast chat log. One parameter, so the text keeps its spacing.
+                // ACE's own world broadcast: the retail line, ChatMessageType.WorldBroadcast, and the AllBroadcast chat log.
                 AdminCommands.HandleGamecast(session, new[] { st.Text });
                 Say(session, $"Sent to {online} online.");
                 Mod.Log.Info($"[RevivalGuard] @broadcast by {session?.Player?.Name ?? "console"} to {online}: {st.Text}");
@@ -144,8 +115,7 @@ namespace RevivalGuard
             }
             Set(session, new Staged { Text = text, At = DateTime.UtcNow });
 
-            // The preview goes to the sender on the World_Broadcast type, so it reads exactly as it
-            // will for everyone: same prefix, same channel colour. Nobody else receives it.
+            // The preview goes to the sender on the World_Broadcast type, so it reads exactly as it will for everyone: same prefix, same channel colour.
             Say(session, $"Not sent yet. Everyone online ({online}) would see:");
             if (session?.Network != null)
                 session.Network.EnqueueSend(new GameMessageSystemChat(Line(session, text), ChatMessageType.WorldBroadcast));

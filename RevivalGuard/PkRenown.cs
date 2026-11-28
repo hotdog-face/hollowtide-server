@@ -10,38 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// PK RENOWN: THE LADDER, KILL STREAKS, WANTED AND SEASON TITLES (docs/PK-EXPANSION.md, idea 2).
-    /// Ours. Off until `pk_renown_enabled` is true.
-    ///
-    /// Every PK kill of a PK is judged by PkCommon.Judge. An honourable kill earns renown:
-    ///     10 x (victim level / killer level, held to 0.5..2), divided by 1 + the times this killer
-    ///     has already killed this victim today, and shared out when more than two players did the
-    ///     damage; plus 2 per kill of a streak the victim had running (3 or more), 25 for a victim
-    ///     who was Wanted, and 10 for a victim carrying infamy (justice).
-    /// A kill of or by a Hollow Company mercenary is no kill at all: no renown, no infamy, no death
-    /// (owner 2026-10-22, "players only").
-    /// A kill of a newcomer (under pk_honor_min_level, 15) or of someone far beneath the killer earns
-    /// INFAMY instead, one point that fades after a day each; three and the killer is branded with
-    /// retail's own "Murderer" title and is worth justice renown to anyone who kills them.
-    /// Nothing is ever taken from the victim: renown only grows, so a weak player is never pushed
-    /// down the ladder by the strong (retail PK's death spiral is what drove players off Darktide).
-    ///
-    /// Five honourable kills without dying makes a player WANTED (a world line); ending a streak
-    /// of five or more is announced too. Titles, all retail's (ACE CharacterTitle): Duelist at 100
-    /// renown in a season, Bloodletter at 500, Dereth's Gladiator at 1,500, Kingslayer for killing
-    /// the ladder's leader, Murderer for infamy; at a season's end the leader is Warlord of Dereth
-    /// and second and third are Gladiator Champion.
-    ///
-    ///     @pkladder                 the ladder (our client: the PK board window)
-    ///     @pkladder me              your record this season
-    ///     @pkladder season <name>   (admin) end the season: titles, archive, a fresh ladder
-    ///     @pkladder rejudge [apply] (admin) judge the season again under today's rules (a preview, then apply);
-    ///                               it also runs by itself, once, the first time the ladder is used after a
-    ///                               deploy that raised RULES (PkRules.cs)
-    ///
-    /// State: PkLedger/ledger.json beside the dll (ModFolder); past seasons in PkLedger/seasons.json.
-    /// </summary>
+    /// <summary>PK renown: the ladder, kill streaks, wanted and season titles (docs/PK-EXPANSION.md, idea 2).</summary>
     internal static partial class PkRenown
     {
         internal const string P_SEASON = "pk_season_name";
@@ -72,8 +41,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ the kill
 
-        /// <summary>ACE's own PK-death step (Player_Death.cs HandlePKDeathBroadcast): the victim is
-        /// still PK and topDamager is the player ACE credits with the kill.</summary>
+        /// <summary>ACE's own PK-death step: the victim is still PK and topDamager is the player ACE credits with the kill.</summary>
         [HarmonyPatch(typeof(Player), nameof(Player.HandlePKDeathBroadcast))]
         static class OnPkDeath
         {
@@ -135,7 +103,6 @@ namespace RevivalGuard
             return r;
         }
 
-        /// <summary>The PkRules title ids must be ACE's own; a mismatch is logged, never thrown.</summary>
         static void CheckTitleIds()
         {
             var want = new (uint id, CharacterTitle t)[]
@@ -162,9 +129,7 @@ namespace RevivalGuard
 
         static bool s_RejudgeChecked;
 
-        /// <summary>A ledger kept under older rules is judged again once, the first time the ladder is used after
-        /// the deploy (a kill, a command, the board, a login): by then the world is open and every character can
-        /// be looked up. The old file is kept beside it as ledger.json.before-rules-N.</summary>
+        /// <summary>A ledger kept under older rules is judged again once, the first time the ladder is used after the deploy</summary>
         static void EnsureRejudged()
         {
             if (s_RejudgeChecked) return;
@@ -301,9 +266,6 @@ namespace RevivalGuard
                 return;
             }
             // @pkladder remove <name>: take one character's record off this season's ladder (admin).
-            // The ladder is live state beside the dll, and test characters that fight on the live
-            // shard (the 2026-09-30 death sweep's +Deathsweep Alpha, rank 1 after one test kill) had no
-            // way off it short of ending the season for everyone.
             if (verb == "remove")
             {
                 if (session.AccessLevel < AccessLevel.Admin) { PkCommon.Say(p, "Only an admin can remove a ladder record."); return; }
@@ -336,8 +298,7 @@ namespace RevivalGuard
             Me(p);
         }
 
-        /// <summary>@pkladder rejudge: what judging the season again under today's rules would change (the top ten
-        /// before and after, and the titles); `apply` does it, keeping the old file beside it.</summary>
+        /// <summary>@pkladder rejudge: what judging the season again under today's rules would change</summary>
         static void Rejudge(Player admin, bool apply)
         {
             RejudgeResult res;
@@ -398,9 +359,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>End the season running and open `next` with a fresh ladder. `titles`: the leader becomes Warlord of
-        /// Dereth and second and third Gladiator Champion (false for an opening reset, PkSeason: a ladder nobody was
-        /// told was a season). `archivedAs` renames the ended season in seasons.json (null keeps its name).</summary>
+        /// <summary>End the season running and open `next` with a fresh ladder.</summary>
         internal static void EndSeason(string actor, string next, bool titles, string archivedAs = null)
         {
             var (rows, _) = Ladder(0);
@@ -413,8 +372,7 @@ namespace RevivalGuard
             lock (s_Lock)
             {
                 var fresh = new State { Season = next, SeasonStarted = PkCommon.Now(), Rules = RULES };
-                // The new season opens with last season's winners carrying their title on the ladder
-                // (a row appears once they earn renown); an offline winner gets it at the next login.
+                // The new season opens with last season's winners carrying their title on the ladder; an offline winner gets it at the next login.
                 foreach (var (g, name, t) in awards)
                 {
                     var online = PlayerManager.GetOnlinePlayer(g);
@@ -514,13 +472,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// THE PK BOARD: the ladder, the bounties and the shrines in one window of our client
-    /// (Assets/Streaming/AcPkBoardHud.cs), sent over the mod channel ("pkboard", JSON). The window
-    /// exists only when the shard sends it one: nothing is sent unless a PK feature is on, so with
-    /// all three off our client shows nothing new at all. `@pkboard` (or /pkboard) asks for it;
-    /// a retail client gets the same as chat lines from @pkladder, @bounty and @shrines.
-    /// </summary>
+    /// <summary>The PK board: the ladder, the bounties and the shrines in one window of our client, sent over the mod channel.</summary>
     internal static class PkBoard
     {
         internal static void Register()
@@ -537,8 +489,7 @@ namespace RevivalGuard
             bool refresh = tab == "refresh";
             if (!PkCommon.AnyOn)
             {
-                // An open window asking for its refresh after the features were turned off is told
-                // to close, quietly; anyone else gets the one line.
+                // An open window asking for its refresh after the features were turned off is told to close, quietly; anyone else gets the one line.
                 if (refresh) { if (ModChannel.Capable(session)) ModChannel.Send(session, "pkboard", "{\"open\":0,\"on\":{\"renown\":0,\"bounty\":0,\"shrines\":0,\"night\":0,\"arena\":0}}"); return; }
                 PkCommon.Say(p, "The player-killer board is not open on this world.");
                 return;
@@ -555,8 +506,7 @@ namespace RevivalGuard
             Send(session, !refresh, refresh ? null : tab);
         }
 
-        /// <summary>The board's data to one connection; `open` asks the client to show the window
-        /// (on the named tab), a refresh only updates it if it is already open.</summary>
+        /// <summary>The board's data to one connection</summary>
         internal static void Send(Session session, bool open, string tab)
         {
             var p = session?.Player;

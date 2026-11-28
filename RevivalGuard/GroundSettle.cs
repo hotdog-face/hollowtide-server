@@ -7,17 +7,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A PK'S SERVER BODY LEFT IN THE AIR AT REST LANDS (ticket 261109-0039, Olivia killed in the Olthoi hive 0x028B after
-    /// "You can't do that while in the air!"; before it 261029-0005/0013, 261028-0011). For a FastTick player ACE's IsJumping
-    /// is just !OnWalkable, and refuses swings, kits, spells, potions and gems. Player.UpdateObjectPhysics ticks the body only
-    /// while it moves, animates or has velocity, and an AutonomousPosition at the same spot runs no physics at all
-    /// (UpdatePlayerPosition's distance check). So a body that ends a report off the ground with no velocity (a dungeon ramp,
-    /// a crowd of olthoi) is never ticked again: gravity never lands it, every action is refused until the player walks.
-    /// Here such a body is ticked as if it moved, so gravity lands it within a few ticks (tools/ace-physprobe `air`: 0.33 s;
-    /// as shipped it was still in the air after 12 s). Only when the client's last report said it stands on the ground
-    /// (LastContact). Location (the client's) is untouched; only the physics body falls. Switch: rg_ground_settle (on).
-    /// </summary>
+    /// <summary>A PK'S server body left in the air at rest lands.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.UpdateObjectPhysics))]
     static class GroundSettle
     {
@@ -45,8 +35,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>GroundSettle's rule, pure (tools/modcheck): tick this body although ACE would not. ACE already ticks a body
-    /// that moves, animates or has velocity; one in the air on purpose (a jump, a fall) has velocity or told us so.</summary>
+    /// <summary>GroundSettle's rule, pure (tools/modcheck): tick this body although ACE would not.</summary>
     public static class GroundSettleRule
     {
         public static bool Needs(bool fastTick, bool teleporting, bool onWalkable, bool movingOrAnimating, bool hasVelocity, bool clientContact) =>

@@ -1,0 +1,161 @@
+{
+ "Id": "0x1000F1C7",
+ "ClothingBaseEffects": {
+  "0x02000D76": {
+   "CloObjectEffects": [
+    {
+     "Index": 0,
+     "ModelId": "0x01002A51",
+     "CloTextureEffects": [
+      {
+       "OldTexture": "0x05001F90",
+       "NewTexture": "0x05E824D6"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "ClothingSubPalEffects": {
+  "2": {
+   "Icon": "0x00000000",
+   "CloSubPalettes": [
+    {
+     "Ranges": [
+      {
+       "Offset": 0,
+       "NumColors": 2048
+      }
+     ],
+     "PaletteSet": "0x0F000085"
+    }
+   ]
+  },
+  "4": {
+   "Icon": "0x00000000",
+   "CloSubPalettes": [
+    {
+     "Ranges": [
+      {
+       "Offset": 0,
+       "NumColors": 2048
+      }
+     ],
+     "PaletteSet": "0x0F000081"
+    }
+   ]
+  },
+  "39": {
+   "Icon": "0x00000000",
+   "CloSubPalettes": [
+    {
+     "Ranges": [
+      {
+       "Offset": 0,
+       "NumColors": 2048
+      }
+     ],
+     "PaletteSet": "0x0F000086"
+    }
+   ]
+  },
+  "8": {
+   "Icon": "0x00000000",
+   "CloSubPalettes": [
+    {
+     "Ranges": [
+      {
+       "Offset": 0,
+       "NumColors": 2048
+      }
+     ],
+     "PaletteSet": "0x0F000084"
+    }
+   ]
+  },
+  "9": {
+   "Icon": "0x00000000",
+   "CloSubPalettes": [
+    {
+     "Ranges": [
+      {
+       "Offset": 0,
+       "NumColors": 2048
+      }
+     ],
+     "PaletteSet": "0x0F000088"
+    }
+   ]
+  },
+  "77": {
+   "Icon": "0x00000000",
+   "CloSubPalettes": [
+    {
+     "Ranges": [
+      {
+       "Offset": 0,
+       "NumColors": 2048
+      }
+     ],
+     "PaletteSet": "0x0F00008A"
+    }
+   ]
+  },
+  "13": {
+   "Icon": "0x00000000",
+   "CloSubPalettes": [
+    {
+     "Ranges": [
+      {
+       "Offset": 0,
+       "NumColors": 2048
+      }
+     ],
+     "PaletteSet": "0x0F000087"
+    }
+   ]
+  },
+  "14": {
+   "Icon": "0x00000000",
+   "CloSubPalettes": [
+    {
+     "Ranges": [
+      {
+       "Offset": 0,
+       "NumColors": 2048
+      }
+     ],
+     "PaletteSet": "0x0F000082"
+    }
+   ]
+  },
+  "17": {
+   "Icon": "0x00000000",
+   "CloSubPalettes": [
+    {
+     "Ranges": [
+      {
+       "Offset": 0,
+       "NumColors": 2048
+      }
+     ],
+     "PaletteSet": "0x0F000083"
+    }
+   ]
+  },
+  "61": {
+   "Icon": "0x00000000",
+   "CloSubPalettes": [
+    {
+     "Ranges": [
+      {
+       "Offset": 0,
+       "NumColors": 2048
+      }
+     ],
+     "PaletteSet": "0x0F000089"
+    }
+   ]
+  }
+ }
+}

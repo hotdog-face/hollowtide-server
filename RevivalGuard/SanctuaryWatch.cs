@@ -10,20 +10,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A LIFESTONE BIND THAT CHANGES IS LOGGED WITH WHAT CHANGED IT (reports 261030-0001/0002, Numero-uno, level 33: bound
-    /// in the Xarabydun Lifestone dungeon, 0x02D3010A, per the 2026-10-29 09:15 backup; by 2026-10-30 00:40 a recall and a
-    /// death both brought him to Holtburg at (84, 7.1, 94). That exact point is written by two things only: character
-    /// creation and the Training Academy's exit (portal 29338 and Jonathan 29324, emote SetSanctuaryPosition). A lifestone
-    /// binds where the player stands. Nothing in the server's log said which, so from now on it does:
-    ///
-    ///   * every Sanctuary write or removal on a player: old bind, new bind, and the methods that did it;
-    ///   * a death with no bind (ACE then sends the body to the Instantiation, the creation spot) is said too.
-    ///
-    /// AND ONE GUARD: the Academy exit's SetSanctuaryPosition does not replace a bind made outside the Academy. It is for
-    /// a new character leaving (its bind is still the creation spot inside, AcademyExitAmnesty.ACADEMY); a character that
-    /// bound somewhere in the world and stands at an Academy door keeps its own. Grep the server log for "SanctuaryWatch".
-    /// </summary>
     static class SanctuaryWatch
     {
         internal static string Loc(Position p) => p == null ? "none" : $"0x{p.Cell:X8} [{p.PositionX:F1} {p.PositionY:F1} {p.PositionZ:F1}]";

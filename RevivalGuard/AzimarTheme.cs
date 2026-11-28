@@ -12,21 +12,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AZIMAR DRESSES FOR THE FESTIVALS (owner 2026-10-25: "any other seasonal events that don't have a buff bot he goes
-    /// there but themed for the event"). NOT RETAIL. Festival Season has its own buffer (the Pumpkin Buffer), and Azimar
-    /// stands in its spots the rest of the year (azimar-seasons.sql, SeasonalCalendar's AzimarYearRound row). While
-    /// Frostfell, the Spring Festival, the Royal Wedding anniversary, the Anniversary or the New Year runs, he wears that
-    /// festival's theme:
-    ///   * his palette (this rule, server side, so every client sees it): the creature's own palette rows on the live
-    ///     object, then an ObjDesc update. Frostfell icy blue, the Royal Wedding and the New Year silver; the others
-    ///     keep his gold.
-    ///   * hats, flowers and sparkles (our client): mod channel "azimar" with the theme key; AcAzimar adds the theme's
-    ///     attaches from expansion/models/attach.json ("901631:frostfell") and the Anniversary's firework sparkles.
-    ///   * festival greetings (AzimarVoice): pools greet.fest.&lt;theme&gt; and idle.fest.&lt;theme&gt;.
-    /// Staff preview (the admin panel's Azimar row): "@azimar theme &lt;key|auto&gt;" sets the theme on THIS server for 30
-    /// minutes (everyone on it sees it; meant for the box test shard), "@azimar" says what is showing and why.
-    /// </summary>
+    /// <summary>Azimar dresses for the festivals.</summary>
     static class AzimarTheme
     {
         internal const uint WCID = 901631;

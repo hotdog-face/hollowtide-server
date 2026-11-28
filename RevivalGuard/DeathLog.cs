@@ -14,18 +14,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// /deaths: YOUR LAST 10 DEATHS (owner 2026-11-16, "Yes, add /deaths"; player Numero-uno asked how to look up who
-    /// killed him after logging off). Ours, not retail.
-    ///
-    ///   /deaths           your own, newest first: who or what, where, how long ago and when (Pacific), PK or not
-    ///   @deaths &lt;name&gt;    staff (Developer+): another character's
-    ///
-    /// Recorded in a prefix on Player.Die(lastDamager, topDamager), the one place every player death passes (a /die
-    /// with suicide_instant_death skips OnDeath). A fall is told apart by TakeDamage_Falling being on the stack, a /die
-    /// by ACE's private suicideInProgress. One small file per character, deaths/&lt;guid&gt;.json beside the dll (a
-    /// deploy copies only the dll), capped at DeathLogRule.KEEP. Wording and the cap: DeathLogRule.cs (nettest).
-    /// </summary>
+    /// <summary>/deaths: your last 10 DEATHS.</summary>
     public static class DeathLog
     {
         static readonly object s_Lock = new object();
@@ -67,7 +56,7 @@ namespace RevivalGuard
 
         static string FileOf(uint guid) => s_Dir == null ? null : Path.Combine(s_Dir, guid.ToString("X8") + ".json");
 
-        /// <summary>The character's list, read once and cached. Call under s_Lock.</summary>
+        /// <summary>The character's list, read once and cached.</summary>
         static List<DeathLogRule.Entry> Get(uint guid)
         {
             if (s_Cache.TryGetValue(guid, out var l)) return l;
@@ -92,8 +81,7 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] DeathLog: cannot write {f}: {e.Message}"); }
         }
 
-        /// <summary>The place words for where the player stands now ("at 42.1N, 33.6E near Holtburg"), or null.
-        /// Also NewcomerNotes' corpse line.</summary>
+        /// <summary>The place words for where the player stands now ("at 42.1N, 33.6E near Holtburg"), or null.</summary>
         internal static string WhereOf(Player p)
         {
             try
@@ -162,8 +150,7 @@ namespace RevivalGuard
             foreach (var line in DeathLogRule.Lines(copy, who, DateTime.UtcNow, Clock)) Say(session, line);
         }
 
-        /// <summary>Every player death: Player.Die(lastDamager, topDamager), declared on Player (RetailDeathDelay
-        /// transpiles the same method; a prefix and a transpiler coexist).</summary>
+        /// <summary>Every player death: Player.Die, declared on Player.</summary>
         [HarmonyPatch]
         static class OnDie
         {
@@ -181,8 +168,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A fall: ACE's falling damage calls OnDeath and Die from inside TakeDamage_Falling, with the player
-        /// as their own last damager (Player_Move.cs). The flag is up only while it runs.</summary>
+        /// <summary>A fall: ACE's falling damage calls OnDeath and Die from inside TakeDamage_Falling</summary>
         [HarmonyPatch]
         static class Falling
         {

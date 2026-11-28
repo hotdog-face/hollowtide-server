@@ -4,27 +4,12 @@ using System.Numerics;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE EVENT BOSS'S PURE HALF (EventBoss.cs; docs/proposals/bael-boss-redesign.md, owner 2026-11-22: "i want him to kill
-    /// people but not everyone"). No ACE types, so tools/nettest compiles it by path (EventBossCase.cs). Ours, not retail.
-    ///
-    ///   health      base x min(cap, 1 + k (N - 1)), N = distinct NON-STAFF players who have hurt him (WorldBossScaling)
-    ///   hit cap     no single hit takes more than HitCapFrac of his max health (a staff x250 hit cannot carry him)
-    ///   rotation    one telegraphed signature attack every Interval seconds, dealt from a shuffled bag of the five so the
-    ///               same one never comes twice running; Portal to Teth waits until the learning minutes are over
-    ///   wind-up     chat line + PlayScript at the start, the hit WindUp seconds later (2-3 s; never under 2 s)
-    ///   phases      75% Shadows (empower him if alive after 20 s), 50% a 10 s shield, 25% faster rotation and wind-ups,
-    ///               14 minutes after the first hit a hard enrage (a lethal pulse every few seconds)
-    ///   geometry    2D, AC world metres (x east, y north). Cone and ring are measured from his centre; knockback moves a
-    ///               player straight away from him by a fixed distance (a short teleport; ACE has no monster knockback).
-    /// </summary>
+    /// <summary>The event boss's pure half.</summary>
     public static class EventBossRule
     {
         public enum Attack { Wrath, Slam, Pulse, Teth, Weakness }
 
-        // BASE_HEALTH: the brief said about 700,000; the box fight (docs/WORLD-BOSS-SYSTEM.md section 9) measured 23 a second per
-        // level-200-like melee bot and estimates ~45 for a real 145-220 player, so 700k x 1.56 for 8 would take ~40 minutes.
-        // 150,000 x 1.56 = 234,000 is ~11 minutes for 8 at 45 a second.
+        // BASE_HEALTH: the brief said about 700,000
         public const double BASE_HEALTH = 150000, PER_FIGHTER = 0.08, SCALE_CAP = 3.0, HIT_CAP_FRAC = 0.005;
         public const double FIRST_ATTACK_S = 15, INTERVAL_S = 16, INTERVAL_LAST_S = 10, INTERVAL_ENRAGE_S = 4;
         public const double LEARN_S = 120, LEARN_DAMAGE = 0.5, ENRAGE_S = 14 * 60;
@@ -33,7 +18,7 @@ namespace RevivalGuard
         public const float PULSE_RADIUS = 10f, PULSE_KNOCK = 10f, TETH_DODGE = 25f, ADJACENT = 3f, ENRAGE_RADIUS = 60f;
         public const double WEAK_MULT = 0.7, WEAK_S = 30, ADDS_GRACE_S = 20, SHIELD_S = 10;
 
-        /// <summary>Seconds from the warning to the hit. The last phase is 20% faster, never under 2 s (still dodgeable).</summary>
+        /// <summary>Seconds from the warning to the hit.</summary>
         public static double WindUp(Attack a, bool lastPhase)
         {
             double s = a switch { Attack.Wrath => 3.0, Attack.Slam => 2.5, Attack.Pulse => 3.0, Attack.Teth => 3.0, _ => 2.0 };
@@ -86,8 +71,7 @@ namespace RevivalGuard
             return cos >= MathF.Cos(halfDeg * MathF.PI / 180f);
         }
 
-        /// <summary>Where a knocked player lands: dist metres further along the line from him to them (fallback = the way
-        /// to push when they stand on his centre, normally his facing).</summary>
+        /// <summary>Where a knocked player lands: dist metres further along the line from him to them.</summary>
         public static Vector2 KnockTo(Vector2 boss, Vector2 p, float dist, Vector2 fallback)
         {
             var d = p - boss;
@@ -103,8 +87,6 @@ namespace RevivalGuard
             return v.LengthSquared() < 1e-6f ? Vector2.UnitY : Vector2.Normalize(v);
         }
 
-        /// <summary>The order of the five: a shuffled bag, refilled when empty, never the same attack twice running;
-        /// Teth is skipped (kept in the bag) while it is not allowed.</summary>
         public sealed class Rotation
         {
             readonly Random m_Rng;
@@ -133,8 +115,7 @@ namespace RevivalGuard
         /// <summary>One planned attack: when it is announced, when it lands.</summary>
         public struct Planned { public double At, Lands; public Attack What; }
 
-        /// <summary>The timeline the server would run for a fight, given when each phase is reached (seconds after the
-        /// first hit; NaN = never) and its end: the scheduling checked by the tests.</summary>
+        /// <summary>The timeline the server would run for a fight, given when each phase is reached and its end</summary>
         public static List<Planned> Plan(int seed, double lastPhaseAt, double end)
         {
             var rot = new Rotation(seed);

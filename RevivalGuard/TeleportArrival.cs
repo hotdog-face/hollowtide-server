@@ -13,23 +13,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE ARRIVAL A CLIENT NEVER CONFIRMS ("stuck in portal space", pink bubbles).
-    ///
-    /// ACE sets Teleporting on every teleport, portal and login, and only the client's LoginComplete ends it
-    /// (OnTeleportComplete). A client that stays connected but never sends it is held hidden and unable to act;
-    /// TeleportWatchdog completes it after rg_tele_arrive_seconds (default 120 s, the PK-safe wait of ticket 261103-0036).
-    /// This adds what the watchdog cannot see (rules in TeleportArrivalRule, tested in tools/nettest):
-    ///   (a) rg_tele_move_arrive: the client walking the destination is proof it left portal space, so the arrival
-    ///       completes then, not two minutes later. Gated on the body having moved (rg_tele_move_min_cm), the teleport
-    ///       sequence and the landblock, because our client relays held keys inside the tunnel.
-    ///   (c) rg_tele_latch: the arrival side effects run once per teleport, whichever of the client, the movement
-    ///       arm or the watchdog gets there first, and however many re-check chains were started.
-    ///   (d) rg_tele_diag: a WARN at 10 s and 30 s for a pending teleport saying whether packets are being lost, the
-    ///       client has stalled, or it is alive and acking but never sent LoginComplete; and a line when a player
-    ///       abandons a pending teleport by logging out. A login warns later (rg_tele_diag_login_first_s, 30 s, then 60 s):
-    ///       our client streams the world 10-15 s before LoginComplete.
-    /// </summary>
     public static class TeleportArrival
     {
         internal const string P_MOVE = "rg_tele_move_arrive", P_LATCH = "rg_tele_latch", P_DIAG = "rg_tele_diag";
@@ -43,7 +26,6 @@ namespace RevivalGuard
         static double s_Grace = DEF_GRACE, s_MinMeters = DEF_MIN_CM / 100.0, s_Wait = DEF_WAIT, s_LoginFirst = DEF_LOGIN_FIRST;
         static int s_Registered;
 
-        /// <summary>(b) TeleportWatchdog's wait for a client that never said its portal space ended.</summary>
         internal static double ClientWaitSeconds(double floor) => TeleportArrivalRule.ClientWait(s_Wait, floor);
 
         /// <summary>Per pending teleport: its start stamp, the traffic baseline and what has been logged.</summary>
@@ -134,8 +116,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The arrival was already asked for (the client's LoginComplete or one of ours); only ACE's landblock
-        /// re-check chain can still be holding it.</summary>
+        /// <summary>The arrival was already asked for; only ACE's landblock re-check chain can still be holding it.</summary>
         internal static bool Requested(Player p, double start)
             => s_Pending.TryGetValue(p.Guid.Full, out var e) && e.Start == start && e.Requested;
 
@@ -163,8 +144,7 @@ namespace RevivalGuard
         }
 
         // ------------------------------------------------------------------------------------------- (c) the latch
-        /// <summary>Prefix of OnTeleportComplete: skip a second arrival for a teleport that already arrived. Returns the
-        /// start stamp to latch when this call will arrive (not re-queue for an unloaded landblock), else 0.</summary>
+        /// <summary>Prefix of OnTeleportComplete: skip a second arrival for a teleport that already arrived.</summary>
         internal static bool LatchPrefix(Player p, out double latch)
         {
             latch = 0;
@@ -320,8 +300,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>ACE ignores AutonomousPosition while Teleporting; a held key sends no new MoveToState, so this peeks the
-    /// position (and puts the stream back) to see the client walking.</summary>
+    /// <summary>ACE ignores AutonomousPosition while Teleporting</summary>
     [HarmonyPatch(typeof(GameActionAutonomousPosition), nameof(GameActionAutonomousPosition.Handle))]
     static class TeleportArrivalAutoPos
     {

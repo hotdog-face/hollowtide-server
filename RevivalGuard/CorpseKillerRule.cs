@@ -3,29 +3,14 @@ using System.Collections.Generic;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// CORPSE CAPSULES: WHO COULD HAVE KILLED IT HERE (the pure half; tools/nettest compiles this file by path). Owner
-    /// bug 261117-0025 at the Facility Hub: "these two corpses say they were killed by monsters that couldnt have killed
-    /// them here" (an Olthoi Grub and a Veteran Reedshark: gen.py gave hub corpses any low-level dungeon creature).
-    /// A corpse's "Killed by" must fit where it lies:
-    ///   a creature  only one that spawns in that landblock. The site table is the proof: a 2017, dungeon, outdoor or
-    ///               daily site's killer is the creature that spawns (or died in the 2017 captures) right there, so a
-    ///               landblock's creatures are its sites' killers. The Facility Hub has none (only its Wardens, who
-    ///               cannot be attacked), so no creature there.
-    ///   a player    (the PK line or a real Darktide PK) only where PK is possible: PK spots, lawns, Darktide places, the
-    ///               Town Network, the Facility Hub, Ayan Baqur and the open world outdoors; dungeons get their own
-    ///               creatures. Never a victim under the newcomer shield (newcomer.shield_level), who is not yet a PK.
-    ///               A NAMED site (kind 10+, one place made a dense battlefield): a player from the other side.
-    ///   misadventure anywhere.
-    /// </summary>
+    /// <summary>Corpse capsules: who could have killed it here (the pure half; tools/nettest compiles this file by path).</summary>
     public static class CorpseKillerRule
     {
         public const string PK_LINE = "a player killer", MISADVENTURE = "misadventure";
         public const int KIND_2017 = 0, KIND_DUNGEON = 1, KIND_OUTDOOR = 2, KIND_PK = 3, KIND_LAWN = 4, KIND_DAILY = 5,
                          KIND_DT = 6, KIND_TN = 7, KIND_HUB = 8, KIND_AYAN = 9,
                          KIND_NAMED = 10;   // and up: a NAMED site (gen.py NAMED)
-        // generated corpses standing in one landblock at most (anti-farm): outdoors, indoors (dungeons are big), the Town
-        // Network and the Facility Hub (one busy space each: littered, not cluttered); a named site has its own cap
+        // generated corpses standing in one landblock at most: outdoors, indoors, the Town Network and the Facility Hub; a named site has its own cap
         public const int LB_CAP_OUT = 16, LB_CAP_IN = 30, CAP_TN = 25, CAP_HUB = 15;
 
         /// <summary>A site kind whose killer is a creature spawning (or dying in 2017) at that very spot.</summary>
@@ -63,8 +48,7 @@ namespace RevivalGuard
             return d;
         }
 
-        /// <summary>Does this killer fit where the corpse lies? monsters: every creature name the data knows; local: the
-        /// landblock's own (LocalMonsters). Anything else is a player.</summary>
+        /// <summary>Does this killer fit where the corpse lies? monsters: every creature name the data knows; local: the landblock's own.</summary>
         public static bool Plausible(string killer, int kind, uint cell, int level, int shieldLevel,
                                      ICollection<string> local, ICollection<string> monsters)
         {
@@ -73,9 +57,6 @@ namespace RevivalGuard
             return PkPossible(kind, cell, level, shieldLevel);
         }
 
-        /// <summary>Owner 2026-11-17: "it needs real darktide names at all cost." The victim: a free Darktide person first
-        /// (random tries, then a scan from a random start, so the pool is used up before anything else), another real
-        /// person only when no Darktide one is free (fellBack). -1: nobody free.</summary>
         public static int PickVictim(IList<int> darktide, IList<int> others, Func<int, bool> free, Random rng, out bool fellBack)
         {
             fellBack = false;
@@ -94,10 +75,7 @@ namespace RevivalGuard
             return -1;
         }
 
-        // ---------------------------------------------------------------- named sites: two sides that fought there
-        // Owner 2026-11-18: the lawn of his old allegiance's mansion, its people and the PKs they fought (his retail
-        // screenshots). Each corpse there is one side's, killed by someone from the OTHER side. The sides are real names,
-        // so they live only in the server-only names file ("sites": {id: {"sides": [[...], [...]]}}).
+        // named sites: two sides that fought there
 
         /// <summary>The side a name is on (0, 1, ...), or -1.</summary>
         public static int SideOf(string name, IList<IList<string>> sides)
@@ -108,15 +86,14 @@ namespace RevivalGuard
             return -1;
         }
 
-        /// <summary>Did someone from the other side kill this victim? (both on a side, different sides)</summary>
+        /// <summary>Did someone from the other side kill this victim?</summary>
         public static bool OtherSide(string victim, string killer, IList<IList<string>> sides)
         {
             int v = SideOf(victim, sides), k = SideOf(killer, sides);
             return v >= 0 && k >= 0 && v != k;
         }
 
-        /// <summary>A killer from the other side (ok: may that name be used, e.g. no character here has it); a victim on no
-        /// side may be killed by either. Never the victim. null: nobody fits.</summary>
+        /// <summary>A killer from the other side; a victim on no side may be killed by either.</summary>
         public static string OtherSideKiller(string victim, IList<IList<string>> sides, Func<string, bool> ok, Random rng)
         {
             if (sides == null) return null;
@@ -131,8 +108,7 @@ namespace RevivalGuard
             return pool.Count == 0 ? null : pool[rng.Next(pool.Count)];
         }
 
-        /// <summary>The next victim at a named site: from the side with fewer lying there now (standing[i]), so both sides'
-        /// dead lie on the field; the other side when that one has nobody free. null: nobody free on any side.</summary>
+        /// <summary>The next victim at a named site</summary>
         public static string PickSideVictim(IList<IList<string>> sides, IList<int> standing, Func<string, bool> free, Random rng)
         {
             if (sides == null || sides.Count == 0) return null;
@@ -151,14 +127,12 @@ namespace RevivalGuard
             return null;
         }
 
-        /// <summary>A killer that fits: the preferred one if local, else a local creature, else (where PK is possible) a
-        /// player (pkName, or the PK line), else misadventure.</summary>
+        /// <summary>A killer that fits: the preferred one if local, else a local creature, else a named player, else misadventure (never the PK_LINE placeholder).</summary>
         public static string Replacement(string preferred, IList<string> local, bool pkPossible, Func<string> pkName, Random rng)
         {
             if (local != null && local.Count > 0)
                 return preferred != null && local.Contains(preferred) ? preferred : local[rng.Next(local.Count)];
-            if (pkPossible) return pkName?.Invoke() ?? PK_LINE;
-            return MISADVENTURE;
+            return (pkPossible ? pkName?.Invoke() : null) ?? MISADVENTURE;
         }
     }
 }

@@ -11,25 +11,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE BORG'S STARTING LOOK (owner-approved 2026-11-08, docs/proposals/the-borg.md "The retail look"; side-by-sides in
-    /// docs/proposals/borg-retail/). A Borg ("... of Borg" on an allowlisted account, BorgSwitch.IsBorg) starts in the
-    /// black-top squad's clothes and earns everything else ("EARN IT"): Puffy Shirt (DyeSpringBlack, shade 0), Pants in
-    /// DyeDarkGreen (a woman: Flared Pants and black Shoes, so boots don't hide the flare; a man: Leather Boots), and an
-    /// Acid Dagger. Every piece is bonded, attuned and worth nothing: a look, not loot, kept through a Darktide death.
-    /// Given at login and after a lifestone return: plain clothing in the way goes to the pack; armour the Borg earned is
-    /// never replaced (a slot it covers stays as it is).
-    /// MercKit skips Borg characters.
-    ///
-    /// THE BONDED SUITS (owner 2026-11-12: "lets make them their armor and have it be bonded. there were two suits. one
-    /// for lower level ranges and one for mid level. then once they are high enough level for a epic and legendary suit
-    /// they make their own"). The weenies 911300-911316 (datafix 2026-11-12-borg-bonded-suits.sql, tools/borg/suit_sql.py)
-    /// replace the plain kit when they exist: LOW (under 40) the black tops at AL 120 as Pathwarden plate, bald; MID
-    /// (40 to 79) the gold Celdon suit, silver helm, Sollerets and red Aegis at AL 240 (wields at 40), as the Amateur
-    /// Explorer set. In its band the suit is the look: earned armor in the slots it covers goes to the pack (kept), and
-    /// crossing 40 swaps low for mid. From 80 nothing is given or taken: the Borg wear what they earn and tailor this
-    /// look onto it (tools/borg/look.py). Without the datafix, the plain kit as before.
-    /// </summary>
+    /// <summary>The borg's starting look.</summary>
     public static class BorgKit
     {
         const uint PUFFY_SHIRT = 2591, PANTS = 127, PANTS_ALT = 907706, FLARED_PANTS = 2597, LEATHER_BOOTS = 115, SHOES = 132,
@@ -47,8 +29,7 @@ namespace RevivalGuard
         /// <summary>The datafix is in: the suit weenies exist (asked once; a missing one is logged by ACE).</summary>
         static bool Suits => s_suits ??= ACE.Database.DatabaseManager.World.GetCachedWeenie(S_SHIRT) != null;
 
-        // the slots a suit holds for its look: earned armor there goes to the pack. Low leaves the head bare (retail's
-        // black tops are bald) and the hands free; mid leaves the hands free.
+        // the slots a suit holds for its look: earned armor there goes to the pack.
         const EquipMask BODY = EquipMask.ChestArmor | EquipMask.AbdomenArmor | EquipMask.UpperArmArmor | EquipMask.LowerArmArmor
                              | EquipMask.UpperLegArmor | EquipMask.LowerLegArmor | EquipMask.FootWear | EquipMask.HeadWear;
 
@@ -83,7 +64,6 @@ namespace RevivalGuard
             p.EquippedObjects.Values.Where(o => wcids.Contains(o.WeenieClassId))
              .Concat(wcids.SelectMany(w => p.GetInventoryItemsOfWCID(w))).ToList();
 
-        /// <summary>Pieces of the kit that are no longer ours to wear go: consumed (bonded, worth nothing).</summary>
         static void Retire(Player p, IEnumerable<WorldObject> pieces, string why)
         {
             foreach (var o in pieces.ToList())
@@ -95,8 +75,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>THE SUIT IS THE LOOK: earned armor in the suit's slots goes to the pack, kept (never destroyed; left on
-        /// when the pack is full).</summary>
+        /// <summary>The suit is the look: earned armor in the suit's slots goes to the pack, kept.</summary>
         static void ToPack(Player p, EquipMask slots)
         {
             foreach (var o in p.EquippedObjects.Values.ToList())
@@ -131,11 +110,7 @@ namespace RevivalGuard
             given.Add(have.Name);
         }
 
-        // THE SIGNATURE WEAPONS (owner 2026-11-12: "same with the weapons they were designed to use. bonded so they actually
-        // use them and designed their stats to they are useful and fair for their level ranges"). Low: the Acid set,
-        // mid: the Weeping set (tools/borg/suit_sql.py WEAPONS: base +20). Kind: what the Borg wields (its skill and weapon
-        // type), else its best trained weapon skill. Damage follows its level by Curve (the same table as tools/borg/look.py
-        // WEAPON_CURVE, anchored on the quest and loot weapons of each level: docs/borg/GEAR-TRACK.md).
+        // The signature weapons.
         const uint W_LOW = 911320, W_MID = 911340;
         enum Kind { HeavySword, HeavyMace, HeavyAxe, LightDagger, LightMace, LightAxe, Bow, Crossbow, Wand }
         internal static bool IsSignature(uint wcid) => wcid >= 911320 && wcid <= 911348;
@@ -185,8 +160,7 @@ namespace RevivalGuard
 
         static bool Trained(Player p, Skill s) => p.GetCreatureSkill(s).AdvancementClass >= SkillAdvancementClass.Trained;
 
-        /// <summary>No weapon in hand: its best trained weapon skill (a "mage" without War Magic fights as Heavy, as the
-        /// brain does); a Heavy fighter's default is the mace (the Academy Mace it starts with), a Light one's the dagger.</summary>
+        /// <summary>No weapon in hand: its best trained weapon skill; a Heavy fighter's default is the mace, a Light one's the dagger.</summary>
         static Kind ByTraining(Player p)
         {
             Skill best = Skill.HeavyWeapons; uint top = 0;
@@ -202,9 +176,7 @@ namespace RevivalGuard
 
         static string SkillGroup(Kind k) { var g = Group(k); return g == "bow" || g == "crossbow" ? "missile" : g; }
 
-        /// <summary>THE KIND, BY WHAT IT IS TRAINED IN (live 2026-11-13: Maximus, an archer, held a Knife at login and was
-        /// given the Borg Acid Dagger). The best trained weapon skill decides; what it holds only picks the subtype when it
-        /// is of that skill (a Heavy fighter with a sword gets the sword); an archer gets the crossbow when it carries one.</summary>
+        /// <summary>The kind, by what it is trained in.</summary>
         static Kind Choose(Player p)
         {
             var trained = ByTraining(p);
@@ -240,9 +212,7 @@ namespace RevivalGuard
             return out_;
         }
 
-        /// <summary>ROOM TO DRESS (live 2026-11-13: Sefa's pack was full of loot; her Chainmail went to the pack and the suit
-        /// had nowhere to be made, "pack full" at every login). The cheapest plain loot goes, as few as are needed: never
-        /// bonded, attuned or kit items, keys, money, notes, containers, or anything worth JUNK_TOP or more.</summary>
+        /// <summary>Room to dress.</summary>
         const int JUNK_TOP = 2000;
         static void Room(Player p, int need)
         {
@@ -250,8 +220,7 @@ namespace RevivalGuard
             if (free >= need) return;
             var junk = AllCarried(p).Where(o => !(o is Container) && !IsSuit(o.WeenieClassId) && !IsSignature(o.WeenieClassId)
                     && !KIT.Contains(o.WeenieClassId) && (o.GetProperty(PropertyInt.Bonded) ?? 0) == 0 && !o.IsAttunedOrContainsAttuned
-                    // plain loot only: armor, clothing, jewelry, melee weapons, gems (never ammunition, launchers, casters,
-                    // kits, components or food: shard2 2026-11-13, the first try cleared an archer's arrows)
+                    // plain loot only: armor, clothing, jewelry, melee weapons, gems
                     && (o.ItemType & (ItemType.Armor | ItemType.Clothing | ItemType.Jewelry | ItemType.MeleeWeapon | ItemType.Gem)) != 0
                     && o.WeenieType != WeenieType.Ammunition
                     && (o.Value ?? 0) < JUNK_TOP)
@@ -274,8 +243,7 @@ namespace RevivalGuard
             else w.DamageMod = Math.Round(v, 2);
         }
 
-        /// <summary>THE BAND'S WEAPON IN HAND: the other band's signature retired, the old acid dagger of the plain kit too;
-        /// any other weapon goes to the pack (kept); the signature made if not carried, set to our level, wielded.</summary>
+        /// <summary>The band's weapon in hand</summary>
         static void Arm(Player p, string band, List<string> given)
         {
             var kind = Choose(p);
@@ -311,8 +279,7 @@ namespace RevivalGuard
             given.Add(mine.Name);
         }
 
-        /// <summary>THE MID SUIT (40 to 79): the low suit retired, earned armor in its slots to the pack, the suit on; the
-        /// Aegis only with a one-handed weapon or a caster (a bow or a two-hander keeps it in the pack).</summary>
+        /// <summary>The mid suit: the low suit retired, earned armor in its slots to the pack, the suit on</summary>
         static void DressMid(Player p, List<string> given)
         {
             Retire(p, Owned(p, LOW_SUIT), "the mid suit from level 40");
@@ -335,9 +302,7 @@ namespace RevivalGuard
             WearSuit(p, S_AEGIS, given);
         }
 
-        /// <summary>PLAIN CLOTHES MAKE ROOM (a new character starts in the creator's tunic, breeches and boots): worn clothing
-        /// in this slot that is not the kit is removed (a bot's starter clothes; worth nothing). Armour (ItemType.Armor) is never touched: what a Borg earned
-        /// stays on.</summary>
+        /// <summary>Plain clothes make room: worn clothing in this slot that is not the kit is removed.</summary>
         static void ClearClothing(Player p, EquipMask slot)
         {
             foreach (var o in p.EquippedObjects.Values.ToList())
@@ -354,26 +319,19 @@ namespace RevivalGuard
         {
             if (wo == null) return false;
             var at = wo.ValidLocations ?? EquipMask.None;
-            // CLOTHING LAYERS (a shirt and pants both cover the abdomen, boots and pants the lower leg): only armour, or the
-            // same kind of item already worn there (a weapon, a second shirt), keeps a piece off; ACE's own rules decide the rest
+            // Clothing layers: only armour, or the same kind of item already worn there, keeps a piece off; ACE's own rules decide the rest
             var under = p.EquippedObjects.Values.Where(o => ((o.CurrentWieldedLocation ?? 0) & at) != 0
-                // the kit's own Leather Boots are ItemType.Armor and cover the lower leg (0x180) as Pants do (0xC4): they
-                // kept every man's Pants off (live 2026-11-08: Cranius, Maximus, Nexus in no pants). Kit never blocks kit.
+                // the kit's own Leather Boots are ItemType.Armor and cover the lower leg (0x180) as Pants do (0xC4): they kept every man's Pants off.
                 && (o.ItemType == ItemType.Armor && !KIT.Contains(o.WeenieClassId) || o.ItemType == wo.ItemType && wo.ItemType != ItemType.Clothing
                     || o.ValidLocations == wo.ValidLocations)).ToList();
             string why = at == EquipMask.None ? "no slot" : under.Count > 0 ? "slot taken: " + string.Join(", ",
                 under.Select(o => $"{o.Name} {o.CurrentWieldedLocation}")) : null;
-            // INTO THE PACK FIRST, THEN WIELDED AS A PLAYER WOULD (owner report 261109-0015, "sefa showed up missing pieces
-            // in inspect"): TryEquipObjectWithNetworking on a new object sends the wearer only the wield events, never the
-            // object, so the wearer's own client had no name or look for it. Created in the pack, the client is told of it;
-            // GetAndWieldItem then moves it on with every message a wield sends.
             if (why == null)
             {
                 if (!p.TryCreateInInventoryWithNetworking(wo)) why = "pack full";
                 else
                 {
-                    // A MOMENT LATER (shard2 2026-11-09): wielded in the same tick, the wearer's client had the wield before
-                    // the new object and left it in the pack ("dressed" on the server, nothing worn in his own view)
+                    // A moment later: wielded in the same tick, the wearer's client had the wield before the new object and left it in the pack
                     var chain = new ActionChain();
                     chain.AddDelaySeconds(1.5);
                     chain.AddAction(p, () =>
@@ -407,7 +365,7 @@ namespace RevivalGuard
             }
             if (Suits)
             {
-                // THE LOW SUIT replaces the plain kit (bonded at run time before the datafix) and holds its slots
+                // The low suit replaces the plain kit (bonded at run time before the datafix) and holds its slots
                 Retire(p, Owned(p, PLAIN_KIT.ToArray()).Where(o => o.GetProperty(PropertyInt.Bonded) == (int)BondedStatus.Bonded),
                        "the bonded low suit");
                 ToPack(p, BODY);
@@ -458,7 +416,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>CROSSING A BAND: a level-up to 40 swaps low for mid at once (and to 80 leaves things be).</summary>
+        /// <summary>Crossing a band: a level-up to 40 swaps low for mid at once (and to 80 leaves things be).</summary>
         [HarmonyPatch]
         static class OnLevelUp
         {

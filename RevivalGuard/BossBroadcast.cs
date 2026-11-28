@@ -17,12 +17,7 @@ using R = RevivalGuard.BossBroadcastRule;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// BOSS KILL NEWS: "The Thunder Turkey has been slain by X and the fellowship Y!" to everyone online. Ours, not retail
-    /// (owner 2026-11-21). The list and the limits are BossBroadcastRule's. Switch `rg_boss_broadcast`, default ON (owner's yes
-    /// 2026-11-21). @bossbroadcast: status, on|off, test [wcid], list [text], add &lt;wcid&gt; [name], remove &lt;wcid&gt;, reload.
-    /// Other code can make one creature a boss for its life with Mark (the Holtburg raid's leader).
-    /// </summary>
+    /// <summary>Boss kill news: "The Thunder Turkey has been slain by X and the fellowship Y!" to everyone online.</summary>
     static class BossBroadcast
     {
         public const string P_ON = "rg_boss_broadcast";
@@ -80,7 +75,7 @@ namespace RevivalGuard
             catch (Exception e) { err = e.Message; return false; }
         }
 
-        /// <summary>This creature is a boss for its life, said as <paramref name="name"/> (TownRaid's leader).</summary>
+        /// <summary>This creature is a boss for its life, said as name (TownRaid's leader).</summary>
         internal static void Mark(Creature c, string name)
         {
             if (c == null) return;

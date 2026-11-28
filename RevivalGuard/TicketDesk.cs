@@ -12,29 +12,7 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// PLAYER REPORTS AND SUPPORT TICKETS. Owner, 2026-09-18: capture the bugs real players hit, and let
-    /// players send support tickets for staff to review.
-    ///
-    /// The wire is retail's own AbuseLogRequest 0x0140 (String16L target, uint status, String16L
-    /// complaint), which ACE lists but never handles. Retail's Report Abuse and Urgent Assistance
-    /// buttons opened Turbine's support site instead; ours send this message, so the report arrives
-    /// over the player's own authenticated session and no new port is opened.
-    ///
-    /// Our client (Assets/Streaming/AcTickets.cs) sends one report as numbered chunks, because one
-    /// game message is one fragment and the bridge's strings are ASCII:
-    ///     target    = "RVT1|&lt;client id&gt;|&lt;index&gt;|&lt;count&gt;|&lt;kind&gt;"
-    ///     complaint = one slice of the report's UTF-8 text in base64
-    /// Any other 0x0140 (a retail client's own abuse report) is filed as it arrives, kind "abuse".
-    ///
-    /// Each finished report is one JSON file under ~/ace/reports/&lt;yyyy-MM&gt;/&lt;id&gt;.json, with what
-    /// the SERVER knows (account, character, level, location) beside what the client wrote, since
-    /// the client's text is the player's word and the server's fields are not.
-    /// tools/reports/tickets.py lists, shows and closes them.
-    ///
-    /// A report desk is also an attack surface (disk filling, log spam), so it is limited per account
-    /// and per session, and anything malformed is dropped.
-    /// </summary>
+    /// <summary>Player reports and support tickets.</summary>
     static class TicketDesk
     {
         const string MAGIC = "RVT1";
@@ -47,9 +25,7 @@ namespace RevivalGuard
         const int USAGE_PER_SESSION = 40;                          // AcUsage flushes: every 15 min and at logout
         const int ASSIST_PER_SESSION = 120;                        // AcAssistUsage batches: hourly at least, a stop within a minute
         const int SHARD_PER_DAY = 3000;                            // a ceiling on disk use for the whole shard
-        // SHARED ROUTES (owner 2026-11-03, docs/ATLAS-ROUTES.md): "Share this route" sends a walked route for the atlas. Not a
-        // ticket: filed apart (reports/routes/), no ticket number, its own caps, and only well-formed route JSON is kept
-        // caps count SHARES (the body's "id"), not parts: a long route comes as up to ROUTE_MAX_PARTS parts (AcRouteShare)
+        // Shared routes: "Share this route" sends a walked route for the atlas.
         const int ROUTE_PER_SESSION = 3, ROUTE_PER_DAY = 10, ROUTE_SHARD_PER_DAY = 2000, ROUTE_MAX_POINTS = 2000, ROUTE_MAX_PARTS = 4;
 
         static readonly string Root = Environment.GetEnvironmentVariable("REVIVAL_REPORTS_DIR")
@@ -65,7 +41,7 @@ namespace RevivalGuard
         static readonly Dictionary<uint, List<(DateTime at, string id)>> s_RoutesByAccount = new Dictionary<uint, List<(DateTime, string)>>();
         static int s_RouteTodayCount; static string s_RouteToday;
 
-        /// <summary>Handle one AbuseLogRequest. Always consumes it (ACE has no handler of its own).</summary>
+        /// <summary>Handle one AbuseLogRequest.</summary>
         public static void Take(ClientMessage message, Session session)
         {
             var player = session?.Player;
@@ -105,8 +81,7 @@ namespace RevivalGuard
                     st.Open.Remove(stale);
                 if (!st.Open.TryGetValue(f[1], out var p))
                 {
-                    // Staff (Sentinel and up) file reports in bursts while reviewing (owner 2026-11-02: "am i limited in how many bug
-                    // reports i can send?"): no per-account caps for them; the shard's daily ceiling still applies.
+                    // Staff (Sentinel and up) file reports in bursts while reviewing: no per-account caps for them; the shard's daily ceiling still applies.
                     if (st.Open.Count >= (Staff(session) ? MAX_PENDING_STAFF : MAX_PENDING)) { Offences.Add(player, "ticket", "too many unfinished reports; chunk dropped"); return; }
                     p = new Pending { Kind = kind, Count = count, Parts = new string[count], Started = now };
                     st.Open[f[1]] = p;
@@ -120,9 +95,7 @@ namespace RevivalGuard
                     catch { Offences.Add(player, "ticket", "report was not valid base64; dropped"); return; }
                     if (kind == "usage")
                     {
-                        // The client's feature counters (Assets/Streaming/AcUsage.cs): not a ticket, a line in
-                        // the player event log (Telemetry). Capped per session, silently.
-                        // the Assistant's usage batches (AcAssistUsage) have their own cap: an 8 hour night is ~10 of them
+                        // The client's feature counters (Assets/Streaming/AcUsage.cs): not a ticket, a line in the player event log (Telemetry).
                         if (Telemetry.IsAssist(done) ? ++st.Assist > ASSIST_PER_SESSION : ++st.Usage > USAGE_PER_SESSION) return;
                         Telemetry.Usage(player, done);
                         return;
@@ -136,22 +109,15 @@ namespace RevivalGuard
             }
             if (done == null) return;
             if (kind == "route") { FileRoute(session, player, st, done); return; }
-            // Answers to the milestone questions (Feedback) carry the question they answer; ideas and
-            // answers also go into the event log beside what the player was doing.
+            // Answers to the milestone questions carry the question they answer
             if (kind == "answer") done = $"Question: {Feedback.LastQuestion(player) ?? "(none asked this session)"}\n\n{done}";
             if (kind == "idea" || kind == "answer") Telemetry.Emit(kind, player, ",\"text\":" + Telemetry.J(done.Length > 4000 ? done.Substring(0, 4000) : done));
             File(session, player, kind, done);
         }
 
-        /// <summary>A report the player did not write as a ticket (a feature request from FeatureBoard): filed the same
-        /// way, but with no "received as ticket" line and no over-the-limit message (the board already answered).</summary>
+        /// <summary>A report the player did not write as a ticket</summary>
         internal static void FileQuiet(Session session, Player player, string kind, string body) => File(session, player, kind, body, quiet: true);
 
-        // A BOT'S OWN AUTOMATIC REPORTS ARE NOT THE OWNER'S TICKETS (coordinator 2026-11-09, ticket 261109-0038: Cranius of
-        // Borg's client filed a watchdog "too busy" report into the live desk). The game's automatic and crash reports
-        // from a mercenary or Borg account (Mercenaries.IsMerc: the reserved allowlist) go to reports/bots/<yyyy-MM>/, with
-        // no ticket number and their own daily cap, for whoever works on the bots. Every reader of the desk globs
-        // reports/*/*.json, so they skip them. A report a person types on those accounts is still a ticket.
         const int BOT_AUTO_PER_DAY = 60;
         static readonly Dictionary<uint, (string day, int n)> s_BotDay = new Dictionary<uint, (string, int)>();
 
@@ -249,10 +215,7 @@ namespace RevivalGuard
                     $"Thank you. Your report has been received as ticket {id}. Our team reviews every ticket.", ChatMessageType.Broadcast));
         }
 
-        /// <summary>A shared route part: kept only when it is the JSON the client's Share button writes (AcRouteShare:
-        /// {"v":1,"id":"8hex","part":k,"of":n,"name","type","pts":"ew,ns,z,t;..."}), under reports/routes/&lt;yyyy-MM&gt;/r&lt;id&gt;.json.
-        /// The atlas stitches the parts and reads them as candidates; a bot walks each before anything trusts it
-        /// (tools/atlas/route_learn.py).</summary>
+        /// <summary>A shared route part: kept only when it is the JSON the client's Share button writes</summary>
         static void FileRoute(Session session, Player player, SessionState st, string body)
         {
             string share; int part, of;

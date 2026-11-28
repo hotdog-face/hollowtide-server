@@ -2,16 +2,7 @@ using ACE.Server.Mods;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The folder the mod dll lives in (~/ace/ace-runtime/Mods/RevivalGuard on the shard). Files the
-    /// mod owns go beside the dll: deploy-revivalguard.sh copies only the dll, so they survive a
-    /// deploy, and they need no database table. SeasonalOverrides.json was the first; the audit
-    /// trail and character snapshots follow it.
-    ///
-    /// GetModContainerByName is exact-match on purpose; a mod that is still initialising (this is
-    /// called from Mod.Initialize) falls back to ModPath/RevivalGuard, which is the same folder by
-    /// ACE's convention: FolderName is the dll name.
-    /// </summary>
+    /// <summary>The folder the mod dll lives in (~/ace/ace-runtime/Mods/RevivalGuard on the shard).</summary>
     internal static class ModFolder
     {
         public static string Path()
@@ -23,7 +14,7 @@ namespace RevivalGuard
             return folder;
         }
 
-        /// <summary>A subfolder beside the dll, created if missing. Null (and a log line) if it cannot be.</summary>
+        /// <summary>A subfolder beside the dll, created if missing.</summary>
         public static string Sub(string name)
         {
             var dir = System.IO.Path.Combine(Path(), name);

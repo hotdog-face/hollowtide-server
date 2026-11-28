@@ -7,15 +7,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A DRINK STARTED OFF WALKABLE GROUND (SERVER-SIDE) FINISHES ON A TIMER. With allow_fast_chug every PK here takes
-    /// ApplyConsumableWithAnimationCallbacks, which waits for the server body's motion-done of Drink and then Ready. When
-    /// ACE's physics has that body out of Contact/OnWalkable (crowded on a dungeon ramp, see ServerFooting), the motion is
-    /// never queued, the use never ends, and the player is "too busy" until ChugWatchdog (Genki, 261023-0010: "it lags a
-    /// lot, re-logging fixes it"). Here such a drink takes ACE's own timed path instead (the body of ApplyConsumable when
-    /// fast chug is off), which always sends UseDone. A drink on walkable ground keeps the retail fast chug.
-    /// Switch: rg_chug_footing (default on).
-    /// </summary>
+    /// <summary>A drink started off walkable ground (server-side) finishes on a timer.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.ApplyConsumable))]
     static class ChugFooting
     {

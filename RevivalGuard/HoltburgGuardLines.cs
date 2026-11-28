@@ -2,13 +2,7 @@ using System.Collections.Generic;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// WHAT HOLTBURG'S ROYAL GUARDS SAY (HoltburgGuards.cs). Data only: edit a line here, rebuild the mod, nothing else
-    /// changes. Turbine's lore voice (docs/outreach/VOICE.md): plain ASCII, no em dashes, nothing modern or jokey. Retail's
-    /// one heartbeat line, "All's quiet on this front!", stays in the general pool. Pools are picked by
-    /// HoltburgGuardsRule.PickPool (time of day by Dereth's hours, the season, and what has just happened); within a pool a
-    /// guard says every line once before any line again (HoltburgGuardsRule.LineBag).
-    /// </summary>
+    /// <summary>What holtburg's royal guards say (HoltburgGuards.cs).</summary>
     public static class HoltburgGuardLines
     {
         public static readonly Dictionary<string, string[]> Pools = new Dictionary<string, string[]>

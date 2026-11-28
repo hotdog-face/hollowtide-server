@@ -5,22 +5,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A HOOK TAKES ONLY WHAT FITS IT (house hooks audit, 2026-09-27, docs/SYSTEMS-HOUSING.md).
-    ///
-    /// ACE puts ANY item on ANY hook: +Sysprobe hung a Mace, which has no HookType at all, on a wall
-    /// hook of cottage 0x742AA1A7, and a rug would go on a wall the same way. Retail refused both. Its
-    /// client ran ItemHolder::CheckHookStatus @00586e90 from gmExternalContainerUI::DragItemAcceptable
-    /// @004cbb60 before any request went out, and its server had the error for it
-    /// (WeenieError.ItemIsWrongTypeForHook 0x04E3, "That item is of the wrong type to be placed on this
-    /// hook."). This is CheckHookStatus's rule, server side, so every client gets it:
-    ///   the hook has no HookType or no HookItemType   -> allowed
-    ///   the hook has no house owner                    -> refused
-    ///   item.HookType shares a bit with the hook's     -> allowed if item.ItemType is in HookItemType
-    ///   anything else (no HookType on the item too)    -> refused
-    /// ACE's hook weenies all author HookItemType -1 (every type), so in practice the rule is the
-    /// HookType match: wall 2, floor 1, ceiling 4, yard 8, roof 16.
-    /// </summary>
+    /// <summary>A hook takes only what FITS it.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.HandleActionPutItemInContainer))]
     static class HookTypeGuard
     {
@@ -50,10 +35,6 @@ namespace RevivalGuard
             int hookType = hook.HookType ?? 0;
             int hookItemTypes = hook.HookItemType ?? 0;
             if (hookType == 0 || hookItemTypes == 0) return true;
-            // AN UNOWNED HOUSE IS NOT A TYPE PROBLEM. Refusing it here answered "That item is of the wrong
-            // type to be placed on this hook" for a wall trophy on a wall hook in a mansion the player had
-            // not bought yet (owner, 2026-09-29, six refusals in a row). Ownership is ACE's own check,
-            // with its own reply, so this guard only judges the type and lets ACE judge the owner.
             if ((hook.HouseOwner ?? hook.House?.HouseOwner ?? 0) == 0) return true;
             int itemHookType = item.HookType ?? 0;
             if (itemHookType == 0 || (itemHookType & hookType) == 0) return false;

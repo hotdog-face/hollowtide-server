@@ -6,26 +6,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// SEASONAL DROPS ARE SEASONAL. Owner, 2026-09-30: "For the seasonal items, do the seasonal releases to
-    /// grant those items instead of them being available all the time." docs/OBTAINABLE-ITEMS-2026-09-30.md section 6.
-    ///
-    /// Retail's festival trophies (the Mask Maker heads and body parts, the Festival Season quest drops) came
-    /// from ordinary creatures only while the festival ran. ACE's world data carries those create-list rows
-    /// all year, and the 2026-09-30 obtainable-items pass added twelve more (ids 9300001-9300100). A create
-    /// list cannot see the calendar, so this does: after ACE's own roll (Creature.CreateListSelect, used for
-    /// a creature's death drops), a row whose item is in the table below is dropped unless one of its
-    /// festivals is running (SeasonalCalendar, forced states included). Removing the rolled row leaves
-    /// every other item's odds as they were: that set simply rolled "nothing" this time.
-    ///
-    /// The table is wcid -> festival keys (SeasonalCalendar's keys). An item whose droppers exist only
-    /// inside an event (the Pumpkin Kin's Seeds, the spring babies' tokens) is already seasonal by the
-    /// creature and is not listed. A second key keeps an existing event creature's drop: Mad Cows carry
-    /// Cow Heads on April Fools' Day, a spring baby Ursuin carries an Ursuin Head. Vendors, gives and
-    /// generators are untouched (the seasonal Costumers already come and go with their festival).
-    /// Evidence per row: the local AC wiki ("Seasonal Items" + "Trophy Items"; the Mask Maker page:
-    /// "During the fall season, many creatures will drop heads ... as trophies").
-    /// </summary>
+    /// <summary>Seasonal drops are seasonal.</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.CreateListSelect), new Type[] { typeof(List<PropertiesCreateList>) })]
     static class SeasonalDrops
     {
@@ -104,16 +85,14 @@ namespace RevivalGuard
             { 36401, new[] { "festivalseason" } },   // Enchanted Bone Fragment
             { 36495, new[] { "festivalseason" } },   // Ancient Crest
             { 36489, new[] { "festivalseason" } },   // Chilling Ebony Staff
-            { 901700, new[] { "festivalseason" } },   // Necklace of the Night Swarm (ours; 1% on the Pumpkin Lord and festival scarecrows, owner 2026-10-01)
+            { 901700, new[] { "festivalseason" } },   // Necklace of the Night Swarm
             { 34386, new[] { "frostfell" } },   // Hot Coal
-            { 14765, new[] { "frostfell" } },   // Eggnog (the imposter Santa's drops, datafix 2026-12-01-frostfell-3; owner ticket 261031-0010)
+            { 14765, new[] { "frostfell" } },   // Eggnog
             { 52580, new[] { "frostfell" } },   // Holiday Sweater (the imposter Santa)
             { 47168, new[] { "frostfell" } },   // Snow Tuskie Kennel (the imposter Santa)
             { 80078, new[] { "spring" } },   // Pon Mi's confession
             { 27249, new[] { "spring" } },   // Spring Cleaner Title Token
-            // Retired live events (docs/EVENTS-RETIRED.md; tools/gpubox-ace/gen_retired_feb2.py). Their droppers come only
-            // in the window, so these hold only if one is ever spawned outside it; the Illuminated scroll's dropper,
-            // Matriarch Mirta'kir on Bur, stands all year.
+            // Retired live events (docs/EVENTS-RETIRED.md; tools/gpubox-ace/gen_retired_feb2.py).
             { 5878, new[] { "greatwork" } },     // Tremblant's Ivory Staff (Sir Joffre Tremblant, 1 in 10)
             { 5904, new[] { "greatwork" } },     // Crystal Device (The Great Work)
             { 903733, new[] { "burritual" } },   // Illuminated Falatacot Scroll (Matriarch Mirta'kir)

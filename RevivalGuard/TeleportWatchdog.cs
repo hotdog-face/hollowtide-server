@@ -8,115 +8,18 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A TELEPORT THAT NEVER COMPLETES BLOCKS EVERY LATER ONE, FOR EVER.
-    ///
-    /// Found 2026-09-21 while sweeping Hotel Swank. A bot was teleported to a position whose
-    /// landblock-local y was out of range (`@teleloc 0x018A0249 91 -83 0.1` -- a dungeon whose own
-    /// cells span negative y). From that moment every further teleport was **silently** dropped:
-    /// no movement, no message to the player, nothing in the server log, and `@fixbusy` did not
-    /// help. Fourteen consecutive @teleloc commands did nothing. Only relogging cleared it.
-    ///
-    /// The mechanism is in ACE, not in the client. `Player.Teleport` sets `Teleporting = true`
-    /// (Player_Location.cs:679) and only `OnTeleportComplete` clears it (:760) -- and that method
-    /// refuses to finish while the destination landblock has not reported
-    /// `CreateWorldObjectsCompleted`, re-queueing itself every 0.1 s for ever:
-    ///
-    ///     if (CurrentLandblock != null &amp;&amp; !CurrentLandblock.CreateWorldObjectsCompleted)
-    ///         ... AddDelaySeconds(0.1); AddAction(this, OnTeleportComplete); return;
-    ///
-    /// Meanwhile every entry point that matters is gated on the flag --
-    /// `if (IsBusy || Teleporting || ...) return;` in Player.cs:1096, Player_Inventory.cs:1373 and
-    /// :3192 -- so a stuck `Teleporting` does not only block teleports. It quietly blocks using and
-    /// moving items too. A player can reach this without any admin command: a portal, a recall or a
-    /// quest link whose destination has bad coordinates does the same thing, and the symptom they
-    /// report is "I'm stuck and nothing works", which is unfalsifiable from the outside.
-    ///
-    /// ---------------------------------------------------------------------------------------
-    /// WHY THE FIRST VERSION OF THIS FILE DID NOT WORK, AND WHY ACE'S OWN SAFETY NET DOES NOT EITHER
-    ///
-    /// The first version of this watchdog was a postfix on `Player.Heartbeat`.
-    ///
-    /// A CORRECTION TO WHAT THIS COMMENT FIRST CLAIMED. It said the Hotel Swank reproduction on
-    /// 2026-09-21 proved the hook was wrong, because the watchdog never fired. That reproduction
-    /// turned out to be a DIFFERENT failure -- `OnTeleportComplete` throwing partway through, with
-    /// `Teleporting` already false (see <see cref="TeleportCompleteRescue"/>) -- so the watchdog
-    /// stayed silent because there was no stuck flag to find, not because it could not run. The
-    /// evidence was real and the conclusion drawn from it was not.
-    ///
-    /// The hook still had to move, on the argument below, which stands on its own without that
-    /// reproduction: it is about where `Heartbeat` comes from, and it is read off ACE's own source.
-    ///
-    /// `Player.Heartbeat` is driven by the LANDBLOCK the player is in, not by the server:
-    ///
-    ///     // Landblock.TickSingleThreadedWork, Entity/Landblock.cs:597-606
-    ///     while (sortedWorldObjectsByNextHeartbeat.Count > 0)
-    ///         ... first.Heartbeat(currentUnixTime);
-    ///
-    /// A player in the middle of a failed teleport has been taken out of the old landblock and was
-    /// never finished into the new one, so they are in nobody's heartbeat list and `Heartbeat`
-    /// simply stops being called for them. A watchdog hanging off it cannot fire for precisely the
-    /// players it exists to rescue. The same is true of the `OnTeleportComplete` retry chain above:
-    /// ActionChains are pumped from the landblock tick too, so the 0.1 s re-check that is supposed
-    /// to let the player materialise also stops running.
-    ///
-    /// **ACE's own guard has the identical flaw**, which is why nothing in stock ACE rescues this
-    /// either. Player_Tick.cs:135 -- inside `Heartbeat` -- says:
-    ///
-    ///     if (Teleporting &amp;&amp; DateTime.UtcNow > ...LastTeleportStartTimestamp....Add(MaximumTeleportTime))
-    ///         Session.LogOffPlayer(true);
-    ///
-    /// with `MaximumTeleportTime = 5 minutes`. So ACE already intends to rescue a stuck teleport by
-    /// forcing a relog, and cannot reach a player who is in no landblock either. (The Swank bot that
-    /// sat past five minutes without being logged off is NOT evidence of this -- its `Teleporting`
-    /// was already false, so ACE's guard correctly did nothing. The flaw is structural and read off
-    /// the source above, not demonstrated.)
-    ///
-    /// SO THIS HANGS OFF `PlayerManager.Tick` INSTEAD. That is called from `WorldManager`
-    /// (Managers/WorldManager.cs:524), on the world loop, for the whole server -- it does not care
-    /// which landblock a player is in or whether they are in one at all. `PlayerManager.GetAllOnline`
-    /// is the same list ACE uses for broadcasts, so a wedged player is still in it.
-    ///
-    /// THE REMEDY IS GRADED, because the three ways to be stuck do not deserve the same answer:
-    ///
-    ///  1. The destination landblock HAS finished loading and only the dead retry chain is keeping
-    ///     the player in the pink-bubble state. Then the honest fix is to run the thing that should
-    ///     have run: `OnTeleportComplete()`. The player materialises where they meant to go and
-    ///     loses nothing.
-    ///  2. The landblock has not finished, or there is no landblock. Clearing `Teleporting` at
-    ///     least gives the player their client back -- item use, item moves and further teleports
-    ///     all un-gate -- so they can recall or @teleloc out under their own power.
-    ///  3. Still `Teleporting` a minute and a half later, i.e. neither of the above took. Then do
-    ///     what ACE always meant to do and force the relog, because a relog is the only remedy
-    ///     that is PROVEN to clear this state (2026-09-21: it was the only thing that worked).
-    ///     Ninety seconds rather than ACE's five minutes: a player who cannot act is not going to
-    ///     wait five minutes, and the position they resume at is the one the server already holds.
-    ///
-    /// None of this papers over the cause. Every arm logs who was stuck, for how long, and where,
-    /// which is the evidence trail for fixing the destination that did it.
-    ///
-    /// THREADING: `PlayerManager.Tick` runs on the world loop, the same thread that runs landblock
-    /// ticks, so this calls `OnTeleportComplete` from exactly the thread that would have called it.
-    /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class TeleportWatchdog
     {
-        /// <summary>Retail's own teleports settle in a second or two and ACE re-checks every 0.1 s;
-        /// twenty seconds is far past any honest landblock load and far short of a play session.</summary>
+        /// <summary>Retail's own teleports settle in a second or two and ACE re-checks every 0.1 s</summary>
         const double STUCK_SECONDS = 20.0;
 
-        /// <summary>When the gentle arms have not worked, ACE's own remedy. See the class note for
-        /// why this is 90 s and not ACE's five minutes.</summary>
+        /// <summary>When the gentle arms have not worked, ACE's own remedy.</summary>
         const double FORCE_LOGOFF_SECONDS = 90.0;
 
-        /// <summary>A client that has NOT sent LoginComplete for this teleport is still showing portal space (ours holds
-        /// it until the world is ready: 25 s, 90 s on a first visit or in the browser, then a 100 s fallback). ACE keeps
-        /// the player hidden and unattackable until then, as retail did; completing it at 20 s let a PK kill a slow loader
-        /// who saw only the tunnel (ticket 261103-0036). Such a player waits this long before the arms above.
-        /// Property rg_tele_arrive_seconds (TeleportArrival), default 120, never under STUCK_SECONDS.</summary>
         static double CLIENT_PORTAL_SECONDS => TeleportArrival.ClientWaitSeconds(STUCK_SECONDS);
 
-        /// <summary>When each player's client last sent LoginComplete (unix time), from <see cref="LoginCompleteSeen"/>.</summary>
+        /// <summary>When each player's client last sent LoginComplete (unix time), from LoginCompleteSeen.</summary>
         internal static readonly ConcurrentDictionary<uint, double> s_ClientArrived = new ConcurrentDictionary<uint, double>();
 
         /// <summary>The thresholds are 20 s and more; the world loop calls Tick about every millisecond.</summary>
@@ -139,13 +42,12 @@ namespace RevivalGuard
             foreach (var p in PlayerManager.GetAllOnline().ToList())
             {
                 if (p == null || !p.Teleporting) continue;
-                // Already on the way out (our own logoff arm, or a PK logoff timer): it stays Teleporting and
-                // online until FinalizeLogout, so without this the 90 s arm re-fired and warned every tick.
+                // Already on the way out: it stays Teleporting and online until FinalizeLogout, so without this the 90 s arm re-fired and warned every tick.
                 if (p.IsLoggingOut || p.PKLogout) continue;
                 var started = p.LastTeleportStartTimestamp;
                 if (started == null || started <= 0) continue;
                 var stuck = now - started.Value;
-                // the client's own LoginComplete for THIS teleport: then only the retry chain can be holding it
+                // The client's own LoginComplete for this teleport: then only the retry chain can be holding it
                 bool clientDone = s_ClientArrived.TryGetValue(p.Guid.Full, out var at) && at >= started.Value;
                 // ...or our own completion (TeleportArrival's movement arm) already asked for it
                 if (!clientDone && TeleportArrival.Requested(p, started.Value)) clientDone = true;
@@ -169,8 +71,6 @@ namespace RevivalGuard
                 var lb = p.CurrentLandblock;
                 if (lb != null && lb.CreateWorldObjectsCompleted)
                 {
-                    // Case 1: the world is ready and only the dead retry chain (or the client's word) was missing.
-                    // TeleportArrival.Complete also does LoginComplete's first-login step.
                     TeleportArrival.Complete(p, "the teleport watchdog", clientDone
                         ? "its landblock HAS finished loading, so the re-check chain died with the landblock tick"
                         : $"its client never said portal space ended within rg_tele_arrive_seconds ({CLIENT_PORTAL_SECONDS:F0}s); landblock loaded");
@@ -186,7 +86,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Notes each client's LoginComplete (the end of its portal space) for <see cref="TeleportWatchdog"/>.</summary>
+    /// <summary>Notes each client's LoginComplete (the end of its portal space) for TeleportWatchdog.</summary>
     [HarmonyPatch(typeof(GameActionLoginComplete), nameof(GameActionLoginComplete.Handle))]
     public static class LoginCompleteSeen
     {

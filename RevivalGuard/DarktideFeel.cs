@@ -17,23 +17,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// "FEELS LIKE RETAIL DARKTIDE" (owner's yes 2026-11-18 to build; each switch DEFAULT OFF until his separate yes):
-    /// docs/proposals/darktide-feel-2026-11-18.md. Pure rules: DarktideFeelRule.cs.
-    ///
-    ///   rg_signed_loot              corpse-capsule and house-capsule items carry retail makers' names: a looted item a
-    ///                               player could have tinkered is tinkered for real (ACE's own mutation scripts, the
-    ///                               same NumTimesTinkered, TinkerLog and numbers), "Last tinkered by", "Imbued by" (with
-    ///                               the imbue's icon underlay) and "Created by" on a recipe's crafted result.
-    ///   rg_signed_loot_inscriptions a few weapons and armour carry their owner's own inscription.
-    ///   rg_house_last_owner         an empty capsule house's covenant crystal reads "&lt;last owner&gt;'s Cottage" while his
-    ///                               pieces hang there; the stash note is signed by the same name; gone at purchase.
-    ///   rg_onthisday                twice a day a world line of dated real Asheron's Call history, Darktide first.
-    ///
-    /// NAMES are real retail characters and never in git or this source: read from the server-only names file the corpse
-    /// capsules use (~/ace/corpse-capsules/names.json, RG_CORPSE_NAMES; tools/corpse-capsules/names.py): people (Darktide
-    /// flagged), dtTinkers, dtImbuers. No file: nothing is signed and the signs stay as ACE has them.
-    /// </summary>
     static class DarktideFeel
     {
         internal const string P_LOOT = "rg_signed_loot", P_INSCRIBE = "rg_signed_loot_inscriptions", P_SIGN = "rg_house_last_owner", P_DAY = "rg_onthisday";
@@ -70,8 +53,7 @@ namespace RevivalGuard
         static string NamesPath => Environment.GetEnvironmentVariable("RG_CORPSE_NAMES")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ace", "corpse-capsules", "names.json");
 
-        /// <summary>The server-only names file, read again when it changes on disk (looked at once a minute at most): a new
-        /// names.py run on the host reaches the houses without a restart.</summary>
+        /// <summary>The server-only names file, read again when it changes on disk</summary>
         static NameLists Names
         {
             get
@@ -132,8 +114,7 @@ namespace RevivalGuard
             return name == TimeCapsuleRule.FallbackNames[0] ? null : name;
         }
 
-        /// <summary>A stored last owner is still good: no names file (keep what is there), or a name in the current file
-        /// that no character on this shard has. Else the house gets a fresh name (owner 2026-11-27: the screenshot names).</summary>
+        /// <summary>A stored last owner is still good: no names file, or a name in the current file that no character on this shard has.</summary>
         internal static bool StillGood(string name)
         {
             var n = Names;
@@ -165,8 +146,7 @@ namespace RevivalGuard
             SignedLootRule.SUNSTONE => MaterialType.Sunstone, SignedLootRule.BLACK_OPAL => MaterialType.BlackOpal, _ => MaterialType.FireOpal,
         };
 
-        /// <summary>One tinker as ACE applies it (RecipeManager.TryMutate + HandleTinkerLog): the mutation script, and the
-        /// salvage's material appended to TinkerLog when NumTimesTinkered went up.</summary>
+        /// <summary>One tinker as ACE applies it</summary>
         static bool Apply(WorldObject wo, uint mutation)
         {
             var script = MutationCache.GetMutation(mutation);
@@ -178,7 +158,7 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>Signs what a capsule holds, as its owner and the tinkers of his day left it. Returns how many got a name.</summary>
+        /// <summary>Signs what a capsule holds, as its owner and the tinkers of his day left it.</summary>
         internal static int SignAll(IEnumerable<WorldObject> items, string owner)
         {
             if (!Loot || items == null) return 0;
@@ -228,10 +208,7 @@ namespace RevivalGuard
 
         static string BaseName(SlumLord sl) => DatabaseManager.World.GetCachedWeenie(sl.WeenieClassId)?.GetName() ?? sl.House?.HouseType.ToString();
 
-        /// <summary>Puts the last owner's name on an empty capsule house's crystal, or takes ours off. Never touches a
-        /// name ACE set (an owned house).</summary>
-        /// <param name="real">A real player's house left with his goods inside (TimeCapsule, rg_house_real_capsules): its
-        /// own switch decides, not rg_house_last_owner.</param>
+        /// <summary>Puts the last owner's name on an empty capsule house's crystal, or takes ours off.</summary>
         internal static void UpdateSign(House house, bool piecesUp, string owner, bool real = false)
         {
             var sl = house?.SlumLord;
@@ -252,13 +229,13 @@ namespace RevivalGuard
             else if (ours) ClearSign(sl, owned);
         }
 
-        /// <summary>Ours off: back to the weenie's name (ACE then names an owner's house as it always does).</summary>
+        /// <summary>Ours off: back to the weenie's name.</summary>
         internal static void ClearSign(SlumLord sl, bool owned)
         {
             if (sl == null || !(sl.GetProperty(SIGN_SET) ?? false)) return;
             sl.RemoveProperty(SIGN_SET);
             if (!owned) sl.SetAndBroadcastName();
-            else sl.Name = BaseName(sl);   // a purchase: ACE appends the buyer's name right after (SetHouseOwner)
+            else sl.Name = BaseName(sl);   // a purchase: ACE appends the buyer's name right after
             sl.SaveBiotaToDatabase();
         }
 
@@ -310,8 +287,7 @@ namespace RevivalGuard
                 case "say": Say(session, OnThisDay.SayNow(force: true) ?? "[DarktideFeel] Nothing for today."); return;
                 case "loadlb":
                 {
-                    // Loads a landblock with nobody in it, so its houses (hook pieces, crystal) and corpses are made as a
-                    // visitor would find them. Test shards only; it unloads by itself like any other.
+                    // Loads a landblock with nobody in it, so its houses (hook pieces, crystal) and corpses are made as a visitor would find them.
                     if (a.Length < 2 || !uint.TryParse(a[1].Replace("0x", ""), System.Globalization.NumberStyles.HexNumber, null, out var lb)) { Say(session, "[DarktideFeel] loadlb <landblock hex, e.g. C7D2>"); return; }
                     var id = new ACE.Entity.LandblockId((lb & 0xFFFF) << 16 | 0xFFFF);
                     LandblockManager.GetLandblock(id, false, false);
@@ -326,8 +302,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>ON THIS DAY: the dated lines (embedded OnThisDay.json) said at OnThisDayRule.HOURS, at most twice a day,
-    /// only with someone online. What was said is kept in Mods/RevivalGuard/OnThisDay/state.json across restarts.</summary>
+    /// <summary>On this day: the dated lines said at OnThisDayRule.HOURS, at most twice a day, only with someone online.</summary>
     static class OnThisDay
     {
         static List<OnThisDayRule.Entry> s_All = new List<OnThisDayRule.Entry>();
@@ -415,8 +390,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Before ACE names the crystal for its buyer ("&lt;buyer&gt;'s Cottage" from the current name), our last-owner
-    /// name comes off, so the buyer's name is put on the plain one.</summary>
+    /// <summary>Before ACE names the crystal for its buyer, our last-owner name comes off, so the buyer's name is put on the plain one.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.SetHouseOwner))]
     static class DarktideFeelOnPurchase
     {

@@ -4,15 +4,7 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE ARENA QUEUE'S RULES, PURE C# (no ACE types) so NetTest runs them (tools/nettest/PkArenaCase.cs): who may be
-    /// matched with whom, how a 2v2 is split, and the rating a result moves. PkArena.cs feeds these from live players.
-    ///
-    /// Matching: the longest waiter is served first. Everyone in a match must be within the level band of that waiter,
-    /// and the band widens the longer they wait (a thin population still gets a fight). No two characters in one match
-    /// share an account, or a connection address (PkCommon.SameAddress, which honours pk_honor_ignore_ip). Borg and
-    /// Hollow Company mercenaries are never queued unless pk_arena_bots is on (PkArena checks that at the door).
-    /// </summary>
+    /// <summary>The arena queue's rules, PURE C# so NetTest runs them</summary>
     internal static class PkArenaRules
     {
         internal enum Mode { Duel = 0, Pairs = 1, Ffa = 2 }
@@ -31,7 +23,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>One character waiting. Account and Address stand for "same account" / "same connection".</summary>
+        /// <summary>One character waiting.</summary>
         internal sealed class Waiter
         {
             public uint Guid; public string Name = ""; public int Level; public uint Account; public string Address = "";
@@ -51,8 +43,7 @@ namespace RevivalGuard
         internal static int Need(Mode m, long firstWaited, int ffaMin, long ffaWait) =>
             m == Mode.Duel ? 2 : m == Mode.Pairs ? 4 : firstWaited >= ffaWait ? ffaMin : 4;
 
-        /// <summary>The next match for one mode's queue (oldest first), or null. The oldest waiter is always in it; the
-        /// rest are the closest in level to them, within the band, with no account or address shared.</summary>
+        /// <summary>The next match for one mode's queue (oldest first), or null.</summary>
         internal static List<Waiter> Pick(IReadOnlyList<Waiter> queue, Mode m, long now, int baseBand, int perMinute, int cap,
             int ffaMin = 3, long ffaWait = 60)
         {
@@ -84,8 +75,7 @@ namespace RevivalGuard
             return new List<List<Waiter>> { new List<Waiter> { s[0], s[3] }, new List<Waiter> { s[1], s[2] } };
         }
 
-        /// <summary>Elo (K 32). The rating change of each side in a finished match: `placeOf[i]` 0 for the winning side, 1 for the
-        /// rest; all 0 is a draw. Ffa scores each pair of sides as a game of its own, averaged.</summary>
+        /// <summary>Elo (K 32).</summary>
         internal static int[] Changes(double[] sideRating, int[] placeOf)
         {
             int n = sideRating.Length;

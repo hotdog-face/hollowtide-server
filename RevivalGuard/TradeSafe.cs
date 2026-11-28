@@ -15,22 +15,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A CRASH DURING A TRADE NO LONGER LOSES THE ITEMS (docs/findings/dupe-recheck-2026-11-02.md). ACE's
-    /// Player.FinalizeTrade takes each offered item out of its owner's pack with TryRemoveFromInventoryWithNetworking
-    /// (or TryDequipObjectWithNetworking), whose DeepSave writes the row with NO container, holds the items 0.5 s,
-    /// then puts each into the other pack and saves it there. Measured 2026-11-03 (box and M5 test shards): kill -9
-    /// 0.3 s after both accepted left both items owned by nobody, gone from both players.
-    ///
-    /// So during FinalizeTrade the ownerless DeepSave is skipped: the database keeps the item with its old owner until
-    /// the hand-over saves it with the new one (TryCreateInInventoryWithNetworking saves each item at once). A crash then
-    /// leaves each item where it was or where it went, one row either way: never nowhere, never twice.
-    ///
-    /// Belt and braces: the items of a trade are written to trade-journal.json (guid, from, to) before the hand-over,
-    /// and at startup any journalled item whose row has no container, wielder or location goes back to its old owner,
-    /// logged. Rows a crash orphaned before this fix carry no trace of their owner: @orphans lists them and
-    /// @orphans return &lt;guid&gt; &lt;character&gt; hands one to the character a report names.
-    /// </summary>
     [HarmonyPatch(typeof(Player), "FinalizeTrade")]
     static class TradeSafe
     {
@@ -77,8 +61,7 @@ namespace RevivalGuard
         /// <summary>Startup: a journalled trade item whose row belongs to nothing goes back to the one who offered it.</summary>
         internal static void Register()
         {
-            // Mods load before ACE opens its database (Program.cs: ModManager.Initialize, then DatabaseManager.Initialize),
-            // so the replay waits for it on a worker; it runs before the world opens to logins in practice.
+            // Mods load before ACE opens its database, so the replay waits for it on a worker; it runs before the world opens to logins in practice.
             System.Threading.Tasks.Task.Run(async () =>
             {
                 for (int i = 0; i < 600 && DatabaseManager.Shard == null; i++) await System.Threading.Tasks.Task.Delay(200);
@@ -112,8 +95,7 @@ namespace RevivalGuard
             && !db.BiotaPropertiesIID.Any(p => p.Type == (ushort)PropertyInstanceId.Container || p.Type == (ushort)PropertyInstanceId.Wielder)
             && !db.BiotaPropertiesPosition.Any(p => p.PositionType == (ushort)PositionType.Location);
 
-        /// <summary>Into a character's pack: an online one gets the object on the world thread (Replay runs on a worker,
-        /// a console @orphans on the console thread), so true there means queued; an offline one finds it at login.</summary>
+        /// <summary>Into a character's pack: an online one gets the object on the world thread, so true there means queued</summary>
         static bool Return(Biota db, uint owner)
         {
             var online = PlayerManager.GetOnlinePlayer(owner);

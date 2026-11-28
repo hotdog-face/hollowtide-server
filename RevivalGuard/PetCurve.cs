@@ -7,14 +7,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// SUMMONING CURVE (owner 2026-11-24 "Smooth the curve"; docs/proposals/summoning-curve.md; rule in PetCurveRule.cs).
-    /// Postfix on ACE Creature.GetBaseDamage(body part), the per-strike damage range every monster melee hit starts from:
-    /// for a combat pet, with rg_pet_curve on, its DamageMod is multiplied by PetCurveRule.Multiplier, worked out once
-    /// per pet from its own weenie values (level, base Strength and Quickness, PowerupTime, motion and combat tables,
-    /// body parts). Ratings, crits, armor and resistances still apply after it, as before. Default OFF: nothing changes
-    /// until `@modifybool rg_pet_curve true` or the datafix 2026-11-25-summon-3-curve-on.sql.
-    /// </summary>
+    /// <summary>Summoning curve.</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.GetBaseDamage), new[] { typeof(PropertiesBodyPart) })]
     static class PetCurve
     {

@@ -9,17 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// PUBLIC CHAT, KEPT FOR READING BUG REPORTS OUT OF IT (owner 2026-10-16: "lots of good bugs coming in through chat in
-    /// discord and in game chat. can we log in game chat so you can review it for bugs too?").
-    ///
-    /// One line per message in ~/ace/reports/chat/&lt;yyyy-MM-dd&gt;.log (UTC): the public channels (General, Trade, LFG,
-    /// Roleplay, Society, Olthoi), speech said aloud nearby, and what Discord's #in-game said into General. NOT tells,
-    /// NOT allegiance or fellowship chat: those are private. Admins (a '+' name) are included, mercenaries are not.
-    ///
-    /// ACE has its own switches for this (chat_log_general and the rest, into the server log), but they cover the
-    /// channels only, not speech, and need console commands to set; this is one file per day beside the tickets.
-    /// </summary>
+    /// <summary>Public chat, kept for reading bug reports out of it.</summary>
     static class ChatLog
     {
         static readonly string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ace", "reports", "chat");
@@ -91,8 +81,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>The mod's shared writer for high-volume logs (telemetry events, the chat log): a game thread queues the
-    /// line and never waits on the disk or on another thread's write (audit 2026-11-09). Flushed at process exit.</summary>
     static class LogFiles
     {
         public static readonly BackgroundAppender Shared = Make();

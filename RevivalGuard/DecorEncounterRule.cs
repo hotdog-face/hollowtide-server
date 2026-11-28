@@ -4,25 +4,7 @@ using System.Globalization;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE DECORATOR'S ENCOUNTERS, PURE (no ACE types): DecorEncounters.cs runs them on the test shard, tools/nettest compiles
-    /// this file by path (DecorEncounterCase.cs), and tools/decor/decor.py publishes the PLAN they write into each layer entry,
-    /// so the test shard and live get the same numbers. Owner 2026-11-23: "a highly curated and good looking boss dungeon".
-    ///
-    /// Everything is a retail data shape (docs/proposals/world-decorator.md "Encounters"):
-    ///   spawn point  a copy of retail's Linkable Monster Generator (1154) with one profile: the creature, how many (init =
-    ///                max), the respawn as the profile's delay, Scatter over GeneratorRadius (Specific for one at the spot).
-    ///   wander       HeartBeat emote sets on a copy of the creature: Move (relative to its home) to four points inside the
-    ///                radius and MoveHome, picked by probability, as 117 retail weenies wander (HeartBeat + Move, ace_world).
-    ///   patrol       one HeartBeat set: Move to each point in turn (offsets from home), then MoveHome; ACE runs a HeartBeat
-    ///                set only while the creature is not awake (EmoteManager.HeartBeat), so a fight interrupts it and the
-    ///                creature's own MoveToHome brings it back to start again.
-    ///   boss         a spawn point of one with a long respawn; its creature copy carries its chest's key in its create
-    ///                list (ContainTreasure, chance 1), as retail's academy captain carries his key (banderlingcaptainmageacademy).
-    ///   chest        a copy of retail's locked high chest (3969): LockCode, ResistLockpick, ResetInterval, its profile a
-    ///                treasure tier (ContainTreasure) or fixed items (Contain). A boss chest's lockout is retail's quest-chest
-    ///                pattern: Quest on the chest, a quest row with MinDelta, QuestSuccess emote StampQuest (Chest.cs).
-    /// </summary>
+    /// <summary>The decorator's encounters, PURE</summary>
     public static class DecorEncounterRule
     {
         public const uint GEN_TEMPLATE = 1154, CHEST_TEMPLATE = 3969, KEY_TEMPLATE = 291;
@@ -30,9 +12,7 @@ namespace RevivalGuard
         public const float MAX_RADIUS = 40f, MAX_LEG = 60f;
         public const int EMOTE_HEARTBEAT = 5, EMOTE_QUEST_SUCCESS = 12;
         public const uint MOVE = 6, MOVE_HOME = 4, STAMP_QUEST = 22;
-        /// <summary>Metres a second a patrol leg is timed at. ACE's Move emote walks at the action's Extent as its speed (1 in
-        /// 1187 of retail's 1306 HeartBeat Moves): a Drudge Ravener walked about 1.4 m/s on shard2 (2026-11-24), and timed at
-        /// 2.5 it was sent on before it arrived and walked a small loop inside the real one. 1.2 leaves it a moment at each.</summary>
+        /// <summary>Metres a second a patrol leg is timed at.</summary>
         public const float LEG_SPEED = 1.2f, LEG_PAUSE = 2f;
 
         public static int Count(int n) => Math.Clamp(n, 1, MAX_COUNT);
@@ -44,15 +24,13 @@ namespace RevivalGuard
         public static int Tier(int t) => Math.Clamp(t, 1, 8);
         public static float LockoutHours(float h) => Math.Clamp(float.IsFinite(h) ? h : 0f, 0f, 168f);
 
-        /// <summary>The generator's own regen tick: how often its queue is looked at. Never slower than a minute (retail's
-        /// linkmonstergen is 60), never faster than 5 s, and about a quarter of the respawn so the wait stays near it.</summary>
+        /// <summary>The generator's own regen tick: how often its queue is looked at.</summary>
         public static float RegenInterval(float respawn) => Math.Clamp(Respawn(respawn) / 4f, 5f, 60f);
 
         /// <summary>One at its own spot is placed exactly there (Specific); more scatter over the radius (Scatter).</summary>
         public static bool Specific(int count, float radius) => Count(count) == 1 && Radius(radius) < 0.5f;
 
-        /// <summary>A treasure_death id per loot tier, each one retail's own chests use (ace_world, chests' ContainTreasure
-        /// profiles grouped by treasure_death.tier).</summary>
+        /// <summary>A treasure_death id per loot tier, each one retail's own chests use.</summary>
         public static uint TreasureFor(int tier) => Tier(tier) switch
         {
             1 => 459, 2 => 16, 3 => 462, 4 => 13, 5 => 460, 6 => 449, 7 => 1001, _ => 2001,
@@ -79,9 +57,6 @@ namespace RevivalGuard
             public int Category; public float Probability; public string Quest; public List<Act> Acts = new List<Act>();
         }
 
-        /// <summary>Wander: four Move sets to points inside the radius (turned by a seed so two spawn points don't move alike)
-        /// and one MoveHome, each about one heartbeat in twelve; most heartbeats it stays put. ACE picks the set with the
-        /// smallest probability above its roll (EmoteManager.GetEmoteSet), so the probabilities climb.</summary>
         public static List<Set> Wander(float radius, int seed)
         {
             var sets = new List<Set>();
@@ -100,9 +75,7 @@ namespace RevivalGuard
             return sets;
         }
 
-        /// <summary>Patrol: points as offsets from home (AC landblock metres, x east y north z up), walked in order, then home,
-        /// as ONE HeartBeat set so the loop starts again at the next heartbeat after it ends. Each Move waits for the leg
-        /// before it (Delay is a pre-delay in ACE's emote chain). Null when there is nothing to walk.</summary>
+        /// <summary>Patrol: points as offsets from home, walked in order, then home</summary>
         public static Set Patrol(IList<(float x, float y, float z)> offsets)
         {
             if (offsets == null || offsets.Count == 0) return null;
@@ -116,8 +89,7 @@ namespace RevivalGuard
                 px = o.x; py = o.y; pz = o.z;
             }
             s.Acts.Add(new Act { Type = MOVE_HOME, Delay = Round(wait) });
-            // the chain holds the emote manager busy until home is reached: a second MoveHome after the last leg, or the next
-            // heartbeat would send it on to the first point halfway home
+            // the chain holds the emote manager busy until home is reached
             s.Acts.Add(new Act { Type = MOVE_HOME, Delay = Round(LegTime(px, py, pz, 0f, 0f, 0f)) });
             return s;
         }
@@ -128,8 +100,7 @@ namespace RevivalGuard
             return (float)(Math.Min(d, MAX_LEG) / LEG_SPEED + LEG_PAUSE);
         }
 
-        /// <summary>The chest's lockout: QuestSuccess for its quest stamps it (ACE Chest.CheckUseRequirements calls OnQuest
-        /// when the player can solve it, and HandleSolveError refuses while the timer runs).</summary>
+        /// <summary>The chest's lockout: QuestSuccess for its quest stamps it.</summary>
         public static Set Lockout(string quest)
         {
             var s = new Set { Category = EMOTE_QUEST_SUCCESS, Probability = 1f, Quest = quest };

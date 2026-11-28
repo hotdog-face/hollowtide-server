@@ -16,56 +16,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// MONSTER TACTICS (docs/AI-POPULATION.md Layer 1, docs/MONSTER-AI.md). Owner-approved 2026-09-27;
-    /// NOT RETAIL, recorded in docs/DIVERGENCES.md. A small layer ON TOP of ACE's monster AI
-    /// (Monster_Tick.cs and friends): a Harmony prefix on Creature.Monster_Tick that either lets ACE's
-    /// tick run as it always has (returns true), or takes this one 0.2 s tick itself (returns false)
-    /// while a tactic is moving the creature. Nothing here replaces ACE's targeting, attacking or
-    /// casting code; the tactics steer WHERE the creature stands and WHICH attack it rolls.
-    ///
-    ///   casters keep range   A creature whose harmful spells make up enough of its spellbook
-    ///                        (monster_ai_caster_min_cast_chance) does not melee-chase: when ACE rolls
-    ///                        a melee attack at a target out of melee reach, it re-rolls its spellbook
-    ///                        (ACE's own TryRollSpell) instead and holds position between tries, for
-    ///                        at most monster_ai_caster_hold_s; a target that closes inside
-    ///                        monster_ai_caster_close_m makes it back off to monster_ai_caster_range_m.
-    ///   archers kite         A creature with a missile weapon wielded steps back
-    ///                        monster_ai_kite_step_m when its target is inside monster_ai_kite_close_m,
-    ///                        at most once per monster_ai_kite_cooldown_s and monster_ai_kite_per_target
-    ///                        times per target (default 1; -1 = no limit), then ACE turns and shoots.
-    ///   pack call            Once engaged (hurt, or within 20 m of its target), a creature wakes idle creatures of its own CreatureType (or its
-    ///                        FriendType) within monster_ai_pack_range_m AND in line of sight, onto its
-    ///                        target (ACE's AlertFriendly only runs at wake-up and uses aural range).
-    ///                        Kin with Tolerance Retaliate (training targets) are never called.
-    ///   pack spread          Melee chasers of one target that are lined up behind each other take
-    ///                        slots around the target instead of stacking on one side.
-    ///   morale               Families in monster_ai_morale_families flee (towards home) once per fight
-    ///                        at monster_ai_morale_health for monster_ai_morale_flee_s, then return.
-    ///                        Undead, golems, skeletons, ghosts, shadows, wisps, elementals and virindi
-    ///                        never do, whatever the list says.
-    ///   healers              A creature with Heal Self N in its spellbook casts Heal Other N on the
-    ///                        most hurt awake ally of its family under monster_ai_heal_ally_health
-    ///                        within monster_ai_heal_range_m (no monster in ace_world has Heal Other).
-    ///   leash                An awake creature more than monster_ai_leash_m from home goes home (ACE's
-    ///                        own is 192 m); one that finishes a return home is healed to full.
-    ///
-    /// STOCK AREAS. None of the above for a creature whose home landblock is in monster_ai_stock_landblocks
-    /// (default MonsterAreaRule.DEFAULT_LIST: Withered Atoll and the most played hunting areas, owner 2026-11-25):
-    /// there ACE's own tick runs untouched, it is never pack-called and never healed on return home.
-    ///
-    /// COST. Every switch and number is an ACE server property (@modifybool / @modifydouble /
-    /// @modifystring), read into one snapshot every 2 s, not per tick. Per creature per tick: a few
-    /// field reads and one ConditionalWeakTable lookup, only for awake creatures; no allocation.
-    /// Scans of nearby objects (pack call, spread, healer) are throttled per creature (once per fight,
-    /// 2.5 s, 1.5 s), line-of-sight tests are capped at 8 per pack call and 1 per heal, and a movement
-    /// plan (a MoveTo) allocates once per tactic START, never per tick.
-    ///
-    ///   @monsterai                       switches, tuning and how often each tactic has fired
-    ///   @monsterai trace [sec] [metres]  log every monster near you twice a second to ACE_Log.txt
-    ///                                    ("[MonsterAI] trace"), for measuring positions over time
-    ///   @monsterai trace off
-    /// </summary>
+    /// <summary>Monster tactics (docs/AI-POPULATION.md Layer 1, docs/MONSTER-AI.md).</summary>
     public static class MonsterAi
     {
         // ------------------------------------------------------------------ switches and tuning
@@ -76,8 +27,7 @@ namespace RevivalGuard
 
         static readonly (string key, bool def, string desc)[] s_Bools =
         {
-            // P_CASTER off by default (owner 2026-11-03): the Withered Atoll shamans backed away from players, and it is a common
-            // botting spot where players expect retail behaviour.
+            // P_CASTER off by default: the Withered Atoll shamans backed away from players
             (P_CASTER, false, "RevivalGuard MonsterAi: casters re-roll spells instead of melee-chasing, and back off when crowded"),
             (P_KITE, true, "RevivalGuard MonsterAi: missile users step back when their target closes, then shoot"),
             (P_PACK, true, "RevivalGuard MonsterAi: a hurt monster wakes same-family monsters in range and line of sight"),
@@ -112,7 +62,6 @@ namespace RevivalGuard
         internal const string P_STOCK = "monster_ai_stock_landblocks";
         const string FAMILIES_DEFAULT = "Drudge,Banderling,Mosswart,Rat,Gromnie,Reedshark";
 
-        /// <summary>Families that never flee, whatever monster_ai_morale_families says.</summary>
         static readonly CreatureType[] s_NeverFlee =
         {
             CreatureType.Undead, CreatureType.Golem, CreatureType.Skeleton, CreatureType.Ghost, CreatureType.Shadow,
@@ -120,7 +69,7 @@ namespace RevivalGuard
             CreatureType.LightningElemental, CreatureType.AcidElemental, CreatureType.Virindi,
         };
 
-        /// <summary>One read of every switch and number; replaced (never mutated) every 2 s.</summary>
+        /// <summary>One read of every switch and number; replaced every 2 s.</summary>
         sealed class Cfg
         {
             public bool Caster, Kite, Pack, Spread, Morale, Heal, Leash, Log, Any;
@@ -188,12 +137,12 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ per-weenie profile
 
-        /// <summary>What a creature IS, from its weenie; computed once per weenie class.</summary>
+        /// <summary>What a creature is, from its weenie; computed once per weenie class.</summary>
         sealed class Profile
         {
             public float HarmfulCastChance;   // chance per ACE attack roll of a harmful, other-targeted spell
             public Spell HealOther;           // Heal Other at the level of its best Heal Self, or null
-            public bool Immobile;             // AiImmobile: never moved by a tactic
+            public bool Immobile;
             public uint MinHarmfulMana;       // the cheapest harmful spell: below this the caster is out of mana
         }
 
@@ -206,7 +155,7 @@ namespace RevivalGuard
         {
             if (s_Profiles.TryGetValue(c.WeenieClassId, out var p)) return p;
             p = new Profile();
-            p.Immobile = c.AiImmobile;   // NOT Stuck: every creature weenie carries Stuck (it only means "cannot be picked up")
+            p.Immobile = c.AiImmobile;
             try
             {
                 var book = c.Biota.PropertiesSpellBook;
@@ -257,8 +206,7 @@ namespace RevivalGuard
         static readonly ConditionalWeakTable<Creature, St> s_State = new ConditionalWeakTable<Creature, St>();
         static readonly ConditionalWeakTable<Creature, St>.CreateValueCallback s_NewSt = _ => new St();
 
-        // ACE's private spell roll (Monster_Magic.cs TryRollSpell): sets CurrentSpell and says whether a
-        // spell came up. Bound once; missing in a future ACE build turns the caster re-roll off, not the mod.
+        // ACE's private spell roll (Monster_Magic.cs TryRollSpell): sets CurrentSpell and says whether a spell came up.
         static readonly Func<Creature, bool> s_TryRollSpell = Bind();
         static Func<Creature, bool> Bind()
         {
@@ -433,8 +381,7 @@ namespace RevivalGuard
                                 if (c.IsMoving || c.PhysicsObj.IsMovingTo()) StopMoving(c);
                                 c.CurrentAttack = CombatType.Magic;
                                 c.MaxRange = c.GetMaxRange();   // ACE's own: re-rolls to melee if a bolt has no line of sight
-                                // no line of sight: end the hold for this approach so ACE walks it round, rather
-                                // than stopping and starting it every second; the next cast re-arms the hold
+                                // no line of sight: end the hold for this approach so ACE walks it round, rather than stopping and starting it every second
                                 st.HoldSince = c.CurrentAttack == CombatType.Magic ? 0 : rt - cfg.CasterHold;
                                 Fired(Tactic.CasterCast);
                                 if (cfg.Log) Mod.Log.Info($"[MonsterAI] hold: {c.Name} 0x{c.Guid.Full:X8} cast after {st.HoldRolls} rolls, attack {c.CurrentAttack}, range {c.MaxRange:F1}");
@@ -470,9 +417,7 @@ namespace RevivalGuard
 
         static bool UsesMana(Creature c) => c.GetProperty(PropertyBool.AiUsesMana) ?? true;
 
-        /// <summary>An out-of-mana caster melees, as ACE would have it: ACE's MagicAttack silently does
-        /// nothing when the spell costs more than the monster has (UseMana), so holding one at range
-        /// would leave it standing there.</summary>
+        /// <summary>An out-of-mana caster melees, as ACE would have it</summary>
         static bool ManaOk(Creature c, Profile prof) => !UsesMana(c) || c.Mana.Current >= Math.Max(1u, prof.MinHarmfulMana);
 
         static bool FleeFamily(Creature c, Cfg cfg)
@@ -494,8 +439,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ movement
 
-        /// <summary>Stops ACE's own chase (a sticky MoveToObject) the way Creature.CancelMoveTo does,
-        /// without its FindNextTarget.</summary>
+        /// <summary>Stops ACE's own chase (a sticky MoveToObject) the way Creature.CancelMoveTo does, without its FindNextTarget.</summary>
         internal static void StopMoving(Creature c)
         {
             var mtm = c.PhysicsObj.MovementManager?.MoveToManager;
@@ -513,8 +457,7 @@ namespace RevivalGuard
             c.ResetAttack();   // ACE re-rolls its next attack and turns to the target
         }
 
-        /// <summary>The frame tactics measure in: landblock-local for a dungeon (FromGlobal treats its
-        /// argument as local there), global outdoors.</summary>
+        /// <summary>The frame tactics measure in: landblock-local for a dungeon, global outdoors.</summary>
         internal static bool Frame(Creature c, WorldObject other, out Vector3 me, out Vector3 them)
         {
             if (c.Location.Indoors)
@@ -534,12 +477,9 @@ namespace RevivalGuard
 
         static readonly float[] s_TryAngles = { 0f, 35f, -35f, 70f, -70f };
 
-        /// <summary>Pack spread's widest slot either side of the leader's bearing (degrees): the far side of
-        /// the target stays open, so a spread never boxes a player in.</summary>
         const float SPREAD_ARC = 100f;
 
-        /// <summary>Runs directly away from the target (blended towards home for a flee, and whenever the
-        /// creature is past half its leash), trying five headings for one that lands in a cell.</summary>
+        /// <summary>Runs directly away from the target, trying five headings for one that lands in a cell.</summary>
         static bool StepAway(Creature c, St st, Creature target, float metres, Mode mode, double seconds, Cfg cfg, bool towardHome)
         {
             if (!Frame(c, target, out var me, out var tg)) return false;
@@ -601,9 +541,7 @@ namespace RevivalGuard
             {
                 var n = o?.WeenieObj?.WorldObject as Creature;
                 if (!Eligible(c, n) || n.IsAwake || !Kin(c, n) || n == target) continue;
-                // Retaliate kin fight only when struck themselves (the Academy's Sparring Golems and
-                // Carpenter Wasps: ACE's AlertFriendly reaches them only inside their 0.1 m aural range).
-                // Owner 2026-10-01: "the trees all aggrod me".
+                // Retaliate kin fight only when struck themselves.
                 if ((n.Tolerance & (Tolerance.NoAttack | Tolerance.Provoke | Tolerance.Retaliate)) != 0) continue;
                 kin++;
                 if (c.PhysicsObj.get_distance_sq_to_object(n.PhysicsObj, true) > r2) continue;
@@ -629,9 +567,7 @@ namespace RevivalGuard
         static float Bearing(Vector3 from, Vector3 to) => (float)(Math.Atan2(to.Y - from.Y, to.X - from.X) * 180.0 / Math.PI);
         static float AngleDiff(float a, float b) { float d = (a - b) % 360f; if (d > 180f) d -= 360f; if (d < -180f) d += 360f; return d; }
 
-        /// <summary>Slots around the target, by guid order among the melee chasers of the same target:
-        /// the lowest guid goes straight in, the others take alternate sides at an even spacing (40-90
-        /// degrees). Only when a chaser is lined up behind another (within 30 degrees and further out).</summary>
+        /// <summary>Slots around the target, by guid order among the melee chasers of the same target</summary>
         static bool TrySpread(Creature c, St st, Creature target, float dist, Cfg cfg, double rt)
         {
             if (c.PhysicsObj.CurCell == null || !Frame(c, target, out var me, out var tg)) return false;
@@ -655,12 +591,9 @@ namespace RevivalGuard
                 if (a.Guid.Full < leaderGuid) { leaderGuid = a.Guid.Full; leaderBearing = b; }
                 if (Math.Abs(AngleDiff(b, myBearing)) < 30f && ad < dist) crowded = true;
             }
-            // a mob of more than 8 has no free side to go to: ACE's straight chase (live 2026-09-28, 21 chasers
-            // round one bot, re-flanked every 2.5 s and never swung)
+            // a mob of more than 8 has no free side to go to: ACE's straight chase
             if (n < 2 || n > 8 || !crowded || lower == 0) return false;
-            // THE SLOTS STAY IN FRONT: within SPREAD_ARC of the leader's bearing, so the far side of the target is
-            // left open. 360/N round the whole target closed a ring on N >= 4, and a player in a ring of Tusker
-            // Guards (three at 2.9 m, report 261019-0037) cannot step out: creatures are solid to players.
+            // The slots stay in front: within SPREAD_ARC of the leader's bearing
             int sideSlots = n / 2;   // the most slots on one side (slot k sits at ((k + 1) / 2) x spacing)
             float spacing = Math.Min(Math.Clamp(360f / n, 40f, 90f), SPREAD_ARC / sideSlots);
             float offset = ((lower + 1) / 2) * spacing * ((lower & 1) == 1 ? 1f : -1f);
@@ -774,10 +707,7 @@ namespace RevivalGuard
             Mod.Log.Info("[RevivalGuard] MonsterAi: casters keep range, archers kite, pack call and spread, morale, healers, leash; stock ACE in busy areas (monster_ai_* server properties, @monsterai)");
         }
 
-        /// <summary>Makes the switches ordinary ACE properties, so @modifybool / @modifydouble /
-        /// @modifystring accept them (they refuse a key missing from the Default*Properties maps,
-        /// ReadOnlyDictionaries over private dictionaries; the same route as MansionPk). If this fails
-        /// the switches are still read, at their defaults, and only the @modify verbs refuse them.</summary>
+        /// <summary>Makes the switches ordinary ACE properties, so @modifybool / @modifydouble / @modifystring accept them.</summary>
         static void RegisterProperties()
         {
             try

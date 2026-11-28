@@ -26,32 +26,7 @@ using R = RevivalGuard.TownRaidRule;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// HOLTBURG RAIDS (owner 2026-11-15: "random raids on Holtburg by neighbouring tribes, to keep the town alive"; ours, not
-    /// retail; docs/DIVERGENCES.md; findings docs/findings/holtburg-raids-2026-11-15.md). Retail monsters only, unchanged.
-    ///
-    ///   WHEN    about 11 a day: none within 75 minutes of the last, then a steady chance a minute (fewer in the dead hours
-    ///           Pacific, more with more players online), only with a player in town, never near the nightly restart or
-    ///           during a Holtburg event (TownRaidRule.ChancePerMinute, QuietForRestart).
-    ///   WARNING the lifestone Royal Guard shouts, every player in and around town reads where they come from; a minute later
-    ///           the raiders appear on that side, outside the town and well away from the lifestone, and run in to a point
-    ///           in town (their Home: after a fight ACE walks them back there; HomeRadius keeps a chase near town).
-    ///   WHO     the tier is the lower median level of the players in town; the kind (drudges mostly, mosswarts or bandits)
-    ///           and the wave by TownRaid.json. Raiders above tier 1 never pick a player under the tier's protect level who
-    ///           has not hit them (new characters arrive at the lifestone).
-    ///   WAVES   three (a big raid four): each a main group and a pack of weaker adds of the same family; the next comes
-    ///           when most of the last is down, or after a while if someone is fighting, the lifestone guard shouting it in;
-    ///           the leader comes with the last (a big raid always, else now and then). Caps: MaxAlive standing, MaxTotal.
-    ///   BIG     now and then a drudge war band: bigger groups, a fourth wave, the leader with escorts; the lifestone guard calls
-    ///           for reinforcements: Royal Guards come in from a gate and a placed guard is mustered up (HoltburgGuards
-    ///           fights for them all: no credit taken, never killed). They leave when the raid ends.
-    ///   END     held (every raider dead): each defender's reward rolls by damage share from the tier's retail treasure table,
-    ///           a raid counter (quest flag rg_townraid_defended; /top raids), a retail title at 25. Withdrawn (nobody hit a
-    ///           raider for 10 minutes, or 25 minutes in all), or stopped: the raiders are taken away.
-    ///
-    /// Switches: rg_town_raid (on), rg_town_raid_discord (OFF: owner's yes), rg_town_raid_trace. Staff (Developer):
-    /// `@raid start [1-4] [drudge|mosswart|bandit] [south|west|north|east] [big]`, `@raid stop`, `@raid status`, `@raid reload`.
-    /// </summary>
+    /// <summary>Holtburg raids.</summary>
     static class TownRaid
     {
         internal const string P_ON = "rg_town_raid", P_DISCORD = "rg_town_raid_discord", P_TRACE = "rg_town_raid_trace";
@@ -109,7 +84,7 @@ namespace RevivalGuard
         static R.Config s_Cfg = new R.Config();
         static DateTime s_Stamp; static double s_NextLoad, s_NextRoll, s_NextTick;
         static Raid s_Raid;
-        /// <summary>A raid on Holtburg now (Drinking never carries a drunk into one).</summary>
+        /// <summary>A raid on Holtburg now.</summary>
         internal static bool Running => s_Raid != null;
         static int s_NextId = 1;
         static State s_State = new State();
@@ -132,7 +107,6 @@ namespace RevivalGuard
             SyncSeed();
             Load(true);
             LoadState();
-            // a deploy or restart never raids at once: at least 20 minutes first
             double now = Now;
             if (now - s_State.LastStart > s_Cfg.Schedule.MinGapMinutes * 60 - 20 * 60) s_State.LastStart = now - s_Cfg.Schedule.MinGapMinutes * 60 + 20 * 60;
             Mod.Log.Info($"[RevivalGuard] TownRaid: Holtburg raids {(On ? "ON" : "off")}, {s_Cfg.Kinds.Count} kinds on {s_Cfg.Sides.Count} sides, Discord {(Discord ? "ON" : "off")} (@raid)");
@@ -297,7 +271,7 @@ namespace RevivalGuard
 
         static string L(string key, IDictionary<string, string> tokens = null) => R.Line(s_Cfg, key, s_Rng.NextDouble(), tokens);
 
-        /// <summary>Is a festival on now (its calendar window or a GM's @festival)? A theme's monsters come only then.</summary>
+        /// <summary>Is a festival on now (its calendar window or a GM's @festival)?</summary>
         static bool FestivalOn(string key) { try { return SeasonalCalendar.IsFestivalActive(key); } catch { return false; } }
 
         static void Post(string text)
@@ -353,7 +327,7 @@ namespace RevivalGuard
             Begin(null, null, null, null, false, now, null);
         }
 
-        /// <summary>A raid begins: the warning now, the raiders a minute later. Null arguments are rolled.</summary>
+        /// <summary>A raid begins: the warning now, the raiders a minute later.</summary>
         static string Begin(int? tier, string kind, string side, bool? big, bool forced, double now, string theme)
         {
             if (s_Raid != null) return "a raid is already running";
@@ -454,17 +428,13 @@ namespace RevivalGuard
             if (leader && r.Big) Reinforce(r);
         }
 
-        /// <summary>A Generic object entering the world, scattered on the ground as ACE's own generators place theirs
-        /// (TthuunRaids.Spawn).</summary>
+        /// <summary>A Generic object entering the world, scattered on the ground as ACE's own generators place theirs (TthuunRaids.Spawn).</summary>
         static WorldObject Spawn(uint wcid, Position at, float radius)
         {
             var wo = WorldObjectFactory.CreateNewWorldObject(wcid);
             if (wo == null) { Mod.Log.Warn($"[RevivalGuard] TownRaid: no weenie {wcid}"); return null; }
             wo.Location = new Position(at);
             wo.Location.PositionZ += 0.05f;
-            // never rots: ACE's decay (WorldObject.IsDecayable) takes any dynamic object with no generator, lifespan or
-            // TimeToRot after 5 minutes, silently: raiders and reserves vanished mid-raid on the box (2026-11-16).
-            // The raid removes what it spawned itself (end, stop, stuck), and a raid lasts 25 minutes at most.
             wo.TimeToRot = -1;
             if (radius > 0) wo.ScatterPos = new SetPosition(new ACE.Server.Physics.Common.Position(wo.Location), SetPositionFlags.RandomScatter, radius);
             bool ok = wo.EnterWorld();
@@ -473,8 +443,7 @@ namespace RevivalGuard
             return wo;
         }
 
-        /// <summary>A raider's home is its point in town: it runs there now, and ACE walks it back there after each fight;
-        /// HomeRadius pulls a chase back before it strays far.</summary>
+        /// <summary>A raider's home is its point in town</summary>
         static void Send(Creature c, Position to, Position home = null)
         {
             var chain = new ActionChain();
@@ -485,8 +454,7 @@ namespace RevivalGuard
                     if (c.IsDead || c.IsDestroyed) return;
                     c.Home = new Position(home ?? to);
                     c.HomeRadius = s_Cfg.HomeRadius;
-                    // Creature.MoveTo runs the walk on the server for a sleeping monster too (MoveToHome leaves it to the
-                    // awake monster's own tick); once it wakes on a player, ACE's monster tick takes over
+                    // Creature.MoveTo runs the walk on the server for a sleeping monster too; once it wakes on a player, ACE's monster tick takes over
                     c.MoveTo(new Position(to), Math.Max(1f, c.GetRunRate()));
                 }
                 catch (Exception e) { TickGuard.Report("TownRaid.Send", e); }
@@ -545,7 +513,6 @@ namespace RevivalGuard
                     double t = (log[log.Count - 1].Time - DateTime.UnixEpoch).TotalSeconds;
                     if (t > r.LastHit) r.LastHit = Math.Min(now, t);
                 }
-                // never inside a building: back to its point in town
                 if (c.Location != null && c.Location.Indoors && c.MonsterState != Creature.State.Return)
                 {
                     var cc = c;
@@ -556,8 +523,6 @@ namespace RevivalGuard
                 }
                 else if (targets.Count > 0 && c.AttackTarget == null && c.MonsterState != Creature.State.Return && R.InBox(s_Cfg, here.X, here.Y, 0))
                 {
-                    // never march on a player this raider may not attack (under its protect level, 11-27 balance audit: tier-1
-                    // raiders walked onto level-1 arrivals at the Holtburg lifestone, then let go only once there)
                     var mine = targets.Where(p => !Protected(p, c)).ToList();
                     if (mine.Count > 0) March(r, c, here, mine, now);
                 }
@@ -583,9 +548,7 @@ namespace RevivalGuard
             if (outcome != R.Outcome.Running) End(r, outcome, now, null);
         }
 
-        /// <summary>A raider in town with nobody to fight marches on the nearest player (TownRaidRule.AdvancePoint): its Home
-        /// moves there, so it is seen in the square rather than idling at the town's edge (owner F7 261125-0022), and a
-        /// player it may pick within AlertMeters wakes it as walking past would (ACE's AlertMonster, our filters).</summary>
+        /// <summary>A raider in town with nobody to fight marches on the nearest player</summary>
         static void March(Raid r, Creature c, Vector2 here, List<Player> targets, double now)
         {
             var may = targets.Where(p => !Protected(p, c)).ToList();
@@ -634,8 +597,7 @@ namespace RevivalGuard
             Send(c, At(next[0], next[1]), At(st.To[0], st.To[1]));
         }
 
-        /// <summary>The big wave: the lifestone guard calls, Royal Guards come in from the side's gate, and a placed guard
-        /// is mustered to the fight.</summary>
+        /// <summary>The big wave: the lifestone guard calls, Royal Guards come in from the side's gate</summary>
         static void Reinforce(Raid r)
         {
             if (r.Reinforced) return;
@@ -812,8 +774,7 @@ namespace RevivalGuard
             if (Tracing) Mod.Log.Info($"[RevivalGuard] TownRaid: #{r.Id} {c.Name} killed ({r.Killed} of {r.Spawned})");
         }
 
-        /// <summary>Creature.GenerateTreasure of a raider: a quest item its retail list carries (the Robber Baron's head)
-        /// stays in its dungeon.</summary>
+        /// <summary>Creature.GenerateTreasure of a raider: a quest item its retail list carries stays in its dungeon.</summary>
         internal static void OnTreasure(Creature c, Corpse corpse)
         {
             if (corpse == null || !s_Raiders.TryGetValue(c, out _)) return;
@@ -825,16 +786,14 @@ namespace RevivalGuard
 
         internal static bool IsRaider(Creature c) => s_Raiders.TryGetValue(c, out _);
 
-        /// <summary>Creature.GetAttackTargets of a raider: players under its tier's protect level who have not hurt it are
-        /// not targets.</summary>
+        /// <summary>Creature.GetAttackTargets of a raider: players under its tier's protect level who have not hurt it are not targets.</summary>
         internal static void FilterTargets(Creature c, List<Creature> targets)
         {
             if (targets == null || targets.Count == 0 || !s_Raiders.TryGetValue(c, out var tag) || tag.ProtectBelow <= 0) return;
-            targets.RemoveAll(t => t is Player p && !R.MayTarget(p.Level ?? 1, c.DamageHistory.HasDamager(p), tag.ProtectBelow));
+            targets.RemoveAll(t => t is Player p && !R.MayTarget(p.Level ?? 1, c.DamageHistory?.HasDamager(p) ?? false, tag.ProtectBelow));
         }
 
-        /// <summary>WorldObject.Destroy of a raider or reserve: every way one leaves the world is logged (a death's
-        /// corpse swap, our own removals, a landblock unload).</summary>
+        /// <summary>WorldObject.Destroy of a raider or reserve: every way one leaves the world is logged.</summary>
         internal static void OnDestroy(WorldObject wo, bool fromUnload)
         {
             if (!(wo is Creature c)) return;
@@ -870,12 +829,11 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] TownRaid: landblock {id:X4} unloads{(r != null ? $" during raid #{r.Id}" : "")}, {mine} raid object(s) in it, players in town {InTown().Count}");
         }
 
-        /// <summary>Creature.AlertMonster (a player moving near wakes a monster onto itself): a protected player does not
-        /// wake a raider. Box 2026-11-16: without this, tier 3 raiders went for a level 10 at once.</summary>
+        /// <summary>Creature.AlertMonster (a player moving near wakes a monster onto itself): a protected player does not wake a raider.</summary>
         internal static bool Protected(Creature alerter, Creature monster)
         {
             if (!(alerter is Player p) || monster == null || !s_Raiders.TryGetValue(monster, out var tag) || tag.ProtectBelow <= 0) return false;
-            return !R.MayTarget(p.Level ?? 1, monster.DamageHistory.HasDamager(p), tag.ProtectBelow);
+            return !R.MayTarget(p.Level ?? 1, monster.DamageHistory?.HasDamager(p) ?? false, tag.ProtectBelow);
         }
 
         // ---------------------------------------------------------------- staff
@@ -900,7 +858,6 @@ namespace RevivalGuard
                         else if (a == "none" || s_Cfg.Themes.Any(t => string.Equals(t.Festival, a, StringComparison.OrdinalIgnoreCase))) theme = a;
                         else { Reply($"what is '{a}'? Kinds: {string.Join(", ", s_Cfg.Kinds.Select(k => k.Key))}; sides: {string.Join(", ", s_Cfg.Sides.Select(x => x.Key))}; themes: {string.Join(", ", s_Cfg.Themes.Select(t => t.Festival))}, none"); return; }
                     }
-                    // never during a Holtburg director event (Bael'Zharon's visit, the snowmen): one fight in town at a time
                     var ev = EventDirector.CurrentEvent()?.key;
                     if (R.PausedForEvent(ev, s_Cfg.Schedule)) { Reply($"not now: {ev} is running in Holtburg (@eventdirector stop ends it)"); return; }
                     Reply(Begin(tier, kind, side, big ?? false, true, now, theme));

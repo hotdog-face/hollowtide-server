@@ -13,19 +13,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// MAP PIECES ON LIVE, SEEN BY EVERYONE (owner 2026-11-26: "i left holtburg and came back a while later and the decorator
-    /// changes i made were gone"). A map piece added with Decorate (a "staticadd": a DAT model, no weenie) was drawn only by the
-    /// decorator's own client, and only while Decorate was open: closing it and leaving the area lost the drawing, and no other
-    /// player (ours or retail) ever saw it, though the panel had counted it as a prop. On live, each added map piece whose model
-    /// is a Setup (0x02...) now also has a server STAND-IN: a Stuck, never-saved copy of PIECE_TEMPLATE wearing that model, at
-    /// its pose and size, the same object decor.py publishes a sized piece as (as_add). It is made when its landblock loads and
-    /// whenever the layer changes, so it is there after leaving, relogging and restarts, for every client. A flat 0x01 model can't
-    /// be a server object: it stays a map piece (client release), and the panel says so on live.
-    /// While someone has Decorate open the stand-ins are kept from their client (it draws its own movable copy; two in one spot
-    /// would pick the wrong one): "@decor state" starts that, "@decor bye" (a newer client, on closing) or STAND_HIDE_FOR after
-    /// their last @decor command ends it.
-    /// </summary>
+    /// <summary>Map pieces on live, seen by everyone.</summary>
     internal static partial class Decor
     {
         const uint PIECE_TEMPLATE = 292;   // decor.py PIECE_TEMPLATE: a plain retail decoration, no use, no emotes
@@ -42,14 +30,14 @@ namespace RevivalGuard
 
         internal static bool IsStandIn(WorldObject wo) => wo != null && s_StandGuids.ContainsKey(wo.Guid.Full);
 
-        /// <summary>An added map piece a server object can show: on live, a Setup model, placed (not "gone").</summary>
+        /// <summary>An added map piece a server object can show: on live, a Setup or GfxObj model, placed (not "gone").</summary>
         static bool StandEligible(JsonObject e)
         {
             if (!LiveMode || e == null || (string)e["kind"] != "staticadd" || !(e["after"] is JsonObject)) return false;
-            try { return Hex((string)e["model"]!) >> 24 == 0x02; } catch { return false; }
+            try { uint cls = Hex((string)e["model"]!) >> 24; return cls == 0x02 || cls == 0x01; } catch { return false; }
         }
 
-        /// <summary>Make the world's stand-in for one key match the layer (made, put back, resized or taken away). True = changed.</summary>
+        /// <summary>Make the world's stand-in for one key match the layer (made, put back, resized or taken away).</summary>
         static bool SyncStand(string key)
         {
             if (key == null || !key.StartsWith("n:", StringComparison.Ordinal)) return false;
@@ -74,7 +62,6 @@ namespace RevivalGuard
             NoFall(wo);   // a piece on a table or a wall stands where it was put (its template has Gravity)
             wo.Location = PosFrom(after);
             wo.Location.LandblockId = new LandblockId(wo.Location.GetCell());
-            // registered before EnterWorld: its first CreateObject already skips the decorators and it is never saved
             s_Stand[key] = wo.Guid.Full;
             s_StandGuids[wo.Guid.Full] = key;
             s_StandFrom[key] = e.ToJsonString();
@@ -101,8 +88,7 @@ namespace RevivalGuard
         static bool HidesStands(Player p) =>
             p != null && s_Decorating.TryGetValue(p.Guid.Full, out var at) && DateTime.UtcNow - at < STAND_HIDE_FOR;
 
-        /// <summary>Each @decor command from a decorator keeps the stand-ins off their client; the first one takes back those
-        /// it already has.</summary>
+        /// <summary>Each @decor command from a decorator keeps the stand-ins off their client</summary>
         static void Decorating(Player me)
         {
             bool was = HidesStands(me);
@@ -131,8 +117,7 @@ namespace RevivalGuard
 
         internal static bool KeepFrom(Player p, WorldObject wo) => IsStandIn(wo) && HidesStands(p);
 
-        /// <summary>A teleport (portal, recall, @tele, Go there) ends the hiding: an older client says nothing when Decorate
-        /// closes, and its own drawing of the pieces is gone once it has left the area. Decorating again hides them again.</summary>
+        /// <summary>A teleport ends the hiding</summary>
         internal static void Teleported(Player p) { if (p != null) s_Decorating.TryRemove(p.Guid.Full, out _); }
 
         const string STAND_WHY = "This is how players see a map piece you placed. Click again to select the piece itself.";

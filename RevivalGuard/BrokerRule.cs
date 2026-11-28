@@ -5,28 +5,16 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE MARKETPLACE BROKER, the pure part (no ACE types, so NetTest runs it: tools/nettest/BrokerCase.cs). Ours, not
-    /// retail (owner 2026-10-31, player request #19). The rules, the ledger's bookkeeping and the crash reconcile live
-    /// here; Broker.cs moves the real items. Design, rules and failure handling: docs/MARKETPLACE-BROKER.md.
-    ///
-    /// THE LEDGER IS WRITTEN BEFORE AN ITEM MOVES, AND THE ITEM'S PLACE WINS AFTER A CRASH. Every list, sale, cancel and
-    /// return marks the listing first (broker.json, through a temp file), then moves the item and saves it. After a
-    /// restart Reconcile compares each open listing with where the item really is (in the Strongbox or not) and puts the
-    /// ledger right: a sale whose item is still in the Strongbox never happened (the seller's credit comes back off),
-    /// a cancel whose item is still there never happened either (listed again), a listing whose item never arrived is
-    /// dropped. Nothing is ever created from the ledger, so a crash can lose a sale but never copy an item.
-    /// </summary>
+    /// <summary>The marketplace broker, the pure part (no ACE types, so NetTest runs it: tools/nettest/BrokerCase.cs).</summary>
     static class BrokerRule
     {
-        // ---- the rules (each one is the owner's to change; the doc lists them) ----
+        // ---- the rules ----
         internal const int MAX_LISTINGS = 10;                 // per character, listed + expired-awaiting-pickup
         internal const long LIST_SECONDS = 7 * 86400;         // then expired and held for the seller
         internal const double FEE_PCT = 0.01;                 // listing fee, paid up front, kept on cancel: a pyreal sink
         internal const long FEE_MIN = 10, FEE_MAX = 10_000;
         internal const double CUT_PCT = 0.05;                 // the Broker's cut of a sale: a pyreal sink
-        // WHOLE MMDs ONLY (owner 2026-10-31: "the merchant should only have items for sale for mmds ... all items he sells are
-        // listed for whole mmd amounts only"): 1 to 200 MMD (MMD = 250,000 pyreals), every listing, players' and the house's.
+        // WHOLE MMDs only: 1 to 200 MMD (MMD = 250,000 pyreals), every listing, players' and the house's.
         internal const long PRICE_MIN = 250_000, PRICE_MAX = 50_000_000;
         internal const double OFFER_SECONDS = 120;            // an offered item waits this long for a price and a Yes
         internal const double SAY_RANGE = 8.0;                // a price said within this many metres reaches him
@@ -73,8 +61,7 @@ namespace RevivalGuard
         /// <summary>A price he takes: whole MMDs, 1 to 200.</summary>
         internal static bool ValidPrice(long price) => price >= PRICE_MIN && price <= PRICE_MAX && price % MMD == 0;
 
-        /// <summary>A price said to him, in MMDs: "3", "3 mmd", "3 mmds", "3 MMD". Pyreal amounts, fractions and anything
-        /// else are not prices. Returns the price in pyreals.</summary>
+        /// <summary>A price said to him, in MMDs: "3", "3 mmd", "3 mmds", "3 MMD".</summary>
         internal static bool TryParsePrice(string said, out long price)
         {
             price = 0;
@@ -91,8 +78,7 @@ namespace RevivalGuard
             return false;
         }
 
-        /// <summary>The price box's answer: an MMD count (1 to 200), or, from a client that sent pyreals, a whole-MMD
-        /// pyreal amount. Anything else is refused.</summary>
+        /// <summary>The price box's answer: an MMD count (1 to 200), or, from a client that sent pyreals, a whole-MMD pyreal amount.</summary>
         internal static bool TryBoxPrice(string sent, out long price)
         {
             price = 0;
@@ -106,13 +92,12 @@ namespace RevivalGuard
         /// <summary>His opening price for an offered item: its value rounded UP to whole MMDs, 1 to 200.</summary>
         internal static long Suggest(long value) => Math.Clamp((Math.Max(0, value) + MMD - 1) / MMD, 1, PRICE_MAX / MMD) * MMD;
 
-        /// <summary>Open players' listings priced before the whole-MMD rule (or otherwise not whole MMDs): taken off the
-        /// table and held for their sellers, who take them back by using him.</summary>
+        /// <summary>Open players' listings priced before the whole-MMD rule</summary>
         internal static List<Listing> OffRule(Ledger l) =>
             l.Listings.Where(x => x.State == State.Listed && x.Seller != HOUSE && !ValidPrice(x.Price)).ToList();
 
-        // ---- MMDs (owner 2026-10-31: "Players will mostly want to list items for sale in whole mmd amounts") ----
-        /// <summary>The MMD: Trade Note (250,000), wcid 20630, 250 to a stack. Pyreals stack to 25,000.</summary>
+        // ---- MMDs ----
+        /// <summary>The MMD: Trade Note (250,000), wcid 20630, 250 to a stack.</summary>
         internal const long MMD = 250_000;
         internal const uint MMD_WCID = 20630, PYREAL_WCID = 273;
         internal const int MMD_STACK = 250, PYREAL_STACK = 25_000;
@@ -127,8 +112,7 @@ namespace RevivalGuard
             return p == 0 ? $"{m} MMD" : $"{m} MMD + {p:N0}";
         }
 
-        /// <summary>A payout as notes and coin: whole MMDs as MMD notes, the rest as pyreals. Stacks: how many pack slots
-        /// it takes at most (a stack may merge into one already carried, so this is the safe count).</summary>
+        /// <summary>A payout as notes and coin: whole MMDs as MMD notes, the rest as pyreals.</summary>
         internal static (long mmd, long pyreals, int stacks) Payout(long amount)
         {
             var (m, p) = Split(amount);
@@ -145,8 +129,7 @@ namespace RevivalGuard
 
         internal enum Refusal { None, Attuned, Story, Stack, Money, Equipped, Retained, Locked, Container, Pet, Trading, Limit, Mercenary }
 
-        /// <summary>The first reason he will not take it, or None. Quest items are almost all attuned or bonded (and
-        /// IsSellable false covers the rest), so "no quest items" is those three tests.</summary>
+        /// <summary>The first reason he will not take it, or None.</summary>
         internal static Refusal Check(ItemFacts f, int alreadyListed)
         {
             if (f.Mercenary) return Refusal.Mercenary;
@@ -182,7 +165,7 @@ namespace RevivalGuard
 
         internal static Listing Find(Ledger l, uint item) => l.Listings.FirstOrDefault(x => x.Item == item && x.Open);
 
-        /// <summary>A sale: the seller is owed price less the cut (the house is owed nothing). Returns the credit.</summary>
+        /// <summary>A sale: the seller is owed price less the cut (the house is owed nothing).</summary>
         internal static long Sell(Ledger l, Listing x, uint buyer, string buyerName, long now)
         {
             x.State = State.Sold; x.Buyer = buyer; x.BuyerName = buyerName; x.Done = now;
@@ -195,7 +178,7 @@ namespace RevivalGuard
 
         internal static void Close(Listing x, State how, long now) { x.State = how; x.Done = now; }
 
-        /// <summary>Listings past their time become Expired (held for the seller). Returns the newly expired.</summary>
+        /// <summary>Listings past their time become Expired (held for the seller).</summary>
         internal static List<Listing> Expire(Ledger l, long now)
         {
             var hit = l.Listings.Where(x => x.State == State.Listed && now >= x.Expires).ToList();
@@ -222,9 +205,7 @@ namespace RevivalGuard
 
         internal sealed class Fix { public Listing Listing; public State From, To; public string Why; }
 
-        /// <summary>Puts the ledger right from where each item is. `where` answers for one item guid; `vaultItems` is
-        /// everything the Strongbox holds (for items no listing names). Returns what changed and the vault items no
-        /// listing claims (held back and logged, never shown or handed out).</summary>
+        /// <summary>Puts the ledger right from where each item is.</summary>
         internal static (List<Fix> fixes, List<uint> unclaimed) Reconcile(Ledger l, Func<Listing, Where> where, ICollection<uint> vaultItems)
         {
             var fixes = new List<Fix>();
@@ -267,8 +248,7 @@ namespace RevivalGuard
         }
 
         // ---- what he says (no em dashes: player text) ----
-        /// <summary>Who runs the stall (owner 2026-10-31: Joe the Sho; the first cast was Vessik the Sclavus, the generator's
-        /// --look vessik). His name in the mod's lines and the price box's title.</summary>
+        /// <summary>Who runs the stall.</summary>
         internal const string WHO = "Joe", WHO_FULL = "Joe the Sho";
         static readonly Random s_Rng = Random.Shared;   // thread-safe: landblocks tick in parallel, and a shared new Random() corrupts under races
         static string Pick(string[] lines) => lines[s_Rng.Next(lines.Length)];
@@ -325,11 +305,7 @@ namespace RevivalGuard
         internal static string ExpiredBackLine(string item) =>
             $"Your {item} sat on my table a full week and nobody bit. Here it is back. No charge for the storage. This time.";
 
-        /// <summary>Who sells a listing, for its examine text in his window (owner 2026-11-01: "let players see who is selling
-        /// the items he sells"). The retail way, like a storage chest's "Owned by X": one line at the end of the item's
-        /// description. The name is the seller CHARACTER's current name, looked up now (never the name saved with the
-        /// listing, which a rename makes stale, and never an account name); a character that is gone or deleted gets no
-        /// line. The house's own stock reads as his; your own listing reads "Sold by you".</summary>
+        /// <summary>Who sells a listing, for its examine text in his window.</summary>
         internal static string SoldByLine(uint seller, uint viewer, Func<uint, string> currentName)
         {
             if (seller == HOUSE) return $"Sold by {WHO_FULL}";
@@ -366,20 +342,11 @@ namespace RevivalGuard
         internal static string ChatterLine() => Pick(Chatter);
 
         // ---- the seed stock: a handful of listings that make the table look used on day one ----
-        /// <summary>A seed: the item, its price, its weenie value (for the check that a seed is never a bargain) and why.</summary>
+        /// <summary>A seed: the item, its price, its weenie value and why.</summary>
         internal sealed class Seed { public uint Wcid; public long Price, Value; public string Note; }
 
-        /// <summary>Plausible mid-value player loot, priced at or above what a player would ask, never a bargain (owner ticket
-        /// 261101-0002: "the rare gauntlets for 3mmds is WAY too cheap ... we can't launch with that item"). No rares, no
-        /// quest or set pieces players chase. Two priced in whole MMDs on common items worth far less to a player, so the
-        /// MMD display shows. The house owns them (HOUSE): a sale pays no one, the pyreals are a sink. Every price is at
-        /// least twice the item's value, so nobody profits by buying one and selling it to a vendor.
-        /// The table can change: SeedPlan pulls house listings whose item left the table, reprices the rest and adds the
-        /// new ones, on a fresh shard and on one already seeded alike.</summary>
         internal static readonly Seed[] SeedStock =
         {
-            // Ticket 261101-0018 (owner 2026-11-01: "way too low ... ancient armored boots = 20mmds"): priced by how much a
-            // player wants each piece next to those boots, not by vendor value, erring high. No free bees.
             new Seed { Wcid = 27909, Price = 20 * MMD, Value = 6_000, Note = "Ancient Armored Long Boots (AL 260): the owner's anchor" },
             new Seed { Wcid = 22013, Price = 18 * MMD, Value = 4_400, Note = "Olthoi Helm (AL 270): top-tier helm, wanted as much as the boots" },
             new Seed { Wcid = 37216, Price = 15 * MMD, Value = 1_631, Note = "Olthoi Breastplate (AL 200): Olthoi plate, a long-term chest piece" },
@@ -391,10 +358,6 @@ namespace RevivalGuard
             new Seed { Wcid = 6003, Price = 6 * MMD, Value = 1_545, Note = "Koujia Breastplate: common, a starter chest piece" },
         };
 
-        /// <summary>What to do to a ledger's house listings to match SeedStock: pull the open ones whose item left the table,
-        /// reprice the open ones whose price changed, and add each seed never placed. A seed placed before (open, sold or
-        /// pulled) is not placed again: a sold seed stays sold. The wcids placed are remembered in Ledger.SeedsPlaced; a
-        /// ledger from before that list counts its house listings, whatever their state.</summary>
         internal static (List<Listing> pull, List<(Listing x, long price)> reprice, List<Seed> add) SeedPlan(Ledger l)
         {
             var table = SeedStock.ToDictionary(z => z.Wcid);

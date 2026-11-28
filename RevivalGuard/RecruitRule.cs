@@ -5,19 +5,14 @@ using System.Text;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of Recruiting (no ACE types; tools/nettest compiles it by path, RecruitCase.cs): who may list an
-    /// allegiance, who is told when a new player asks, when the offer is made, the pitch text checks, the measured
-    /// "usually on" hours, and every line a player reads. Player text: short, plain, no em dashes, never the Borg,
-    /// nothing pushy (owner 2026-11-17). Combined from two drafts on the owner's word (2026-11-18, "Combine both").
-    /// </summary>
+    /// <summary>The pure part of Recruiting</summary>
     public static class RecruitRule
     {
         /// <summary>The starter path's end (starter-path.json until_level): the offer comes when this level is reached.</summary>
         public const int OFFER_LEVEL = 10;
         /// <summary>Whoever lists an allegiance, and everyone told of a request, is at least this level.</summary>
         public const int RECRUITER_LEVEL = 20;
-        /// <summary>Officers who may list: Seneschal (2) and up. Every officer is told of a request.</summary>
+        /// <summary>Officers who may list: Seneschal (2) and up.</summary>
         public const int OFFICER_RANK = 2;
         public const int PITCH_MAX = 120, MEET_MAX = 60, HOURS_MAX = 40;
         /// <summary>Samples (one each 10 minutes) before the hours are worked out: about two days.</summary>
@@ -27,9 +22,7 @@ namespace RevivalGuard
 
         public enum Toggle { Ok, NoAllegiance, NotLeader, TooLow, NotPlayer }
 
-        /// <summary>Whether this character may list its allegiance or change the listing: an allegiance with at least one
-        /// vassal, its monarch or an officer of Seneschal rank or higher, level RECRUITER_LEVEL+, a player (never a bot,
-        /// merc or staff, and never in an allegiance whose monarch is one: <paramref name="botOrStaff"/> covers both).</summary>
+        /// <summary>Whether this character may list its allegiance or change the listing</summary>
         public static Toggle CanToggle(bool hasAllegiance, bool isMonarch, int? officerRank, int level, bool botOrStaff)
         {
             if (botOrStaff) return Toggle.NotPlayer;
@@ -50,8 +43,7 @@ namespace RevivalGuard
             public uint Guid; public bool Online, IsMonarch, BotOrStaff; public int OfficerRank, Level;
         }
 
-        /// <summary>The members told of a request: the named contact first, then the monarch and the officers; online,
-        /// level RECRUITER_LEVEL+, players only. Each once.</summary>
+        /// <summary>The members told of a request</summary>
         public static List<uint> Contacts(IEnumerable<Member> members, uint contact)
         {
             var ok = (members ?? Enumerable.Empty<Member>())
@@ -82,10 +74,7 @@ namespace RevivalGuard
             return t.Length == 0 || t.Length > max ? null : t;
         }
 
-        /// <summary>"6 PM to 11 PM Pacific" from per-hour sample counts and summed online members (Pacific hours 0..23);
-        /// null when there are too few samples or nobody was ever seen on. The hours are those where at least one member
-        /// was on on average, or (a small allegiance) at least half its busiest hour; the longest run wins, wrapping past
-        /// midnight.</summary>
+        /// <summary>"6 PM to 11 PM Pacific" from per-hour sample counts and summed online members</summary>
         public static string Hours(int[] samples, long[] online)
         {
             if (samples == null || online == null || samples.Length != 24 || online.Length != 24) return null;
@@ -220,7 +209,6 @@ namespace RevivalGuard
         public static string Waiting(IReadOnlyCollection<string> lines) =>
             lines.Count == 0 ? "No requests waiting." : "Requests waiting: " + string.Join(", ", lines) + ".";
 
-        /// <summary>No em or en dash, no Borg: the owner's text rules, checked over every fixed line by the nettest.</summary>
         public static bool TextOk(string s) => s != null && s.IndexOf('—') < 0 && s.IndexOf('–') < 0
                                                && s.IndexOf("borg", StringComparison.OrdinalIgnoreCase) < 0
                                                && s.IndexOf("collective", StringComparison.OrdinalIgnoreCase) < 0;

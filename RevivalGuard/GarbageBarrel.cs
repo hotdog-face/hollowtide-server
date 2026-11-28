@@ -8,14 +8,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE GARBAGE BARREL TAKES YOUR OWN ATTUNED ITEMS (owner report 261124-0007, Staff Base: "dragging items to the garbage
-    /// barrel doesnt work on many items. for example envoy's robe"). Retail weenie 34726 is AiAcceptEverything, but ACE's
-    /// GiveObjectToNPC drops that for a sticky-attuned item (Attuned 2: Envoy's Robe, most quest gear), and the barrel has no
-    /// Give emote, so ACE answered "doesn't want that". Retail let you destroy your own attuned items in a garbage barrel.
-    /// Only the sticky-attuned case is taken over here; everything else (and every refusal ACE makes first: a summoned pet's
-    /// device, an item in a trade, an Olthoi player) stays ACE's. Item Lock still refuses earlier, in HandleActionGiveObjectRequest.
-    /// </summary>
+    /// <summary>The garbage barrel takes your own attuned items.</summary>
     [HarmonyPatch]
     static class GarbageBarrel
     {
@@ -68,7 +61,7 @@ namespace RevivalGuard
             catch (Exception e)
             {
                 Mod.Log.Error($"[RevivalGuard] GarbageBarrel: {e}");
-                return !taken;   // before the take: ACE's own answer; after it, never a second give of the same item
+                return !taken;
             }
         }
     }

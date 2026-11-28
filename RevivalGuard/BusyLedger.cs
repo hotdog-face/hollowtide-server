@@ -8,12 +8,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// WHAT KEPT A PLAYER BUSY, for the bug report (261023-0014, "Spell hanging entirely too long... Should be included in
-    /// bug report data"). Per player, the last few uses, casts, UseDones, "You're too busy!" refusals and watchdog rescues
-    /// with their times; TicketDesk writes them, with the cast/use state and footing at that moment, as server_busy.
-    /// Notes only: nothing here changes what ACE does.
-    /// </summary>
     static class BusyLedger
     {
         const int MAX = 16;
@@ -41,13 +35,12 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>"now: busy True, casting Nether Arc VII 3.2s (...); footing ...; recent: 10:03:50 use Condensed Dispel
-        /// Potion; 10:04:00 chug watchdog: ..." (UTC times).</summary>
+        /// <summary>"now: busy True, casting Nether Arc VII 3.2s</summary>
         public static string Describe(Player p)
         {
             if (p == null) return "";
             var now = DateTime.UtcNow;
-            // landblock NONE: nothing ticks this player (an unload took them with it, 261109-0037)
+            // landblock NONE: nothing ticks this player
             var parts = new List<string> { $"busy {p.IsBusy}", p.CurrentLandblock == null ? "landblock NONE" : $"landblock {p.CurrentLandblock.Id.Landblock:X4}" };
             try
             {
@@ -97,8 +90,7 @@ namespace RevivalGuard
             }
         }
 
-        // the chug's own motion-dones, timed from its start, so a slow drink reads as one (261023-0019 read as 14 s and
-        // 31 s drinks from runs of heal-kit UseDones)
+        // the chug's own motion-dones, timed from its start, so a slow drink reads as one
         [HarmonyPatch(typeof(Player), nameof(Player.HandleMotionDone_UseConsumable))]
         static class OnChugDone
         {

@@ -4,29 +4,7 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE PK SUIT PLAN (pure C#, nettest PkSuitCase; server side PkSuit.cs). Owner 2026-11-22: "a full pk ready suit
-    /// legendaries applied to my tailor suits on the stands in the staff base. those cover all cantrips and tinkers etc."
-    /// (docs/proposals/staff-event-toolkit.md item 1).
-    ///
-    /// Given what is worn and wielded (a slot kind per item) and the wearer's trained skills, this decides every item's
-    /// legendary spells and tinkers. Spell ids are retail's legendary cantrips as ACE's spell table has them (ace_world
-    /// `spell`, 2026-11-22; nettest checks them against tools/nettest/PkSuitSpellTable.tsv, the server against its own
-    /// table at run time).
-    ///  - Item spells (cast on the item itself, so every piece carries its own): armour and shields Legendary
-    ///    Impenetrability and the seven Legendary Banes; melee and missile weapons Blood Thirst, Heart Thirst, Defender,
-    ///    Swift Hunter; casters Spirit Thirst, Hermetic Link, Defender (retail's MeleeCantrips/MissileCantrips/WandCantrips
-    ///    families at legendary).
-    ///  - Wearer spells (cast on the wearer; one copy across the suit, never two): Legendary Armor and the seven wards,
-    ///    the six attributes, melee/missile/magic defense (Invulnerability, Impregnability, Magic Resistance), an
-    ///    aptitude for each trained combat or magic skill, and the three Gains. Spread at most <see cref="CAP"/> per item
-    ///    (retail's most cantrips on one loot item): armour takes the protections first, jewelry the attributes and
-    ///    defenses, clothing the skills; weapons, cloaks and anything else take none (the suit works with any weapon).
-    ///  - Tinkers: up to ten, counting what the item already has. Armour and shields: steel (+20 armour level each, ACE's
-    ///    own mutation). Melee: Sunstone (Armor Rending) unless imbued, one granite, the rest iron. Missile: Sunstone, the
-    ///    rest mahogany. Casters: Black Opal (Critical Strike) unless imbued, the rest green garnet on an elemental caster,
-    ///    brass on another. Jewelry, clothing, cloaks: none (retail could not tinker them).
-    /// </summary>
+    /// <summary>The PK suit plan (pure C#, nettest PkSuitCase; server side PkSuit.cs).</summary>
     public static class PkSuitRule
     {
         public enum Kind { Armor, Shield, Jewelry, Clothing, Melee, Missile, Caster, Cloak, Other }
@@ -100,8 +78,7 @@ namespace RevivalGuard
 
         public static bool TakesWearerSpells(Kind k) => PREFS.ContainsKey(k);
 
-        /// <summary>The wearer spells, in placing order: protections, attributes, defenses, a skill aptitude for each
-        /// trained skill (in SKILL_SPELL order), gains.</summary>
+        /// <summary>The wearer spells, in placing order: protections, attributes, defenses, a skill aptitude for each trained skill, gains.</summary>
         public static List<(uint id, int group)> WearerSpells(IEnumerable<int> trainedSkills)
         {
             var have = new HashSet<int>(trainedSkills ?? Enumerable.Empty<int>());
@@ -120,7 +97,7 @@ namespace RevivalGuard
             public List<uint> Unplaced = new List<uint>();                                    // wearer spells with no room
         }
 
-        /// <summary>Every item's spells. Items are (key, kind) in the order the caller lists them (stable).</summary>
+        /// <summary>Every item's spells.</summary>
         public static Result Plan(IList<(int key, Kind kind)> items, IEnumerable<int> trainedSkills)
         {
             var r = new Result();
@@ -153,7 +130,7 @@ namespace RevivalGuard
         public static Tinkers TinkerPlan(Kind k, int timesTinkered, bool imbued, bool elemental)
         {
             var t = new Tinkers();
-            int room = Math.Max(0, MAX_TINKERS - Math.Max(0, timesTinkered));   // a bad negative count never adds tinks (Codex review 11-23)
+            int room = Math.Max(0, MAX_TINKERS - Math.Max(0, timesTinkered));
             if (room == 0) return t;
             switch (k)
             {
@@ -177,8 +154,6 @@ namespace RevivalGuard
             return t;
         }
 
-        /// <summary>Item mana for an evening: enough for 12 hours at the item's burn rate (mana per second, positive),
-        /// never less than 5000 nor less than it had. Rounded up to a hundred.</summary>
         public static int EveningMana(int currentMax, double burnPerSecond)
         {
             double need = Math.Min(2_000_000_000, Math.Max(5000, Math.Abs(burnPerSecond) * 12 * 3600));   // no int overflow (Codex review 11-23)

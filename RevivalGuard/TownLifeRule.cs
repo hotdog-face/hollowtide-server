@@ -3,12 +3,7 @@ using System.Collections.Generic;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of TownLife (no ACE types; tools/nettest compiles it by path, TownLifeCase.cs): the moment of the day,
-    /// THE SPEECH BUDGET (owner 2026-11-14: "i dont want holtberg to be flooded with random npc talking"), which pools a line
-    /// comes from, greetings, rumours by level, keywords, and the routine state machine (rounds out and back along checked
-    /// legs, a stay through the evening, back to the post for business).
-    /// </summary>
+    /// <summary>The pure part of TownLife</summary>
     public static class TownLifeRule
     {
         // ---- the moment (Dereth's 16 hours: 5-12 Dawnsong .. Warmtide-and-Half, 13-15 Evensong .. Gloaming) ----
@@ -34,18 +29,7 @@ namespace RevivalGuard
             m = Moment.Day; return false;
         }
 
-        // =====================================================================================================
-        // THE SPEECH BUDGET. Most of town life is silent (routines, walking, gestures); speech is rare:
-        //   - unprompted lines: at most one per LineGap per listening player, from the whole town (guards and Azimar too);
-        //     each NPC at most once per NpcGap, and only with a player within TalkRange;
-        //   - a two-NPC exchange counts as one line and is rarer still (ExchangeGap per listener);
-        //   - prompted lines (a Use, a greeting or keyword aimed at the NPC, a greeting by name on arrival) do not count,
-        //     but a greeting comes once per player per NPC per GreetGap, an arrival greeting once per ArrivalGap per player;
-        //   - a repeat greeting inside GreetGap gets a short acknowledgement (or only a nod when the player's screen is busy),
-        //     once per AgainGap per player per NPC, so a second hello is never met with silence;
-        //   - an event (raid, PK death, level-up) is answered by one NPC at most;
-        //   - one line on a player's screen at a time: an unprompted line finding a listener's screen busy is dropped, never queued.
-        // =====================================================================================================
+        // The speech budget.
         public sealed class Limits
         {
             public double LineGap = 60, NpcGap = 300, ExchangeGap = 600, GreetGap = 3600, AgainGap = 60, ArrivalGap = 300, Screen = 6, EventWindow = 120;
@@ -94,7 +78,7 @@ namespace RevivalGuard
                 return No.Ok;
             }
 
-            /// <summary>Check and, when allowed, count it at once (the line is said now): true = speak.</summary>
+            /// <summary>Check and, when allowed, count it at once: true = speak.</summary>
             public bool TryAmbient(uint npc, IList<Listener> ls, double now, double seconds = -1)
             {
                 var r = CheckAmbient(npc, ls, now);
@@ -105,8 +89,7 @@ namespace RevivalGuard
                 return true;
             }
 
-            /// <summary>A two-NPC exchange: counts as one unprompted line for both speakers and every listener, and needs
-            /// ExchangeGap since the listener's last one. <paramref name="seconds"/> is how long it holds the screen.</summary>
+            /// <summary>A two-NPC exchange: counts as one unprompted line for both speakers and every listener</summary>
             public No CheckExchange(uint a, uint b, IList<Listener> ls, double now)
             {
                 var r = CheckAmbient(a, ls, now);
@@ -132,8 +115,7 @@ namespace RevivalGuard
                 Prompted++;
             }
 
-            /// <summary>A greeting by this NPC to this player: once per GreetGap; an arrival greeting (the NPC speaks first) also
-            /// at most once per ArrivalGap per player across the town, and only on a free screen.</summary>
+            /// <summary>A greeting by this NPC to this player</summary>
             public No CheckGreet(uint npc, uint player, double now, bool arrival)
             {
                 if (m_Greeted.TryGetValue((npc, player), out var t) && now - t < L.GreetGap) return No.Greeted;
@@ -150,9 +132,7 @@ namespace RevivalGuard
                 return true;
             }
 
-            /// <summary>A prompted repeat greeting (TryGreet said Greeted): Ok = a short acknowledgement line; Screen = the
-            /// player's screen holds a town line, so only a nod (one line on screen at a time); Again = acknowledged within
-            /// AgainGap already, nothing. Ok and Screen both start the AgainGap.</summary>
+            /// <summary>A prompted repeat greeting</summary>
             public No CheckAgain(uint npc, uint player, double now)
             {
                 if (m_Again.TryGetValue((npc, player), out var t) && now - t < L.AgainGap) return No.Again;
@@ -174,7 +154,7 @@ namespace RevivalGuard
                 return true;
             }
 
-            /// <summary>Forget what no rule can need any more (called now and then).</summary>
+            /// <summary>Forget what no rule can need any more.</summary>
             public void Prune(double now)
             {
                 double keep = Math.Max(Math.Max(L.LineGap, L.ExchangeGap), Math.Max(L.NpcGap, L.ArrivalGap)) + 60;
@@ -198,10 +178,7 @@ namespace RevivalGuard
             }
         }
 
-        // =====================================================================================================
-        // WHICH POOL A LINE COMES FROM. Pool names (TownLife.json "lines"): npc.KEY[.moment|.event.E|.fest.F], role.ROLE[...],
-        // town[.moment], event.E, fest.F, news. The caller takes the first pool in the list that has lines.
-        // =====================================================================================================
+        // Which pool a line comes from.
         public sealed class Ctx
         {
             public string Npc, Role, Event, Festival;
@@ -230,7 +207,7 @@ namespace RevivalGuard
 
         public static string Band(int level) => level <= 15 ? "low" : level <= 50 ? "mid" : level <= 125 ? "high" : "legend";
 
-        /// <summary>The greeting pools in the order tried. <paramref name="visits"/> counts this visit.</summary>
+        /// <summary>The greeting pools in the order tried.</summary>
         public static List<string> GreetPools(string npc, int visits, double daysAway, int level, double diedAgo, bool hasTitle, Moment m, double r)
         {
             var l = new List<string>();
@@ -313,12 +290,7 @@ namespace RevivalGuard
             return false;
         }
 
-        // =====================================================================================================
-        // ROUTINES. A round is out and back along its points (post, p0 .. pn, back the same way), every leg checked offline
-        // (tools/townlife/check_legs.py). A point may be a STAY: the NPC stays there for the rest of the moment it arrived in
-        // (patrons drifting in for the evening, townsfolk at their door for the night). Business (a player near, a Use, an
-        // emote chain, an alarm) sends it back to its post and keeps it there.
-        // =====================================================================================================
+        // Routines.
         public enum RState { Post, Walking, Paused, Returning }
         public enum RAct { None, WalkTo, FacePost, Stop, Teleport }
 
@@ -357,8 +329,7 @@ namespace RevivalGuard
             return RAct.WalkTo;
         }
 
-        /// <summary>The round to walk now, or -1: a stay round for this moment first (it has somewhere to be), else one that
-        /// fits the moment, by weight, not the one just walked when another fits.</summary>
+        /// <summary>The round to walk now, or -1</summary>
         public static int PickRound(IList<RoundDef> rounds, Moment mo, string last, double r)
         {
             if (rounds == null || rounds.Count == 0) return -1;
@@ -372,13 +343,7 @@ namespace RevivalGuard
             return fit.Count > 0 ? fit[fit.Count - 1] : -1;
         }
 
-        /// <summary>
-        /// One think (about a second apart). <paramref name="dist"/>: metres to the current target (the post when Index is -1).
-        /// <paramref name="hold"/>: someone is dealing with it where it stands (a Use, its emotes running, a vendor's customer):
-        /// it stops and waits, and walks back to its post once that is over. <paramref name="summon"/>: back to the post now and
-        /// stay there (a player waiting at its post, an alarm, the switch off). <paramref name="playerNear"/>: someone could see a
-        /// teleport home. <paramref name="r"/> a roll in [0, 1).
-        /// </summary>
+        /// <summary>One think (about a second apart).</summary>
         public static RAct Step(Routine m, double now, Moment mo, float dist, IList<RoundDef> rounds, bool hold, bool summon, bool playerNear, double r)
         {
             RoundDef rd = m.Round >= 0 && rounds != null && m.Round < rounds.Count ? rounds[m.Round] : null;
@@ -456,14 +421,12 @@ namespace RevivalGuard
             return RAct.None;
         }
 
-        /// <summary>Back toward the post the way it came: from a point (Paused) the one before it; mid-leg (Walking) the point
-        /// it set out from (index - 1 either way; -1 is the post).</summary>
+        /// <summary>Back toward the post the way it came: from a point the one before it; mid-leg the point it set out from.</summary>
         static RAct Back(Routine m, double now) => Target(m, RState.Returning, Math.Max(-1, m.Index - 1), now);
 
         /// <summary>Away from its post (walking, paused or on its way back).</summary>
         public static bool Away(Routine m) => m.State != RState.Post;
 
-        // ---- gestures: an NPC's own list (TownLife.json), never the same twice running, only standing with someone to see ----
         public static bool MayGesture(RState s, bool moving, bool playerNear, bool business, double now, double busyUntil)
             => (s == RState.Post || s == RState.Paused) && !moving && playerNear && !business && now >= busyUntil;
 

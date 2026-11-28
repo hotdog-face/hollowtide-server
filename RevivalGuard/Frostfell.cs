@@ -22,29 +22,13 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// FROSTFELL, REVIVED (2026-10-29, for the owner's review before Dec 4; docs/EVENT-TESTS/frostfell.md). Retail's
-    /// Frostfell content stays as it was; this adds on top, only while Frostfell runs (SeasonalCalendar, forced included):
-    ///   * ONE LINE PER GIFT BOX: retail's "3 of 12 gift boxes found." and our "Present Hunt: 3 of 6" become one line
-    ///     (FrostfellRule.BoxLine). The retail line is held back only while the Present Hunt will count this box.
-    ///   * THE COSTUMER SAYS WHY: the Frostfell Costumer (900731, a vendor) tells a player, once a day, what Frostfell
-    ///     holds and where (the boxes, Raymond, Frost Haven, Osdryd, the carols), then the Present Hunt count each visit.
-    ///   * THE ABOMINABLE SNOWMAN SCALES (FrostfellRule.SnowmanMax): fun for one and for ten. When he falls, everyone who
-    ///     hurt him gets Frostfell Cheer sized by how many fought, and the line that his Frozen Presents melt with a
-    ///     Hot Coal from the Scold Lumps around him (retail's own loop, never told in game).
-    ///   * CAROLS AT THE GARLAND ARCH (new, for the owner's yes; switch rg_frostfell_carols, default on): every CAROL_S while
-    ///     someone stands at Holtburg's arch, the Costumer calls a cheer, wave or clap; all who join within WINDOW_S get
-    ///     Frostfell Cheer, bigger with more carolers. A small group activity for any level, in the newbie town.
-    ///   * FROSTFELL CHEER: creature XP for an hour (FrostfellRule.Cheer), never stacked over the Night Club party buff:
-    ///     the bigger of the two counts.
-    /// Staff: @frostfell [status | carol [cheer|wave|clap] | snowman | reset] (reset: your own boxes, hunt and deliveries).
-    /// </summary>
+    /// <summary>FROSTFELL, REVIVED.</summary>
     static class Frostfell
     {
         internal const string KEY = "frostfell";
         const uint COSTUMER = 900731, SNOWMAN = 87120;
         const ushort HOLTBURG = 0xA9B4, FROST_HAVEN = 0x9F29;
-        // the Garland Arch over the road, 0xA9B40021 (108, 12) (2026-12-01-frostfell-3-arch.sql): landblock-grid metres
+        // the Garland Arch over the road, 0xA9B40021 (108, 12): landblock-grid metres
         const float ARCH_X = 0xA9 * 192f + 108f, ARCH_Y = 0xB4 * 192f + 12f, ARCH_R = 25f;
         const double CAROL_S = 240, FIRST_CAROL_S = 30, WINDOW_S = 20, INTRO_S = 20 * 3600;
         const string BOX_LINE = "%tqc of %tqm gift boxes found.";
@@ -81,8 +65,7 @@ namespace RevivalGuard
 
         static readonly ConcurrentDictionary<uint, (string text, double at)> s_BoxLine = new ConcurrentDictionary<uint, (string, double)>();
 
-        /// <summary>Before ACE runs an emote action: hold retail's gift-box count back when the Present Hunt will count this
-        /// box too, so SayBoxProgress can say both in one line. False skips ACE's action.</summary>
+        /// <summary>Before ACE runs an emote action</summary>
         internal static bool OnEmote(EmoteManager mgr, PropertiesEmote set, PropertiesEmoteAction a, WorldObject target)
         {
             if (a != null && target is Player pz && mgr?.WorldObject != null && PUZZLE.Contains(mgr.WorldObject.WeenieClassId)) PuzzleStep(pz, set, a);
@@ -93,7 +76,6 @@ namespace RevivalGuard
             if (p.QuestManager.GetCurrentSolves(g.Counter) >= g.N) return true;   // the hunt is done: retail's line alone
             var text = mgr.Replace(a.Message, mgr.WorldObject, target, set?.Quest);
             s_BoxLine[p.Guid.Full] = (text, Now);
-            // the Present Hunt stamp follows in the same emote; if it never moves, retail's line goes out as it was
             var chain = new ActionChain();
             chain.AddDelaySeconds(4);
             chain.AddAction(p, () => { if (s_BoxLine.TryRemove(p.Guid.Full, out var t)) Say(p, t.text); });
@@ -101,7 +83,7 @@ namespace RevivalGuard
             return false;
         }
 
-        /// <summary>From FestivalGoalsStamp, after a goal's count moved: a gift box's one line. True when said.</summary>
+        /// <summary>From FestivalGoalsStamp, after a goal's count moved: a gift box's one line.</summary>
         internal static bool SayBoxProgress(Player p, FestivalGoals.Goal g, int n)
         {
             if (p == null || g?.Counter != "PresentHunt" || !s_BoxLine.TryRemove(p.Guid.Full, out var t)) return false;
@@ -110,18 +92,12 @@ namespace RevivalGuard
             return true;
         }
 
-        // ---- 1b. Santa's present puzzle: a wrong guess closes the first present again ------------------------------
+        // ---- 1b.
 
         // the sixteen presents of the five patterns (88349 and its siblings spawn them)
         static readonly HashSet<uint> PUZZLE = new HashSet<uint>(Enumerable.Range(88332, 8).Concat(Enumerable.Range(88350, 8)).Select(i => (uint)i));
         static readonly ConcurrentDictionary<uint, int> s_FirstGuess = new ConcurrentDictionary<uint, int>();
 
-        /// <summary>
-        /// Ticket 261030-0015 ("not all the presents open"): retail's data opens the first present of a pair (its bit in
-        /// SclavusPresentsOpened, and SclavusPresentFirstGuess) but a wrong second guess clears neither, so the first one
-        /// stays "already opened" and can never be matched, and the next present is judged against it. Here a wrong guess
-        /// closes the first present again and forgets the first guess, as a memory game should.
-        /// </summary>
         static void PuzzleStep(Player p, PropertiesEmote set, PropertiesEmoteAction a)
         {
             if (a.Type == (uint)EmoteType.SetQuestBitsOn && a.Message == "SclavusPresentsOpened" && set?.Quest == "SclavusPresentFirstGuess")
@@ -135,8 +111,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The imposter Santa Sclavus falls (tickets 261030-0018/0019): each fighter gets a Present to unwrap
-        /// (his corpse also carries treasure now, gen_frostfell_santa.py).</summary>
+        /// <summary>The imposter Santa Sclavus falls: each fighter gets a Present to unwrap.</summary>
         internal static void ImposterFell(Creature c)
         {
             var fighters = c.DamageHistory?.TotalDamage.Values.ToList()
@@ -259,9 +234,8 @@ namespace RevivalGuard
         static readonly ConditionalWeakTable<Creature, Scaled> s_Scaled = new ConditionalWeakTable<Creature, Scaled>();
         static double s_NextRaid;
 
-        /// <summary>Each raider and present, once, the moment it is seen: raiders' health by FrostfellRule.RaiderShare,
-        /// the present's by FrostfellRule.PresentShare, for the defenders within RAID_R of it then.</summary>
-        // the running raid's pacing and countdown (tickets 261030-0011, -0013)
+        /// <summary>Each raider and present, once, the moment it is seen</summary>
+        // the running raid's pacing and countdown
         static readonly HashSet<uint> WAVE_GENS = new HashSet<uint> { 73218, 73226 };      // the raids' wave generators
         static readonly HashSet<uint> WAVES = new HashSet<uint> { 73220, 73222, 73231 };   // what they spawn: one wave each
         static string s_RaidKey;
@@ -304,8 +278,7 @@ namespace RevivalGuard
                 }
         }
 
-        /// <summary>The present broken (ticket 261030-0012: "needs a transition out"): it bursts on screen and the
-        /// defenders are told what happened, instead of the present just vanishing.</summary>
+        /// <summary>The present broken: it bursts on screen and the defenders are told what happened, instead of the present just vanishing.</summary>
         internal static void PresentBroken(Creature c)
         {
             c.EnqueueBroadcast(new GameMessageScript(c.Guid, PlayScript.Explode));
@@ -346,12 +319,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A Present Raid won (EventDirector: held to the end, or every raider gone): retail's usable reward present
-        /// appears where the raid's present stood, for 3 minutes (wiki: the reward present stays 3 minutes after the raid).
-        /// Its own retail emotes do the rest: 20 h timer, title (Tufa 857 Present Protector, Yaraq 859 Loss Prevention),
-        /// 20% of a level's XP up to 100,000,000, 5,000 luminance and one random Holiday Rush item. Retail's generator chain
-        /// makes it a child of the reset stopgap, which the event's stop sweep removes at once, so it is spawned on its own
-        /// here (docs/EVENT-TESTS/holiday-rush-audit.md). Before: title 857 at both towns and an old Present (36897).</summary>
+        /// <summary>A Present Raid won: retail's usable reward present appears where the raid's present stood, for 3 minutes.</summary>
         internal static void RaidWon(string key, List<Player> near)
         {
             bool yaraq = key != null && key.EndsWith("yaraq", StringComparison.OrdinalIgnoreCase);
@@ -563,10 +531,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A landblock only if it is already loaded. LandblockManager.GetLandblock LOADS it: the raid tick asked
-        /// for Tufa and Yaraq every 2 s, so with nobody there each landblock unloaded after ACE's 5 idle minutes and was
-        /// loaded again at once, and a running raid's generators spawned a fresh Holiday Present and wave every 5 minutes
-        /// (box 2026-11-01 04:43 to 05:13).</summary>
+        /// <summary>A landblock only if it is already loaded.</summary>
         static Landblock IfLoaded(ushort block)
         {
             var id = new LandblockId((uint)block << 16 | 0xFFFF);
@@ -751,9 +716,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Frostfell Cheer: creature-kill XP. The bigger of it and the Night Club party buff counts, never both:
-    /// this prefix multiplies by (1 + max) / (1 + party), which with NightClubPartyXp's own (1 + party) gives 1 + max
-    /// in either order.</summary>
+    /// <summary>Frostfell Cheer: creature-kill XP.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.EarnXP))]
     static class FrostfellCheerXp
     {
@@ -782,8 +745,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>The raid's calm (Frostfell.HoldWave): a wave generator's queued spawn waits while the defenders have their
-    /// 45 seconds; the queue is kept, so the wave comes when the calm ends.</summary>
+    /// <summary>The raid's calm: a wave generator's queued spawn waits while the defenders have their 45 seconds</summary>
     [HarmonyPatch(typeof(GeneratorProfile), nameof(GeneratorProfile.ProcessQueue))]
     static class FrostfellRaidCalm
     {

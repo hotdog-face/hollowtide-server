@@ -16,29 +16,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ALLEGIANCES THAT WELCOME NEW PLAYERS (owner 2026-11-17, docs/findings/growth-review-fable-2026-11-17.md lever 4:
-    /// browser players who swore allegiance stayed at about 9x the rate; 2026-11-18 "Combine both" drafts). Ours, not
-    /// retail. Player allegiances opt in; never a bot's (the Borg, the Hollow Company) or staff's. Swearing stays retail's:
-    /// two players, the Swear button.
-    ///
-    ///   /recruit                       the allegiances on the list: size, who is on now, usual hours, their line, where
-    ///                                  to meet, who to ask (/recruiting is the same command)
-    ///   /recruit join &lt;n&gt;              a player with no patron or vassals asks number n: its contact, monarch and
-    ///                                  officers who are on are told now; nobody on, they are told at their next login
-    ///   /recruit on &lt;line&gt; | off        the monarch or a Seneschal+ officer, level 20+, of an allegiance with a vassal
-    ///   /recruit pitch|meet|contact|hours &lt;text&gt;   the line, where to meet, the member asked first (level 20+), and
-    ///                                  the hours in their own words ("hours auto": measured, RecruitRule.Hours)
-    ///   /recruit status                your listing and the requests waiting
-    ///   @recruit remove &lt;n&gt;            staff (Sentinel+): take a listing down
-    ///
-    /// The offer (2026-11-23: now one hint, once, Recruiting.Finder.cs): a few seconds after a player with no patron reaches
-    /// level 10, or at a later login in its first week, if anything is listed. The join request, the panel board and
-    /// listing fields are Recruiting.Finder.cs (AllegianceFinderRule). All of it is behind rg_recruit (default OFF:
-    /// inert until the owner's yes; admin panel Server Settings, Setting "rg_recruit", on; datafix
-    /// 2026-11-18-recruit-on.sql keeps it on across restarts). State: Recruiting/state.json beside the dll. Rules and
-    /// every player line: RecruitRule.cs (nettest RecruitCase).
-    /// </summary>
+    /// <summary>Allegiances that welcome new players.</summary>
     public static partial class Recruiting
     {
         internal const string P_ON = "rg_recruit";
@@ -80,8 +58,6 @@ namespace RevivalGuard
             public int OfficerMin { get; set; } = RecruitRule.OFFICER_RANK;
             /// <summary>The allegiance's name when last listed or asked (for lines said when it is not loaded).</summary>
             public string Label { get; set; }
-            /// <summary>False for an allegiance that never listed itself: the entry only holds requests made from the
-            /// directory (Recruiting.Directory.cs) and goes when they do. An old file's entries are listings.</summary>
             public bool Listed { get; set; } = true;
         }
 
@@ -142,8 +118,6 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ who is who
 
-        /// <summary>A bot (a Borg or a Hollow Company merc: both on hcmerc accounts, BorgRule) or a staff character: never lists, is never
-        /// listed, told or offered.</summary>
         internal static bool BotOrStaff(IPlayer p)
         {
             if (p == null) return true;
@@ -156,8 +130,7 @@ namespace RevivalGuard
 
         static bool HasVassals(Player p) => p.AllegianceNode != null && p.AllegianceNode.HasVassals;
 
-        /// <summary>NewcomerNotes: how many allegiances /recruit would show this player now, or -1 when /recruit is off
-        /// or the player is not free to join one.</summary>
+        /// <summary>NewcomerNotes: how many allegiances /recruit would show this player now</summary>
         internal static int OpenListingsFor(Player p)
         {
             if (!On || p == null || !Seeker(p)) return -1;
@@ -168,8 +141,7 @@ namespace RevivalGuard
 
         static RecruitRule.Toggle CanManage(Player p, out Allegiance a) => CanManage(p, out a, out _);
 
-        /// <summary>The monarch, or an officer of the rank the monarch allows (the listing's OfficerMin; Seneschal while
-        /// there is no listing).</summary>
+        /// <summary>The monarch, or an officer of the rank the monarch allows.</summary>
         static RecruitRule.Toggle CanManage(Player p, out Allegiance a, out Entry e)
         {
             a = p.Allegiance;
@@ -401,7 +373,7 @@ namespace RevivalGuard
             Say(me, $"Removed {x.L.Name} from the list.");
         }
 
-        // ------------------------------------------------------------------ the newcomer hint (was: the list at level 10)
+        // ------------------------------------------------------------------ the newcomer hint
 
         [HarmonyPatch(typeof(Player), "CheckForLevelup")]
         static class OfferOnLevel

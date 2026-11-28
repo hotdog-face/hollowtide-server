@@ -14,25 +14,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AT MOST CAP NEW ACCOUNTS PER ADDRESS PER DAY (docs/ACCOUNT-SIGNUP.md, owner 2026-10-01).
-    /// ACE's AllowAutoAccountCreation makes an account for any unknown name with a password, so one
-    /// script could fill the auth table. This prefix on AuthenticationHandler.DoLogin refuses the
-    /// login BEFORE ACE creates the account when the address has already created CAP accounts in the
-    /// last 24 hours, counted from ace_auth.account's own create_Time / create_I_P (so the count
-    /// survives a restart). Logins to accounts that exist are never touched, and neither is
-    /// multiboxing: MaximumAllowedSessionsPerIPAddress stays as configured.
-    ///
-    /// Loopback, LAN and Tailscale addresses are exempt (the fleet and load tests make accounts from
-    /// there), the same rule as StaffLoginGate's throttle, unless the shard property
-    /// rg_signup_cap_lan is true (for testing the cap from the LAN). REVIVAL_NEW_ACCOUNTS_PER_DAY sets
-    /// CAP (default 3; 0 turns the cap off). The login screen learns about the cap before it sends a
-    /// password, through AccountQuery's answer 3, and says so in words; this boot is the backstop
-    /// for a client that did not ask.
-    ///
-    /// A SHARED RELAY (StaffLoginGate.IsSharedRelay, rg_shared_relays: webAC's hosted bridge) brings every browser
-    /// player from one address, so its cap is RELAY_CAP (rg_shared_relay_signups, default 50) instead (owner 2026-11-03).
-    /// </summary>
+    /// <summary>At most cap new accounts per address per day.</summary>
     [HarmonyPatch]
     static class AccountCreationCap
     {
@@ -50,8 +32,7 @@ namespace RevivalGuard
         static System.Reflection.MethodBase TargetMethod() =>
             AccessTools.Method("ACE.Server.Network.Handlers.AuthenticationHandler:DoLogin");
 
-        /// <summary>Make rg_signup_cap_lan and rg_shared_relay_signups ordinary ACE properties, so @modifybool and
-        /// @modifylong accept them; and rg_shared_relays (StaffLoginGate).</summary>
+        /// <summary>Make rg_signup_cap_lan and rg_shared_relay_signups ordinary ACE properties, so @modifybool and @modifylong accept them</summary>
         internal static void Register()
         {
             ExpansionMotions.RegisterProperty(P_LAN, false, "RevivalGuard AccountCreationCap: apply the new-account cap to LAN addresses too (testing only; docs/ACCOUNT-SIGNUP.md)");
@@ -96,10 +77,7 @@ namespace RevivalGuard
                 // the address the account will be created from, for CreateAccount (Gateway): a browser player's own
                 var addr = Gateway.RealAddress(session.EndPointC2S);
                 Gateway.t_LoginReal = addr;
-                // THE MERCENARY PREFIX IS RESERVED (Fable audit 2026-10-19, docs/findings/FINDINGS-server-mod-audit.md item 1):
-                // Mercenaries.IsMerc goes by the account name, and an hcmerc* account gets @mercfollow (a teleport to its
-                // fellowship leader), no chat log, no Discord mirror and no population count. Existing accounts keep
-                // working; a new one is refused (make new mercenaries with ACE's own accountcreate on the console).
+                // The mercenary prefix is reserved
                 if (loginRequest.NetAuthType == NetAuthType.AccountPassword
                     && Mercenaries.IsReservedName(loginRequest.Account)
                     && DatabaseManager.Authentication.GetAccountByName(loginRequest.Account) == null)

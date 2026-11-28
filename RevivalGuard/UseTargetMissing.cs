@@ -6,16 +6,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A USE ON AN OBJECT THE SERVER CANNOT FIND (261025-0022, Akuma): eleven uses of Door 0x7C174000 outside the Folthid
-    /// cottage (landblock 0xC174, a plain door-aluvian-house with no links) each logged only ACE's debug line
-    /// "HandleActionUseItem(7C174000): couldn't find object" while the client drew the door 8 m away. ACE looks in the
-    /// player's CurrentLandblock and its adjacents only (Player.FindObject, SearchLocations.Landblock), so either the door
-    /// was gone from the landblock or the player's CurrentLandblock was not where his Location was (he had just come back
-    /// from dungeon 0x0007 through the cellar). Nothing in the logs told the two apart. This logs, once per player and
-    /// object a minute, where the server has the player (Location vs CurrentLandblock) and every loaded landblock that does
-    /// hold the object. Diagnostic only: ACE's own path (UseDone, no use) is unchanged.
-    /// </summary>
+    /// <summary>A use on an object the server cannot find</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.HandleActionUseItem))]
     public static class UseTargetMissing
     {

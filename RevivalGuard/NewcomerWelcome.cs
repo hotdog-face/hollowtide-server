@@ -17,21 +17,7 @@ using R = RevivalGuard.NewcomerWelcomeRule;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A NEW PLAYER IS NOTICED (owner 2026-11-18: new browser players leave in their first ten minutes, and regulars help
-    /// newcomers when they notice them). When a brand-new player's first character enters the world for the first time and
-    /// is still there SETTLE_S later, one short line on General names them ("Welcome Bob to Dereth! Say hi in General."),
-    /// and the Discord bridge posts the same line to #in-game. Character name only.
-    ///   * new = the character's first login (ACE's TotalLogins 1, FirstEnterWorldDone unset) on an account made in the
-    ///     last day with no other character (deleted ones count), and no other account from the same address with a
-    ///     character that has been in the world (a second tab's guest, a lost-browser guest, a player's second account).
-    ///     Local, shared-relay and unknown addresses cannot tell, so only the account is judged there;
-    ///   * never staff, hcmerc* (Hollow Company, Borg), the dev and test fleet's accounts or the owner's (NewcomerWelcomeRule.NotNew);
-    ///   * at most one line per GAP_S: arrivals in between share the next line ("Welcome Bob and Alice ...");
-    ///     whoever has left by then is dropped.
-    ///   @modifybool rg_newcomer_welcome true       on (default off)
-    ///   @modifylong rg_newcomer_welcome_style 2    wording 1-3 (NewcomerWelcomeRule.Line)
-    /// </summary>
+    /// <summary>A new player is noticed.</summary>
     static class NewcomerWelcome
     {
         internal const string P_ON = "rg_newcomer_welcome", P_STYLE = "rg_newcomer_welcome_style";
@@ -163,8 +149,7 @@ namespace RevivalGuard
             Task.Delay(TimeSpan.FromSeconds(wait)).ContinueWith(_ => WorldManager.EnqueueAction(new ActionEventDelegate(Flush)));
         }
 
-        /// <summary>World thread: one line for everyone waiting who is still in the world. Whoever arrives meanwhile
-        /// waits for the next flush, GAP_S after this line.</summary>
+        /// <summary>World thread: one line for everyone waiting who is still in the world.</summary>
         static void Flush()
         {
             List<(uint guid, string name)> batch;

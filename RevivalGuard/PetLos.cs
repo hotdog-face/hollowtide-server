@@ -7,17 +7,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// PET LINE OF SIGHT (owner 2026-10-19 "Skip unseen", docs/findings/FINDINGS-pet-los.md). NOT RETAIL-PROVEN.
-    /// ACE CombatPet.FindNextTarget takes the nearest monster in ObjMaint's visible targets with no sight test,
-    /// and ACE has no pathfinding, so a pet locked onto a monster behind a wall grinds against it until it expires.
-    /// This prefix runs the same selection (GetNearbyMonsters, nearest first, inside VisualAwarenessRangeSq) but
-    /// takes the nearest one that passes ACE's own WorldObject.IsDirectVisible (the test monsters use for
-    /// projectile spells). At most MAX_TESTS sight tests per call; a pet with nothing in sight scans again
-    /// after RETRY_S, not every tick. Any error falls back to ACE's own method.
-    ///   @modifybool pet_los_targets false   ACE's original behaviour
-    ///   @modifybool pet_los_log true        a "[RevivalGuard] PetLos:" line per pick and per scan with none in sight
-    /// </summary>
+    /// <summary>Pet line of sight.</summary>
     [HarmonyPatch]
     static class PetLos
     {

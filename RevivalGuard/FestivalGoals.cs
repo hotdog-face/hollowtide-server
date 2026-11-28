@@ -15,20 +15,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ONE GOAL PER FESTIVAL (owner 2026-10-21, seasonal improvement #2). The goals are world data
-    /// (tools/gpubox-ace/gen_festival_goals.py: quest counters, KillQuest3 on the festival creatures, emote sets on
-    /// the turn-in NPCs, six trophy weenies 902200-902205). This file does what data cannot:
-    ///   * a counter only moves while its festival runs (SeasonalCalendar, forced states included) and not after this
-    ///     festival's trophy was taken: retail creatures such as the Old Zombies or the bunnies also live outside it;
-    ///   * a kill goal starts at its first festival kill (ACE counts a kill task only once the quest is on the record),
-    ///     and every count says "Harvest Hunt: 7 of 20" instead of ACE's "You have killed 7 Pumpkin Kins!";
-    ///   * the three Costumers are vendors, and ACE runs no Use emote for a vendor: their Use set (the hand-in) runs
-    ///     before the shop opens;
-    ///   * a trophy is named for the year it was won: "Frostfell 2026 Snowglobe" (Frostfell's January days count for
-    ///     the December it began in).
-    /// docs/EVENT-DIRECTOR.md "Festival goals" has the table.
-    /// </summary>
+    /// <summary>One goal per festival.</summary>
     static class FestivalGoals
     {
         internal sealed class Goal
@@ -73,7 +60,7 @@ namespace RevivalGuard
                 "Sunflowers in a crystal vase from the Spring Festival of {0}, for Spring Cleaning: twenty-five of spring's young creatures thinned out.") },
             { 902203, ("wedding", "Royal Wedding {0} Cake Topper",
                 "The figures from the top of the royal wedding cake, given at the Royal Wedding Anniversary of {0} to a three-time winner of Hoshino Kiri's candle race.") },
-            { 902204, ("anniversary", "Anniversary Balloons",   // owner 2026-10-28: no year in the name (it stays in the description)
+            { 902204, ("anniversary", "Anniversary Balloons",
                 "Balloons from the Anniversary of {0}, for three nights of dancing at the Night Club.") },
             { 902205, ("newyear", "New Year {0} Champagne",
                 "A bottle of crystal champagne for the New Year of {0}, Rayeesh's thanks for five bowls of black-eyed peas. Far too much to drink.") },
@@ -94,13 +81,7 @@ namespace RevivalGuard
             return p.QuestManager.HasQuest(t) && !p.QuestManager.CanSolve(t);
         }
 
-        /// <summary>
-        /// EACH YEAR STARTS FROM ZERO (owner 2026-10-21: "Reset each year"). A counter last moved more than STALE_DAYS
-        /// ago belongs to an earlier year's festival (no window is longer than 31 days, and the same festival comes back
-        /// a year later), so it is erased before it is read or moved. Keyed on the record's own LastTimeCompleted: no
-        /// extra state, and the same answer after any restart. Run at login (before any hand-in can read it) and before
-        /// every count.
-        /// </summary>
+        /// <summary>Each year starts from zero.</summary>
         const double STALE_DAYS = 60;
 
         internal static bool ResetIfStale(QuestManager qm, Goal g)
@@ -136,8 +117,7 @@ namespace RevivalGuard
                 + "trophies 902200-902205 (tools/gpubox-ace/festival-goals.sql)");
         }
 
-        /// <summary>A festival kill goal open to this player now (festival on, no trophy yet, row present, not maxed):
-        /// clears a stale count, starts the counter at 0 with the "begun" line if it is not on the record, and says yes.</summary>
+        /// <summary>A festival kill goal open to this player now</summary>
         internal static bool BeginKill(Player p, Goal g)
         {
             var qm = p?.QuestManager;
@@ -177,7 +157,7 @@ namespace RevivalGuard
             wo.LongDesc = string.Format(t.desc, y);
         }
 
-        /// <summary>Is the quest row there? Logged once a name: festival-goals.sql not applied means no goal at all.</summary>
+        /// <summary>Is the quest row there?</summary>
         internal static bool HasRow(string name)
         {
             if (DatabaseManager.World.GetCachedQuest(name) != null) return true;
@@ -225,11 +205,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// A festival kill goal: ACE counts a kill task only once its quest is on the record (QuestManager.HandleKillTask
-    /// returns on !HasQuest). These goals start themselves at the first festival kill, with a line saying what they
-    /// are, and the count goes through Stamp above (gate and progress line) instead of ACE's "You have killed 7 ...".
-    /// </summary>
+    /// <summary>A festival kill goal: ACE counts a kill task only once its quest is on the record.</summary>
     [HarmonyPatch(typeof(QuestManager), nameof(QuestManager.HandleKillTask))]
     static class FestivalGoalsKill
     {
@@ -248,12 +224,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// The first festival kill. This ACE's Creature.OnDeath_HandleKillTask calls HandleKillTask only for a damager whose
-    /// record already holds the kill quest, so the start in FestivalGoalsKill never ran and Harvest Hunt never counted
-    /// (box shard 2026-10-22). Before ACE's pass, each player in the damage history (a pet counts for its owner) and
-    /// their fellows in range get the counter started; ACE then counts it through HandleKillTask as usual.
-    /// </summary>
+    /// <summary>The first festival kill.</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.OnDeath_HandleKillTask))]
     static class FestivalGoalsFirstKill
     {
@@ -289,8 +260,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>The Costumers are vendors: ACE's Vendor.ActOnUse opens the shop and never runs a Use emote. Their Use
-    /// set is a goal's hand-in, so it runs first (a set that does not pay says nothing).</summary>
     [HarmonyPatch(typeof(Vendor), nameof(Vendor.ActOnUse), new Type[] { typeof(WorldObject) })]
     static class FestivalGoalsVendorUse
     {

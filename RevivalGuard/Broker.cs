@@ -22,23 +22,7 @@ using static RevivalGuard.BrokerRule;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE MARKETPLACE BROKER (owner 2026-10-31, player request #19 "livelier marketplace"). Ours, not retail.
-    /// Joe the Sho (first cast: Vessik the Sclavus; weenie 903100, placed by datafix 2026-11-03-marketplace-broker.sql) sells players' goods for
-    /// them while they are offline, through retail's own vendor window. docs/MARKETPLACE-BROKER.md has the design,
-    /// the rules (BrokerRule) and the failure handling. Off unless `@modifybool rg_broker true`.
-    ///
-    ///   LIST     give him an item (drag it onto him), use it on him, or drop it on his Sell list. He names a price (the
-    ///            item's value) and asks Yes/No; say a number near him and click No to be asked again at that price.
-    ///            Yes: the fee is paid, the item goes into his Strongbox (903101, a Container in the block that ACE
-    ///            saves like house storage) and the listing is written.
-    ///   BUY      his vendor window shows every open listing as stock at its seller's price (Value is set for the
-    ///            length of the ApproachVendor message only). Buying moves the real item; coin and notes pay
-    ///            (NoteChange). A seller's own listing shows at 1 and is taken back free: that is the cancel.
-    ///   COLLECT  using him pays what you are owed (notes and coin) and hands back what expired.
-    /// The items in the Strongbox are never left in Vendor.UniqueItemsForSale: Vendor.Destroy (a landblock unload)
-    /// destroys that list's objects and their database rows. They are put there for one ApproachVendor and taken out.
-    /// </summary>
+    /// <summary>The marketplace broker.</summary>
     public static class Broker
     {
         internal const string P_ON = "rg_broker";
@@ -87,13 +71,12 @@ namespace RevivalGuard
                 if (File.Exists(p)) s_Ledger = JsonSerializer.Deserialize<Ledger>(File.ReadAllText(p), s_Json) ?? new Ledger();
             }
             catch (Exception e)
-            {   // never start empty over a ledger we could not read: that would orphan every listing
+            {
                 Mod.Log.Error($"[RevivalGuard] Broker: could not read {FILE}: {e.Message}; the Broker stays shut until it is fixed");
                 s_Ledger = null;
             }
         }
 
-        /// <summary>Through a temp file and a rename: a crash leaves the old ledger or the new, never half of one.</summary>
         static bool Save()
         {
             if (s_Ledger == null) return false;
@@ -136,8 +119,7 @@ namespace RevivalGuard
         }
 
         // ------------------------------------------------------------------ the Strongbox
-        /// <summary>The Strongbox beside this Broker, saved to the shard (so it and its contents persist), its contents
-        /// loaded and the ledger reconciled against them once per run. Null when it is not ready (say so and stop).</summary>
+        /// <summary>The Strongbox beside this Broker, saved to the shard</summary>
         static Container Vault(WorldObject npc)
         {
             var v = npc?.CurrentLandblock?.GetObject(new ObjectGuid(VAULT_GUID)) as Container;
@@ -185,8 +167,7 @@ namespace RevivalGuard
             Save();
         }
 
-        /// <summary>Brings the house listings in line with BrokerRule.SeedStock (SeedPlan): pull, reprice, add. The ledger is
-        /// written before any item moves, as everywhere else.</summary>
+        /// <summary>Brings the house listings in line with BrokerRule.SeedStock (SeedPlan): pull, reprice, add.</summary>
         static void SeedNow(Container v)
         {
             long now = Now();
@@ -255,8 +236,7 @@ namespace RevivalGuard
             if (why != Refusal.None) { Tell(p, npc, RefusalLine(why)); return; }
             long price = Suggest(item.Value ?? 0);
             lock (s_Lock) s_Offers[p.Guid.Full] = new Offer { Item = itemGuid, Npc = npc.Guid.Full, Price = price, Fee = Fee(price), At = ACE.Common.Time.GetUnixTime() };
-            // OUR CLIENT ASKS FOR THE PRICE IN ITS OWN BOX (owner 2026-10-31: "the player should set their own price"):
-            // AcBrokerPriceHud, answered with @brokerprice. Another client gets the Yes/No and the price said out loud.
+            // Our client ASKS for the price in its own BOX: AcBrokerPriceHud, answered with @brokerprice.
             if (ModChannel.Capable(p.Session))
             {
                 ModChannel.Send(p.Session, "brokerprice", JsonSerializer.Serialize(new
@@ -283,7 +263,7 @@ namespace RevivalGuard
             o.Asking = true;
         }
 
-        /// <summary>The seller's answer. Yes lists it; No (or no answer) ends the offer unless a new price was said.</summary>
+        /// <summary>The seller's answer.</summary>
         internal static void Answered(Player p, bool yes)
         {
             if (p == null) return;
@@ -323,8 +303,7 @@ namespace RevivalGuard
             bool paid = o.Fee <= 0 || NoteChange.Pay(p, o.Fee);
             long change = NoteChange.t_Change; NoteChange.t_Change = 0;
             NoteChange.Recount(p);
-            // Container.TryRemoveFromInventory, not ...WithNetworking: that one DeepSaves the item with no container, a
-            // second database write a crash could stop between (the item would belong to nothing). One save, below.
+            // Container.TryRemoveFromInventory, not ...WithNetworking
             WorldObject wo = null;
             bool removed = paid && p.TryRemoveFromInventory(item.Guid, out wo) && wo != null;
             if (removed)
@@ -365,7 +344,7 @@ namespace RevivalGuard
         {
             var shown = new List<object>();
             if (!On) return shown;
-            // our client prices this vendor's window in MMD (owner ticket 261031-0012); sent before the window's own message
+            // our client prices this vendor's window in MMD; sent before the window's own message
             if (viewer?.Session != null && ModChannel.Capable(viewer.Session))
                 ModChannel.Send(viewer.Session, "brokershop", $"{{\"g\":{npc.Guid.Full}}}");
             var v = Vault(npc);
@@ -430,9 +409,6 @@ namespace RevivalGuard
                     else Close(x, State.Cancelled, now);
                 if (!Save()) { Mod.Log.Error("[RevivalGuard] Broker: ledger not written; buy refused"); Load(); Done(false); return; }
             }
-            // 2. the money, BEFORE the items: its removal reaches the database queue first (DupeGuard saves a shrunk stack at
-            // once, a spent one is deleted at once), so a crash between can lose the payment but never keep both
-            // (docs/findings/dupe-recheck-2026-11-02.md). Pay takes nothing when it returns false.
             long owe = total;
             NoteChange.t_Change = 0;
             if (owe > 0 && !NoteChange.Pay(p, owe))
@@ -492,8 +468,7 @@ namespace RevivalGuard
             if (!On || p?.Session == null || s_Ledger == null) return;
             var v = Vault(npc);
             if (v == null) return;
-            // Paid as MMD notes for whole MMDs and pyreals for the rest (owner 2026-10-31), only what fits in the pack:
-            // all of it, else the MMDs alone, else nothing and the balance stays held.
+            // Paid as MMD notes for whole MMDs and pyreals for the rest, only what fits in the pack
             long owed; lock (s_Lock) owed = s_Ledger.Owed.GetValueOrDefault(p.Guid.Full);
             if (owed > 0)
             {
@@ -544,8 +519,7 @@ namespace RevivalGuard
             return !r.PlayerExceedsLimits;
         }
 
-        /// <summary>Hands `amount` over as MMD notes and pyreals into the pack. Returns what could not be placed (never
-        /// dropped on the ground: it goes back to what he holds for the seller).</summary>
+        /// <summary>Hands `amount` over as MMD notes and pyreals into the pack.</summary>
         static long PayOut(Player p, long amount)
         {
             var (m, rest, _) = Payout(amount);
@@ -628,8 +602,7 @@ namespace RevivalGuard
             Ask(p, npc);
         }
 
-        /// <summary>The price box's answer: "@brokerprice 0x&lt;item&gt; &lt;price&gt;", 0 = cancelled. OK in the box is the
-        /// seller's yes, so the item is listed at once (the fee and every rule are checked again in ListItem).</summary>
+        /// <summary>The price box's answer: "@brokerprice 0x&lt;item&gt; &lt;price&gt;", 0 = cancelled.</summary>
         static void HandlePrice(Session session, params string[] args)
         {
             var p = session?.Player;
@@ -678,7 +651,6 @@ namespace RevivalGuard
                 try { if (IsBroker(__instance)) __state = Fill(__instance, player); }
                 catch (Exception e) { Mod.Log.Error($"[RevivalGuard] Broker fill: {e}"); }
             }
-            /// <summary>Always, whatever ApproachVendor did: the values and names back, the vendor list empty again.</summary>
             static Exception Finalizer(Exception __exception, Vendor __instance, List<object> __state)
             {
                 try { Unfill(__instance, __state); } catch (Exception e) { Mod.Log.Error($"[RevivalGuard] Broker unfill: {e}"); }
@@ -686,7 +658,6 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Retail's five-minute rot of resold items never touches a listing.</summary>
         [HarmonyPatch]
         static class NoRot
         {
@@ -719,9 +690,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Who sells it (owner 2026-11-01): examining a listing in his window adds "Sold by <name>" at the end of the
-        /// item's description (BrokerRule.SoldByLine). Server side, so every client shows it. Only items in the Strongbox
-        /// with an open listing; the name is the seller character's current one (PlayerManager), none if it was deleted.</summary>
+        /// <summary>Who sells it: examining a listing in his window adds "Sold by " at the end of the item's description.</summary>
         [HarmonyPatch(typeof(ACE.Server.Network.Structure.AppraiseInfo), nameof(ACE.Server.Network.Structure.AppraiseInfo.BuildProfile))]
         static class SoldByOnExamine
         {
@@ -765,7 +734,6 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>His Sell list is a way to hand him something: it lists, it never pays.</summary>
         [HarmonyPatch(typeof(Player), nameof(Player.HandleActionSellItem))]
         static class SellToBroker
         {

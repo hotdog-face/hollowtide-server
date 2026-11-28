@@ -9,29 +9,10 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A SERVER BODY WHOSE MOTION QUEUE NEVER DRAINS (261025-0012, Lillypad: "assistant isnt looting"; earlier Mark the
-    /// Noble 261024-0003). For a PK (FastTick) every use waits on the server body: MoveToManager's first node
-    /// (BeginTurnToHeading) does nothing while PhysicsObj.IsAnimating, and IsAnimating stays true while the
-    /// MotionTableManager holds a pending motion. Live: corpse uses waited 15 s with "queue 9 (SlashMed,...)", "queue 108
-    /// (ThrustMed,...)", "first cyclic True", update lag 0: the body is ticking, the head entry waits for links that will
-    /// never finish. Offline (tools/ace-physprobe `jumpfight`, ACE's own physics): a jump in a sword and shield fight
-    /// leaves the table at Falling on the floor and the swing (ACE plays it as the forward command) replayed by HitGround as
-    /// SlashMed/5 with 4 links to come; every later swing queues behind it, 7 entries after 10 swings, for good.
-    /// MotionQueueRule decides: a queue whose head and finished-link counter have not moved for motion.stale_seconds is
-    /// finished link by link (MotionTableManager.AnimationDone, as each link ending would), and a body left in a state a
-    /// standing body cannot be in (an action as the forward command, or Falling on the ground) is put back to Ready in its
-    /// stance, as ApplyPhysicsMotion does. Offline, after that every later swing finishes. Switch: rg_motion_queue_watchdog.
-    /// THE BACKLOG (261117, Mystic Warrior's "lag" with Olthoi Rippers): a queue that moves but never catches up (table at
-    /// Falling on the ground after a jump or fall mid-swing, so each later swing is 5 links; or 3+ swings waiting for 2 s)
-    /// kept the body animating for good, so every use, heal kit and retarget waited 2-4 s for UseWalkWatchdog. Drained the
-    /// same way (MotionQueueRule.Backlog; tools/ace-physprobe `backlog`). Switch: rg_motion_backlog; motion.backlog_*.
-    /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class MotionQueueWatchdog
     {
         const string P_ON = "rg_motion_queue_watchdog";
-        // the backlog arm (MotionQueueRule.Backlog; 261117 lag): a queue that moves but never catches up
         internal const string P_BACKLOG = "rg_motion_backlog";
         static double STALE => Tunables.D("motion.stale_seconds", 8.0);
         static double FALLING_S => Tunables.D("motion.backlog_falling_seconds", 1.0);
@@ -82,8 +63,7 @@ namespace RevivalGuard
                 foreach (var g in s_Seen.Keys.Where(g => !live.Contains(g)).ToList()) s_Seen.Remove(g);
         }
 
-        /// <summary>The backlog arm: track how long the body has stood with its table at Falling, or held a deep queue, and
-        /// drain it once MotionQueueRule.Backlog says so. True when a drain was queued.</summary>
+        /// <summary>The backlog arm: track how long the body has stood with its table at Falling, or held a deep queue</summary>
         static bool Backlog(Player p, ACE.Server.Physics.Animation.MotionTableManager mtm, int linked, int count, Seen s, double now)
         {
             var po = p.PhysicsObj;
@@ -116,8 +96,7 @@ namespace RevivalGuard
             BusyLedger.Note(p, $"motion queue watchdog: drained a stuck queue after {age:F0}s");
         }
 
-        /// <summary>The head of the body's motion queue, its counter of finished links and its length, to tell later whether
-        /// it moved.</summary>
+        /// <summary>The head of the body's motion queue, its counter of finished links and its length, to tell later whether it moved.</summary>
         internal static (object head, uint counter, int count) Snapshot(Player p)
         {
             var mtm = p?.PhysicsObj?.PartArray?.MotionTableManager;
@@ -125,10 +104,7 @@ namespace RevivalGuard
             return q == null ? (null, 0u, 0) : (q.First, mtm.AnimationCounter, q.Count);
         }
 
-        /// <summary>Finish every entry of the body's motion queue link by link (MotionTableManager.AnimationDone, as each
-        /// link ending would, so the weenie's motion-done callbacks run, a chug's included), then put a body left in a state
-        /// a standing body cannot be in back to Ready in its stance (MotionQueueRule.BackToReady). Returns what it found
-        /// and did, for a log line. Shared with ChugWatchdog and MeleeLatchGuard; run it on the player's action queue.</summary>
+        /// <summary>Finish every entry of the body's motion queue link by link</summary>
         internal static string Finish(Player p)
         {
             var po = p.PhysicsObj;

@@ -5,19 +5,11 @@ using System.Text;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE FEATURE REQUEST BOARD'S RULES, pure C# (no ACE types) so NetTest runs them (tools/nettest/FeatureBoard.cs).
-    /// Owner 2026-10-22: "a feature request list button ... players write feature requests, the ones with the most
-    /// upvotes rise ... pre-populate the list." The store, one vote per account, the daily posting limit, the order
-    /// players see, the staff verbs and the wire forms both ways.
-    /// Down votes (Feature Requests #34, owner ticket 261121-0008 "should have a vote down button"): an account votes
-    /// up, down or neither on each request; the order and the number players see is the net score (up minus down). FeatureBoard.cs is the ACE side (commands, file, push).
-    /// </summary>
+    /// <summary>The feature request board's rules, pure C# (no ACE types) so NetTest runs them (tools/nettest/FeatureBoard.cs).</summary>
     public static class FeatureBoardRules
     {
         public const int TITLE_MIN = 4, TITLE_MAX = 60, TEXT_MAX = 200, POSTS_PER_DAY = 3;
-        /// <summary>UTF-8 bytes of title + newline + text: base64 of this fits one chat message, one packet fragment
-        /// (the ticket desk's 360-character chunks are the same budget).</summary>
+        /// <summary>UTF-8 bytes of title + newline + text: base64 of this fits one chat message, one packet fragment.</summary>
         public const int MAX_BYTES = 270;
         public static readonly string[] STATUSES = { "open", "planned", "done", "declined" };
 
@@ -29,16 +21,15 @@ namespace RevivalGuard
             public string Status { get; set; } = "open";
             public long Created { get; set; }
             public long Updated { get; set; }
-            /// <summary>The account that wrote it (0 for the seed list). Never sent to players.</summary>
+            /// <summary>The account that wrote it (0 for the seed list).</summary>
             public uint Author { get; set; }
-            /// <summary>The character that wrote it, for staff (the report file). Never sent to players.</summary>
+            /// <summary>The character that wrote it, for staff.</summary>
             public string AuthorName { get; set; } = "";
             /// <summary>Votes carried in from the seed list (players who asked before the board existed) or a merge.</summary>
             public int BaseVotes { get; set; }
-            /// <summary>The accounts voting it UP. The name predates down votes: a board.json from before #34 has only
-            /// this list, and its votes stay up votes.</summary>
+            /// <summary>The accounts voting it UP.</summary>
             public List<uint> Voters { get; set; } = new List<uint>();
-            /// <summary>The accounts voting it down (#34). Missing in older files (empty). An account is never in both.</summary>
+            /// <summary>The accounts voting it down (#34).</summary>
             public List<uint> Downers { get; set; } = new List<uint>();
             /// <summary>Where it came from: a report id for a seeded request, empty for one posted on the board.</summary>
             public string Source { get; set; } = "";
@@ -76,8 +67,7 @@ namespace RevivalGuard
 
         public enum VoteResult { Ok, Unchanged, NoSuchRequest, Closed }
 
-        /// <summary>One vote per account: dir 1 up, -1 down, 0 neither. Voting one way clears the other way.
-        /// Done and Declined are closed.</summary>
+        /// <summary>One vote per account: dir 1 up, -1 down, 0 neither.</summary>
         public static VoteResult Vote(Store st, int id, uint account, int dir, long now)
         {
             var r = Find(st, id);
@@ -94,8 +84,7 @@ namespace RevivalGuard
         /// <summary>The pre-#34 form: on is an up vote, off takes away whatever this account voted.</summary>
         public static VoteResult Vote(Store st, int id, uint account, bool on, long now) => Vote(st, id, account, on ? 1 : 0, now);
 
-        /// <summary>The direction word of "@features vote &lt;id&gt; &lt;word&gt;": up/on (and a bare vote) 1, down -1,
-        /// off/none 0, anything else null. "on"/"off" are what clients before #34 send.</summary>
+        /// <summary>The direction word of "@features vote &lt;id&gt; &lt;word&gt;": up/on 1, down -1, off/none 0, anything else null.</summary>
         public static int? VoteWord(string w)
         {
             switch ((w ?? "").ToLowerInvariant())
@@ -117,7 +106,7 @@ namespace RevivalGuard
             return Math.Max(0, POSTS_PER_DAY - list.Count);
         }
 
-        /// <summary>A new request, or null with the reason a player reads. Staff are not limited.</summary>
+        /// <summary>A new request, or null with the reason a player reads.</summary>
         public static Request Add(Store st, uint account, string author, string title, string text, long now, bool staff, out string why)
         {
             title = Clean(title, TITLE_MAX); text = Clean(text, TEXT_MAX);
@@ -185,8 +174,7 @@ namespace RevivalGuard
 
         public static bool Delete(Store st, int id) => st.Items.RemoveAll(r => r.Id == id) > 0;
 
-        /// <summary>Fold one request into another: its voters join (each account still once, and an account that already
-        /// voted on the target keeps that vote), its carried votes add, and it leaves the list.</summary>
+        /// <summary>Fold one request into another: its voters join, its carried votes add, and it leaves the list.</summary>
         public static bool Merge(Store st, int from, int into, long now)
         {
             if (from == into) return false;
@@ -210,10 +198,8 @@ namespace RevivalGuard
             return true;
         }
 
-        // ---- drop files (owner 2026-10-24: "lets make it reflect a changelist ... so its not manual") ----
+        // ---- drop files ----
 
-        /// <summary>One status update from the release pipeline (tools/features/mark.sh, ship.sh), a file in
-        /// reports/features/updates/: {"id":14,"status":"done","why":"shipped in 0.1.80"}.</summary>
         public sealed class Drop
         {
             public int id { get; set; }
@@ -221,10 +207,6 @@ namespace RevivalGuard
             public string why { get; set; } = "";
         }
 
-        /// <summary>A drop applied like the staff verb, with two limits a script must not cross: a Declined request
-        /// stays Declined (only staff reopen it), and "planned" never takes a Done request back. Returns null when it
-        /// was applied (changed = whether the board changed, note = the audit line), else the reason it failed.
-        /// Drops never delete or merge.</summary>
         public static string ApplyDrop(Store st, string json, long now, out bool changed, out string note)
         {
             changed = false; note = null;
@@ -260,8 +242,7 @@ namespace RevivalGuard
         }
         public sealed class SeedFile { public List<SeedItem> items { get; set; } = new List<SeedItem>(); }
 
-        /// <summary>A new store from the seed file (server-mods/RevivalGuard/FeatureRequestsSeed.json, the list the owner
-        /// edits): used once, when the shard has no board yet. Items that do not clean to a title are skipped.</summary>
+        /// <summary>A new store from the seed file: used once, when the shard has no board yet.</summary>
         public static Store FromSeed(string json, long now)
         {
             var st = new Store();
@@ -282,8 +263,7 @@ namespace RevivalGuard
 
         // ---- the wire --------------------------------------------------------------------------------
 
-        /// <summary>The client's "@features add|edit" payload: base64url (no padding) of UTF-8 "title\ntext". Null when
-        /// it does not decode or is over MAX_BYTES.</summary>
+        /// <summary>The client's "@features add|edit" payload: base64url (no padding) of UTF-8 "title\ntext".</summary>
         public static (string title, string text)? DecodePost(string b64)
         {
             if (string.IsNullOrEmpty(b64) || b64.Length > (MAX_BYTES * 4 + 2) / 3 + 4) return null;
@@ -300,11 +280,7 @@ namespace RevivalGuard
             catch { return null; }
         }
 
-        /// <summary>The board for one viewer, as the mod channel's "features" payload (JSON):
-        /// {"now","staff","left","per","down","say","items":[{"id","t","x","s","v","up","dn","me","mine","at"}]} in display
-        /// order. "v" = the net score, "up"/"dn" its two halves, "me" = this account's vote (1 up, -1 down, 0 none; a
-        /// client from before #34 reads only 1 as voted), "mine" = this account wrote it, "down":1 = this server takes
-        /// down votes (a newer client hides its Down button without it). Authors are never sent.</summary>
+        /// <summary>The board for one viewer, as the mod channel's "features" payload</summary>
         public static string Json(Store st, uint viewer, bool staff, long now, string say = null)
         {
             var sb = new StringBuilder("{\"now\":").Append(now).Append(",\"staff\":").Append(staff ? 1 : 0)

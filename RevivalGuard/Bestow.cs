@@ -13,59 +13,14 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// NAME COLLISION, 2026-09-22: this was registered as `bestow` and silently never ran. ACE
-    /// already ships `bestow <name> <level>` (the advocate command), its handler wins the console
-    /// dispatch, and ours logged "registered" perfectly while every call hit ACE's usage text
-    /// instead. A load banner proves a command was registered, not that it is reachable, which is
-    /// the same lesson keyrings taught the same night. Before adding a verb, check it against the
-    /// 317 names in ACE's own CommandHandler attributes.
-    /// <summary>
-    /// @BESTOW: BONDED ITEMS INTO AN OFFLINE CHARACTER'S PACK.
-    ///
-    /// The shard is full PvP with retail's PK death loot (PkDeathLoot): wielded gear drops at any
-    /// level and every rare drops. The one thing that never drops is an item whose PropertyInt.Bonded
-    /// is BondedStatus.Bonded (1): Player.CalculateDeathItems filters "Bonded != 0" out of the value
-    /// sort before anything is chosen, HandleDestroyBonded only consumes Destroy (-2), and
-    /// GetSlipperyItems only lists Slippery (-1). So an item made here can be lost by trade, sale or
-    /// deliberate drop, never by dying.
-    ///
-    /// The owner asked for his main character's kit back, bonded, while that character is offline and
-    /// nobody may log it in. ACE's login path (WorldManager.PlayerEnterWorld) loads possessions from
-    /// the database by GetPossessedBiotasInParallel and sorts anything whose Container is the player
-    /// into the main pack (Container.SortWorldObjectsIntoInventory renumbers PlacementPosition), so a
-    /// new biota written with Container = the character's id is in the pack at the next login. The
-    /// player's own biota is not touched, so the OfflinePlayer swap that @snapshot restore needs is
-    /// not needed here. Items go in the pack, never straight onto the body: equipping through ACE's
-    /// own path keeps its wield checks, and an item written as worn that the character cannot wield
-    /// could not be put back on once removed.
-    ///
-    ///   @grantgear &lt;character name&gt; | &lt;wcid&gt;[xN][:pt=&lt;palette template&gt;,shade=&lt;0..1&gt;,maxlvl=&lt;1..5&gt;,maxed=true] ...
-    ///
-    /// xN makes N copies (one stack for a stackable weenie, N objects otherwise). pt and shade dye the
-    /// item the way the barber and a dye pot would (PaletteTemplate and Shade). maxlvl sets
-    /// ItemMaxLevel and its icon overlay, which is how ACE's loot factory makes a level-capped
-    /// aetheria. maxed=true fills ItemTotalXp to the item's own cap through
-    /// ExperienceSystem.ItemLevelToTotalXP, so a levelable cloak or aetheria arrives at the level
-    /// wearing it to the cap would have reached -- the level is DERIVED from that XP by ACE, which
-    /// is why the XP is what gets set. Every item is Bonded. Admin only; it works from the console FIFO (no world session
-    /// needed) and from a client. An online character is refused: hand them the items in game. The
-    /// whole batch is written on the database thread, in order with any queued save, and every item
-    /// made is named in the Audit channel. Admin command feedback is ours, not retail's.
-    ///
-    /// REDUCING COVERAGE (2026-09-22, owner: "the admin character's items need to be reduced to less slot coverage
-    /// so the upper arms and bracers are open"). A word of the form `0x<guid>:reduce=main|lower|middle`
-    /// names an item the character already holds and applies the Armor Reduction Tool of that name
-    /// to it, offline, with ACE's own Tailoring.TailorReduceArmor mapping; see Reduce below for what
-    /// is kept and the one rule that is not. Words of both kinds may share a call.
-    /// </summary>
+    /// <summary>@BESTOW: bonded items into an offline character's pack.</summary>
     public static class Bestow
     {
         const int MAX_SPECS = 40;
         const int MAX_COPIES = 250;
         const int DEFAULT_CAPACITY = 102;
 
-        /// <summary>One word after the bar. Wcid != 0: make items. Guid != 0: reduce the coverage of an
-        /// item the character already holds (Reduce is main, lower or middle).</summary>
+        /// <summary>One word after the bar.</summary>
         sealed class Spec { public uint Wcid; public int Count = 1; public int? Palette; public double? Shade; public int? MaxLevel; public bool Maxed; public uint Guid; public string Reduce; public string Text; }
 
         internal static void Register()
@@ -124,8 +79,7 @@ namespace RevivalGuard
             {
                 try
                 {
-                    // Re-checked on the database thread: a login between the command and here would
-                    // load the pack before these rows exist and save over them later.
+                    // Re-checked on the database thread
                     var again = PlayerManager.FindByGuid(guid, out bool onlineNow);
                     if (again == null || onlineNow) { Say(session, $"{name} {(again == null ? "vanished" : "logged in")} before the write. Nothing was made."); return; }
 
@@ -177,13 +131,7 @@ namespace RevivalGuard
                                 wo.ItemMaxLevel = spec.MaxLevel;
                                 wo.IconOverlayId = LootGenerationFactory.IconOverlay_ItemMaxLevel[spec.MaxLevel.Value - 1];
                             }
-                            // FULLY LEVELLED, using ACE's own threshold rather than a number typed
-                            // here. A levelable item (a cloak, an aetheria) carries its level in
-                            // ItemTotalXp and ACE derives the level back out of it, so setting the
-                            // level directly would be a lie the next XP grant corrects.
-                            // ExperienceSystem.ItemLevelToTotalXP is the same function the level-up
-                            // path measures against, so "maxed" means exactly what wearing it to the
-                            // cap would have meant.
+                            // Fully levelled, using ACE's own threshold rather than a number typed here.
                             if (spec.Maxed)
                             {
                                 var cap = wo.ItemMaxLevel ?? 0;
@@ -228,21 +176,7 @@ namespace RevivalGuard
             return max > 1 ? 1 : s.Count;
         }
 
-        /// <summary>Reduce a held armor piece's coverage in the database, offline. The mapping is ACE's
-        /// own Tailoring.TailorReduceArmor (Entity/Tailoring.cs:385-465), tool by tool: main keeps
-        /// the chest (else the upper arms, else the abdomen), lower keeps the lower arms, lower legs
-        /// or feet, middle keeps the upper legs. ValidLocations and ClothingPriority are set to the
-        /// one slot and its CoverageMask exactly as that method sets them, and a piece that is worn
-        /// has its CurrentWieldedLocation brought down to the same slot (ACE writes clothing's
-        /// wield location as its ValidLocations, Player_Inventory.cs "if (item is Clothing)").
-        ///
-        /// The one rule of ACE's not carried over is "loot armor only" (ItemWorkmanship != null),
-        /// and retail's tool had the same rule (wiki: "Use this tool on any loot generated
-        /// multi-slot armor"). It is skipped on purpose: the owner's retail chest piece was a
-        /// loot coat wearing the Luminescent Thaumaturgic look through tailoring, reduced to the
-        /// chest, and the quest coat granted here stands in for it because that loot roll cannot
-        /// be recovered (an internal note). Reducing the stand-in is the same end state.
-        /// Nothing else on the row changes: guid, dye, Bonded, spells, armor level.</summary>
+        /// <summary>Reduce a held armor piece's coverage in the database, offline.</summary>
         static string Reduce(ACE.Database.Entity.PossessedBiotas possessions, Spec spec, ShardDatabase db, out string why)
         {
             why = null;
@@ -254,8 +188,7 @@ namespace RevivalGuard
             var itemName = ent.PropertiesString != null && ent.PropertiesString.TryGetValue(PropertyString.Name, out var n) ? n : "item";
             var valid = ints.TryGetValue(PropertyInt.ValidLocations, out int vlRaw) ? (EquipMask)vlRaw : EquipMask.None;
 
-            // Retail reduces multi-slot armour only, and only to a slot it already covers (TailoringParity): a
-            // single-slot piece (pauldrons, tassets, or one reduced already) would otherwise move to another slot here.
+            // Retail reduces multi-slot armour only, and only to a slot it already covers: a single-slot piece would otherwise move to another slot here.
             if (TailoringParity.BodySlots(valid) <= 1) { why = $"{itemName} covers a single slot already ({(uint)valid:X}); retail reduces multi-slot armour only"; return null; }
 
             EquipMask to = EquipMask.None;

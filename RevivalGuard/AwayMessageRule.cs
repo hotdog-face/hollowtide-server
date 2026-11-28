@@ -4,15 +4,7 @@ using System.Text;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of AwayMessage.cs (no ACE types: tools/nettest compiles it by path, AwayMessageCase.cs). Feature
-    /// Requests #33: a player who is away (macroing) answers tells automatically, once per sender per COOLDOWN, so
-    /// people do not think they are being ignored.
-    ///
-    /// NO LOOPS. The answer is a system line on the tell channel ("[Away] Name: message"), never a tell, so it cannot
-    /// reach another away player's GameActionTell and be answered again. A tell whose text is itself an away answer
-    /// (a script that echoes lines back as tells) is never answered, and the per-pair COOLDOWN bounds anything else.
-    /// </summary>
+    /// <summary>The pure part of AwayMessage.cs (no ACE types: tools/nettest compiles it by path, AwayMessageCase.cs).</summary>
     public sealed class AwayMessageRule
     {
         public static readonly TimeSpan COOLDOWN = TimeSpan.FromMinutes(5);
@@ -25,8 +17,7 @@ namespace RevivalGuard
         readonly Dictionary<(uint away, uint sender), DateTime> m_Answered = new Dictionary<(uint, uint), DateTime>();
         readonly Dictionary<uint, HashSet<uint>> m_Missed = new Dictionary<uint, HashSet<uint>>();
 
-        /// <summary>Whether a tell from <paramref name="sender"/> that reached <paramref name="away"/> (who is away) gets
-        /// the automatic answer now. Records the answer when it does.</summary>
+        /// <summary>Whether a tell from sender that reached away (who is away) gets the automatic answer now.</summary>
         public bool Answer(uint sender, uint away, string told, DateTime now)
         {
             if (sender == away || IsAnswer(told)) return false;
@@ -42,8 +33,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Back from away: how many different people told <paramref name="away"/> meanwhile (and forget them).
-        /// The cooldowns are forgotten too, so going away again answers everyone afresh.</summary>
+        /// <summary>Back from away: how many different people told away meanwhile (and forget them).</summary>
         public int Back(uint away)
         {
             lock (m_Answered)
@@ -61,13 +51,11 @@ namespace RevivalGuard
         public static bool IsAnswer(string text) =>
             text != null && text.TrimStart().StartsWith(PREFIX, StringComparison.OrdinalIgnoreCase);
 
-        /// <summary>The answer the sender sees. The staff "+" is left off the name, as tells show it.</summary>
+        /// <summary>The answer the sender sees.</summary>
         public static string Line(string awayName, string message) =>
             $"{PREFIX} {(awayName ?? "").TrimStart('+')}: {(string.IsNullOrEmpty(message) ? DEFAULT_MESSAGE : message)}";
 
-        /// <summary>A message as typed, made safe to keep and send: control characters out, spaces folded, an
-        /// "[Away]" a player typed at the front dropped (the line adds its own), cut to MAX_LENGTH. Empty: null (the
-        /// default is used).</summary>
+        /// <summary>A message as typed, made safe to keep and send</summary>
         public static string Clean(string typed)
         {
             if (string.IsNullOrWhiteSpace(typed)) return null;

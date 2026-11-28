@@ -6,15 +6,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// FALL DAMAGE, LOGGED (report 261020-0045: "Running on a hill at 69.0S, 79.8W, almost killed me and I wasnt even
-    /// jumping"). Diagnostic only: nothing is changed. ACE's Player.HandleFallingDamage judges a landing from the SERVER
-    /// body's own velocity (a FastTick PK's body is simulated between position reports), so a fall the client never
-    /// made shows up here with the client's last ground report far from where the server landed. One line per hurt
-    /// landing: the server's landing speed, where it landed, the client's last ground report and how far below it.
-    /// The box could not reproduce the report (runs down the 45 degree slope at 0x1B29 (120, 4..30), 0.1.71 and 0.1.70
-    /// pacing, no damage); this names the cause the next time it happens on the live shard.
-    /// </summary>
+    /// <summary>Fall damage, LOGGED.</summary>
     [HarmonyPatch]
     static class FallWatch
     {
@@ -49,9 +41,7 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn("[RevivalGuard] FallWatch: " + e.Message); }
         }
 
-        /// <summary>The server body's own spot (the "at" above is the last accepted report), whether a client report or a
-        /// server tick found the landing, and what the client's reports say: time since the last AutonomousPosition and
-        /// its contact byte, and the client's drop (its highest report since its last ground report, minus its last report).</summary>
+        /// <summary>The server body's own spot, whether a client report or a server tick found the landing</summary>
         internal static string FallWatchExtra(Player p)
         {
             var st = FallTrace.s_State.GetOrCreateValue(p); var now = DateTime.UtcNow;

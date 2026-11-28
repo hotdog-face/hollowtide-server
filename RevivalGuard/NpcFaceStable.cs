@@ -7,16 +7,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A TOWN NPC KEEPS ITS FACE (player report 261022-0038: "town NPCs' hair changes colour and shape at random", Shoushi and
-    /// elsewhere; docs/CLOUD-QUEUE.md item 20). ACE gives every non-player creature a random face each time the object is
-    /// made (Creature.SetEphemeralValues -> GenerateNewFace: hair style and colour, eyes, nose, mouth, skin, from
-    /// ThreadSafeRandom) unless its weenie stores that part. A landblock nobody is near unloads and is built again on the next
-    /// visit, so the same shopkeeper came back with other hair. Here an NPC placed in the world (a static guid, the same on
-    /// every load) draws its face from a Random seeded by that guid: ACE's own choice, made the same way every time. A spawned
-    /// creature (dynamic guid) keeps ACE's random face. The client draws whatever ObjDesc arrives (ServerLink.ApplyAppearance).
-    ///   @modifybool rg_npc_face_stable false   ACE's random faces again
-    /// </summary>
+    /// <summary>A town NPC keeps its face.</summary>
     [HarmonyPatch]
     static class NpcFaceStable
     {
@@ -56,7 +47,6 @@ namespace RevivalGuard
             catch (Exception e) { __state = null; Mod.Log.Warn($"[RevivalGuard] NpcFaceStable: {e.Message}"); }
         }
 
-        /// <summary>Always: this thread's Random goes back, whatever GenerateNewFace did.</summary>
         static Exception Finalizer(Exception __exception, Random __state)
         {
             if (__state != null)

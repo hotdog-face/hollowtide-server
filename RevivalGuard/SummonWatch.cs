@@ -8,22 +8,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// SUMMON WATCH (2026-10-19, docs/findings/FINDINGS-summons-power.md). A player said summons are "OP af"
-    /// and that he can exploit them, without saying how. Every rule we could read is retail's and stock ACE
-    /// (use requirements, 43 s life, shared 45 s cooldown, one combat pet, ratings up to 20), so this only
-    /// WATCHES: it changes nothing a player can feel.
-    ///
-    /// On each combat-pet summon (ACE PetDevice.SummonCreature, which declares the method) it logs who, the
-    /// essence, its Level Req and Activation Req against the player's level and buffed Summoning, and the
-    /// essence's ratings. It flags, as a Warn line, what should be impossible:
-    ///   REQ      the summon went through below the essence's level or skill requirement
-    ///   SECOND   another combat pet of the same owner is still alive (more than one at a time)
-    ///   OLD      that earlier pet is older than 60 s (outlived its 43 s lifespan)
-    ///
-    ///   @summonwatch   (admin) counts, the last 20 summons and every live tracked pet with its age
-    /// Grep ACE_Log.txt for "SummonWatch:". Memory only; a restart clears it.
-    /// </summary>
+    /// <summary>Summon watch.</summary>
     [HarmonyPatch(typeof(PetDevice), nameof(PetDevice.SummonCreature), new[] { typeof(Player), typeof(uint) })]
     static class SummonWatch
     {

@@ -3,17 +3,7 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// HOLLOWTIDE'S SIDE OF THE DERETH CHANNEL (docs/proposals/cross-server-chat.md): the shared bridge in DerethChat/
-    /// (the same files other ACE servers install as the DerethChat mod), plus what only we know: mercenaries are our
-    /// automated characters (they never send), every line goes to the chat log as channel "Dereth", and our client
-    /// gets the lines on the mod channel for its Cross-Server tab (owner 2026-11-08).
-    ///
-    ///   "dereth"       {"s":server,"n":name,"t":text,"b":bot}   one line, to a client that said "@dereth client"
-    ///   "derethstate"  {"on":bool,"cmd":"dereth"}               at hello (so the client shows the tab) and on every on/off
-    ///
-    /// Older clients never say "@dereth client", so they keep getting the plain chat line. Off without dereth-chat.json.
-    /// </summary>
+    /// <summary>Hollowtide's side of the dereth channel</summary>
     static class DerethChatHost
     {
         internal static void Register()
@@ -22,8 +12,7 @@ namespace RevivalGuard
             DerethChat.Bridge.LogWarn = s => Mod.Log.Warn("[RevivalGuard] " + s);
             DerethChat.Bridge.IsBotHook = (Player p) => Mercenaries.IsMerc(p);
             DerethChat.Bridge.ChatLogHook = (server, name, text) => ChatLog.Write("Dereth", $"{name} ({server})", text);
-            // what our players read: the client calls it the Cross-Server tab and /crossserver (owner 2026-11-08); the
-            // server takes /crossserver too, so a client without the tab still has the command
+            // what our players read: the client calls it the Cross-Server tab and /crossserver
             DerethChat.Bridge.ChannelName = "cross-server chat";
             DerethChat.Bridge.PlayerHint = "/crossserver";
             DerethChat.Bridge.Aliases = new[] { "crossserver" };

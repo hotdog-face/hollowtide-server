@@ -6,17 +6,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// HOVER DROP (owner 2026-10-19 "Big and low", docs/findings/FINDINGS-buff-npc.md). NOT RETAIL: retail has no such rule.
-    /// A Zefir's animation carries its body 1.09-2.09 m above its origin, times ObjScale; Azimar at 1.8 hovered with his
-    /// lowest point 1.96 m up. ACE cannot spawn him lower (placement pushes his scaled spheres back onto the floor), so his
-    /// PHYSICS stays on the floor, untouched, and only his reported Location (what CreateObject and UpdatePosition send to
-    /// clients) sits DROP metres lower. Every client then draws, picks and collides with him there.
-    /// Hooked where ACE copies physics into Location: WorldObject.SyncLocation (spawn, enter_cell) and
-    /// Creature.UpdatePosition_SyncLocation (emote interrupts, moves). Listed weenies only; anything else returns at once.
-    /// Not covered: UpdateObjectPhysics' own copy when the physics origin moves, which a Stuck NPC's does not.
-    ///   @modifybool hover_drop false   ACE's own heights (takes effect at his next spawn or sync)
-    /// </summary>
+    /// <summary>Hover drop.</summary>
     [HarmonyPatch]
     static class HoverDrop
     {

@@ -3,12 +3,7 @@ using System.Collections.Generic;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of AllegianceOrphans (no ACE types; tools/nettest compiles it by path). A player is an ORPHAN when
-    /// their patron no longer exists (a deleted character). Retail and ACE make such a vassal a monarch: their patron link
-    /// goes, and everyone under them takes them as monarch (ACE AllegianceManager.DoHandlePlayerDelete, "vassals now
-    /// become monarchs").
-    /// </summary>
+    /// <summary>The pure part of AllegianceOrphans (no ACE types; tools/nettest compiles it by path).</summary>
     public static class AllegianceOrphanRule
     {
         /// <summary>The players whose patron is set but is not a player any more, in the order given.</summary>
@@ -20,8 +15,7 @@ namespace RevivalGuard
             return list;
         }
 
-        /// <summary>Everyone under <paramref name="root"/> (vassals, their vassals, ...), not the root itself. A chain that
-        /// loops back is walked once: each player at most once, and never the root.</summary>
+        /// <summary>Everyone under root (vassals, their vassals, ...), not the root itself.</summary>
         public static List<uint> Descendants(uint root, IEnumerable<(uint guid, uint? patron)> players)
         {
             var children = new Dictionary<uint, List<uint>>();

@@ -7,14 +7,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// CORROSION VII AND CORRUPTION VII FROM RIFTWATCHER YSANNE (owner 2026-11-14). Retail had the scrolls (43284, 43292)
-    /// but nothing sold or dropped them. Ysanne (901420) becomes a vendor stocking the two (tools/gpubox-ace/
-    /// ysanne-void-scrolls.sql); ACE vendors cannot gate a sale on a skill, so this does, the way her Nether Rift lesson
-    /// gates on Void Magic trained (NetherRift.TrainerUse): a buy list holding either scroll from a character without Void
-    /// Magic trained is refused whole, with her line. Her lesson still runs when she is used (a Vendor.ActOnUse postfix:
-    /// ACE's Vendor.ActOnUse replaces Creature's, which NetherRift's own trainer hook patches).
-    /// </summary>
+    /// <summary>Corrosion VII and corruption VII from riftwatcher ysanne.</summary>
     static class VoidScrollGate
     {
         internal static bool VoidTrained(Player p)

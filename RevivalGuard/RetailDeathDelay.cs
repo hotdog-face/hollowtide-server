@@ -10,17 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// RETAIL'S DEATH-TO-RESPAWN DELAY. ACE's Player.Die waits the Dead animation plus one more second
-    /// before the corpse and the death teleport (Player_Death.cs: AddDelaySeconds(animLength + 1.0f)).
-    /// Retail did not: in pkt_2017-1-30_1485769877 Health = 0 reaches the client 1.09 s and 1.17 s before
-    /// PlayerTeleport, the Dead animation's own length (1.067 s, 0x030000C6) plus a tick. Audit round 2
-    /// (docs/findings/accuracy-2026-10-20/round2/session-death-travel.md item 3).
-    ///
-    /// One transpiler anchor: the first "ldc.r4 1" followed by "add" within six instructions after the call
-    /// to GetAnimationLength in Player.Die. It becomes Extra(), 0 with the switch on and 1.0 with it off.
-    /// A missing anchor is logged and ACE's delay stays. Switch `retail_death_delay`, default on.
-    /// </summary>
+    /// <summary>Retail's death-to-respawn delay.</summary>
     [HarmonyPatch(typeof(Player), "Die", new[] { typeof(DamageHistoryInfo), typeof(DamageHistoryInfo) })]
     static class RetailDeathDelay
     {

@@ -6,11 +6,7 @@ using System.Text;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of Leaderboards (no ACE types; tools/nettest compiles it by path, LeaderboardCase): who may be listed,
-    /// the boards, ranking, the caller's own rank, and every line players or the website see. Ours, not retail.
-    /// The Borg are listed as players (owner 2026-11-08: they count as players); nothing here marks them.
-    /// </summary>
+    /// <summary>The pure part of Leaderboards</summary>
     public static class LeaderboardRule
     {
         /// <summary>One character's numbers, gathered by Leaderboards off the world thread.</summary>
@@ -32,7 +28,7 @@ namespace RevivalGuard
             public string Key, Title, Unit;
             public string[] Aliases;
             public Func<Entry, long> Value;
-            public bool InDiscord = true;     // the daily Discord post (already approved) lists only the boards it had
+            public bool InDiscord = true;
         }
 
         // the order /top lists them in; Title is said in "Top 10 by <Title>"
@@ -44,13 +40,11 @@ namespace RevivalGuard
             new Board { Key = "kills",  Title = "creatures slain",    Unit = " kills",          Aliases = new[] { "kill", "creatures", "monsters" }, Value = e => e.Kills },
             new Board { Key = "pk",     Title = "player kills",       Unit = " player kills",   Aliases = new[] { "pkkills", "pvp" },                Value = e => e.PkKills },
             new Board { Key = "quests", Title = "quest milestones",   Unit = " quest milestones", Aliases = new[] { "quest", "q" },                  Value = e => e.Quests },
-            // Holtburg raids held (TownRaid's counter, quest flag RAID_FLAG); not in the daily Discord post without the owner's yes
             new Board { Key = "raids",  Title = "Holtburg raids defended", Unit = " raids defended", Aliases = new[] { "raid", "defense", "defence", "holtburg" }, Value = e => e.Raids, InDiscord = false },
-            // the Pancake House's Pancake Challenge: a character's best minute (Diner's counter, quest flag PANCAKE_FLAG); not in the Discord post
             new Board { Key = "pancakes", Title = "pancakes eaten in a minute", Unit = " pancakes", Aliases = new[] { "pancake", "contest", "diner" }, Value = e => e.Pancakes, InDiscord = false },
         };
 
-        /// <summary>TownRaid's per-character counter of raids held (a quest flag; "rg_" flags are never quest milestones).</summary>
+        /// <summary>TownRaid's per-character counter of raids held.</summary>
         public const string RAID_FLAG = "rg_townraid_defended";
 
         /// <summary>The Pancake House diner's per-character best in the Pancake Challenge (DinerRule.BEST_FLAG).</summary>
@@ -65,13 +59,12 @@ namespace RevivalGuard
 
         // ---- who is listed --------------------------------------------------------------------------------------
 
-        /// <summary>Test and fleet accounts by prefix: the same list tools/reports/funnel.py and player_stats.py use,
-        /// plus DnDefaultOn's loadbot. The owner's own accounts (viewer, an admin account) by exact name.</summary>
+        /// <summary>Test and fleet accounts by prefix</summary>
         public static readonly string[] TEST_ACCOUNT_PREFIXES =
             { "devbot", "harness", "loadbot", "playtest", "locfix", "fleetbot", "probe", "smoke", "soak", "newcomer", "kt" };
         public static readonly string[] OWNER_ACCOUNTS = { "viewer", "an admin account" };
 
-        /// <summary>Why this character is not listed, or null when it is. For staff logs only: never shown to players.</summary>
+        /// <summary>Why this character is not listed, or null when it is.</summary>
         public static string Excluded(Entry e, double now, int activeDays, ISet<uint> hidden, ISet<string> extraNames)
         {
             if (e == null || string.IsNullOrWhiteSpace(e.Name)) return "no name";
@@ -81,8 +74,6 @@ namespace RevivalGuard
             if (acct.Length == 0) return "no account";
             if (OWNER_ACCOUNTS.Any(o => string.Equals(o, acct, StringComparison.OrdinalIgnoreCase))) return "owner";
             if (TEST_ACCOUNT_PREFIXES.Any(p => acct.StartsWith(p, StringComparison.OrdinalIgnoreCase))) return "test account";
-            // the hcmerc prefix is reserved (no player can make one), so every such account is the shard's: its "... of Borg"
-            // characters are listed as players, the Hollow Company (and anything else on it) never
             bool shardAccount = e.MercAccount || BorgRule.IsShardAccountName(acct);
             if (shardAccount && !BorgRule.IsBorg(shardAccount, e.Name)) return "mercenary";
             if (extraNames != null && (extraNames.Contains(acct) || extraNames.Contains(e.Name))) return "excluded by list";
@@ -91,8 +82,7 @@ namespace RevivalGuard
             return null;
         }
 
-        /// <summary>A quest registry flag that is a player's own milestone: completed at least once, and not one of the
-        /// flags the shard keeps for itself (RevivalGuard's, deliveries, kill-task counters still running).</summary>
+        /// <summary>A quest registry flag that is a player's own milestone</summary>
         public static bool IsQuestMilestone(string flag, int timesCompleted)
         {
             if (timesCompleted < 1 || string.IsNullOrWhiteSpace(flag)) return false;
@@ -112,8 +102,7 @@ namespace RevivalGuard
             public long Value;
         }
 
-        /// <summary>Everyone listed with a value above 0, best first; equal values share a rank (1, 2, 2, 4) and are
-        /// ordered by name so the list is the same every time.</summary>
+        /// <summary>Everyone listed with a value above 0, best first</summary>
         public static List<Ranked> Rank(IEnumerable<Entry> listed, Board b)
         {
             var sorted = listed.Select(e => (e, v: b.Value(e))).Where(t => t.v > 0)
@@ -197,7 +186,6 @@ namespace RevivalGuard
 
         static string Cap(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s.Substring(1);
 
-        /// <summary>The daily Discord post (off by default; the owner's yes turns it on): each board's top 3.</summary>
         public static string DiscordText(IReadOnlyDictionary<string, List<Ranked>> boards, int activeDays, string pkDeathsSince, int each = 3)
         {
             var sb = new StringBuilder();
@@ -215,7 +203,6 @@ namespace RevivalGuard
 
         static string Escape(string s) => (s ?? "").Replace("*", "\\*").Replace("_", "\\_").Replace("~", "\\~").Replace("`", "\\`").Replace("|", "\\|");
 
-        /// <summary>The daily post is due once a UTC day, at or after the hour, and never twice in one day.</summary>
         public static bool PostDue(DateTime nowUtc, string lastPostedDay, int hourUtc) =>
             nowUtc.Hour >= Math.Clamp(hourUtc, 0, 23) && lastPostedDay != DayKey(nowUtc);
 

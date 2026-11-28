@@ -18,19 +18,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE DECORATOR'S ENCOUNTERS (owner 2026-11-23: "a highly curated and good looking boss dungeon"; the Encounters page of
-    /// the Decorate panel, AcDecorMode.Encounters.cs). Spawn points, a boss, patrol paths and loot chests are layer entries
-    /// (key e:&lt;n&gt;, kind spawn | boss | chest) beside the props, with the same undo, areas, Clear area and self-restore on a
-    /// landblock load. On the test shard they are made live in memory (never written to the database, as props); the numbers
-    /// come from DecorEncounterRule and go into the entry as its "plan", which tools/decor/decor.py publishes as retail-shaped
-    /// rows (a generator copy and its profile, creature copies with HeartBeat emotes, a chest copy, a key copy, a quest row).
-    ///   encspawn &lt;wcid&gt; &lt;count&gt; &lt;respawn s&gt; &lt;radius m&gt; &lt;wander 0|1&gt; &lt;pose&gt;
-    ///   encboss  &lt;wcid&gt; &lt;respawn s&gt; &lt;lockout h&gt; &lt;pose&gt;
-    ///   encchest &lt;tier 0-8&gt; &lt;none|pick|key&gt; &lt;reset s&gt; &lt;boss key|-&gt; &lt;item wcids a,b|-&gt; &lt;pose&gt;   (tier 0 = the items)
-    ///   encset &lt;key&gt; &lt;field&gt; &lt;value&gt; | encmove &lt;key&gt; &lt;pose&gt; | encpatrol &lt;key&gt; none | &lt;cell x y z&gt;... | encremove &lt;key&gt;
-    ///   enctest now | clear   (not an edit: every encounter of the area spawned fresh and chests refilled, or its monsters gone)
-    /// </summary>
+    /// <summary>The decorator's encounters.</summary>
     internal static partial class Decor
     {
         static readonly HashSet<string> s_EncKinds = new HashSet<string> { "spawn", "boss", "chest" };
@@ -115,8 +103,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The client names an outdoor cell for any point (it knows no rooms); in a dungeon or a building the decorator
-        /// stands in, the room that holds the point is found from the decorator's own cell (EnvCell.find_visible_child_cell).</summary>
+        /// <summary>The client names an outdoor cell for any point</summary>
         static ACE.Entity.Position Room(Player me, ACE.Entity.Position p)
         {
             try
@@ -143,8 +130,7 @@ namespace RevivalGuard
             return o;
         }
 
-        /// <summary>A new encounter: checked, planned, made live, put in the area being decorated, and the client told its key
-        /// (it selects it, so the patrol button and the settings act on it at once).</summary>
+        /// <summary>A new encounter: checked, planned, made live, put in the area being decorated, and the client told its key.</summary>
         static void EncNew(Session s, Player me, JsonObject e, Action<string> reply)
         {
             string why = EncCheck(e);
@@ -311,8 +297,7 @@ namespace RevivalGuard
             reply($"{(string)e["name"]}: {EncSays(e)}");
         }
 
-        /// <summary>encpatrol &lt;key&gt; none | &lt;cell x y z&gt;...: the points, kept as offsets from the spawn point (ACE's Move
-        /// emote is relative to the creature's home).</summary>
+        /// <summary>encpatrol &lt;key&gt; none | &lt;cell x y z&gt;...: the points, kept as offsets from the spawn point.</summary>
         static void EncPatrol(Player me, string[] a, Action<string> reply)
         {
             if (!(Get(a[1]) is JsonObject cur) || (string)cur["kind"] == "chest" || !IsEnc((string)cur["kind"])) { reply("Pick a spawn point or a boss first."); return; }
@@ -358,8 +343,6 @@ namespace RevivalGuard
                         { EncPlan(kv.Key, c); c["name"] = $"{(string)e["name"]}'s Chest"; EncTeardown(kv.Key); EncBuild(me, kv.Key, c, _ => { }); }
         }
 
-        // ---- live: made in memory on the test shard, never saved (generators and what they make are never saved by ACE) ----
-
         static bool EncAlive(string key) => s_EncLive.TryGetValue(key, out var wo) && wo != null && !wo.IsDestroyed && wo.CurrentLandblock != null;
 
         static void EncTeardown(string key)
@@ -378,7 +361,7 @@ namespace RevivalGuard
             catch (Exception x) { Mod.Log.Warn($"[RevivalGuard] Decor encounter {key} teardown: {x.Message}"); }
         }
 
-        /// <summary>One encounter made live where its landblock is loaded (else it waits for DecorBlockLoad). True = made.</summary>
+        /// <summary>One encounter made live where its landblock is loaded (else it waits for DecorBlockLoad).</summary>
         static bool EncBuild(Player me, string key, JsonObject e, Action<string> reply)
         {
             var pose = PosFrom((JsonObject)e["after"]!);
@@ -441,8 +424,7 @@ namespace RevivalGuard
             wo.Location.LandblockId = new LandblockId(wo.Location.GetCell());
             if (!wo.EnterWorld())
             {
-                // the generator is invisible and has no body to collide; a chest may sit against a wall: put it at your feet and
-                // straight into its cell, as Restore does
+                // the generator is invisible and has no body to collide
                 if (me == null || (string)e["kind"] != "chest") { wo.Destroy(); reply($"{(string)e["name"]} could not be placed there."); return false; }
                 wo.Location = new ACE.Entity.Position(me.Location);
                 if (!wo.EnterWorld() || !Place(wo, pose, reply)) { wo.Destroy(); reply($"{(string)e["name"]} could not be placed there."); return false; }
@@ -453,8 +435,7 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>A boss chest's lockout quest, known to ACE's quest cache on the test shard without a database row (decor.py
-        /// writes the row when it publishes).</summary>
+        /// <summary>A boss chest's lockout quest, known to ACE's quest cache on the test shard without a database row.</summary>
         static void InjectQuest(string name, uint minDelta)
         {
             try
@@ -467,8 +448,7 @@ namespace RevivalGuard
             catch (Exception x) { Mod.Log.Warn($"[RevivalGuard] Decor quest {name}: {x.Message}"); }
         }
 
-        /// <summary>DecorSpawn's postfix for an encounter generator: the creature gets its wander or patrol (HeartBeat emotes,
-        /// on its own copy of the list: ACE shares the weenie's list between every copy). True = it was ours.</summary>
+        /// <summary>DecorSpawn's postfix for an encounter generator: the creature gets its wander or patrol.</summary>
         static bool EncSpawned(GeneratorProfile p, List<WorldObject> spawned)
         {
             if (p.Generator == null || !s_EncOf.TryGetValue(p.Generator.Guid.Full, out var key) || !(Get(key) is JsonObject e)) return false;
@@ -487,8 +467,7 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>DecorBossLoot: a boss dies; each chest keyed to it gets its key on the corpse (retail: the key is in the boss's
-        /// create list as ContainTreasure at chance 1, which decor.py publishes on its creature copy).</summary>
+        /// <summary>DecorBossLoot: a boss dies; each chest keyed to it gets its key on the corpse.</summary>
         internal static void BossLoot(Creature c, Corpse corpse)
         {
             if (!On || c?.Generator == null || corpse == null) return;
@@ -512,8 +491,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>enctest now | clear: every encounter of the area being decorated made fresh (monsters at full count, chests
-        /// refilled and locked again), or its monsters taken away (they come back on their respawn time).</summary>
+        /// <summary>enctest now | clear: every encounter of the area being decorated made fresh, or its monsters taken away.</summary>
         static void EncTest(Player me, string[] a, Action<string> reply)
         {
             bool now = a.Length > 1 && a[1] == "now";

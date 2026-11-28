@@ -13,38 +13,11 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A MERCENARY WEARS WHAT YOU GIVE IT, IF IT IS BETTER (owner, 2026-10-13: "if i hand items to mercenaries
-    /// they equip the best gear they are given"). One postfix on Player.GiveObjectToPlayer: when the receiver is
-    /// a Hollow Company sellsword (Mercenaries.IsMerc), the sellsword looks over its packs a moment later and
-    /// puts on one upgrade at a time, through the same server actions a player's own drag runs
-    /// (PutItemInContainer to take the old piece off, GetAndWieldItem to put the new one on), so every wield
-    /// requirement and slot rule ACE has still applies.
-    ///
-    /// What counts as better, kept simple and visible:
-    ///   * armor and clothing: more armor level than every worn piece it would replace, and covering at least
-    ///     what they covered (a coat never strips a breastplate and sleeves for less); an empty slot always.
-    ///   * shield: more armor level, or none worn, and only beside a one-handed melee weapon.
-    ///   * melee weapon: more average damage, in a weapon skill the sellsword has trained; empty hands take
-    ///     any trained melee weapon. Bows and casters only replace their own kind.
-    ///   * jewelry and the rest: an empty slot only (no fair measure between two rings).
-    /// Things it cannot wield (level, skill, attunement to someone else) are simply carried.
-    ///
-    /// GIVING DIDN'T WORK (owner tickets 261103-0015, with Brannoc's own 0013/0014: "Unable to put Acid Cestus into
-    /// container" and "You must remove your Acid Cestus to wield Frost Katar", 80 tries in a minute on live). The old
-    /// piece was always put away into the MAIN pack; Brannoc's was full (the gift itself landed in a side pack), so
-    /// UnwieldToFullPack refused it, the wield was refused, and the next step picked the same swap again. Five gives
-    /// ran five such chains side by side. Now:
-    ///   * one run per merc at a time; a give during a run joins it;
-    ///   * the old piece goes into whichever pack has room (main pack first, then the side packs);
-    ///   * each piece is tried once per run: a wield ACE refuses is never asked again;
-    ///   * at the end, gear it was given and is not wearing goes back to the giver, with a line saying why (no room to
-    ///     put the old piece away, can't wield it, or already wears better). Anything that is not gear (kits, food,
-    ///     notes) it keeps, as before. A giver out of reach or with a full pack is told and the merc carries it.
+    /// <summary> a mercenary wears what you give it, if it is better.
     [HarmonyPatch]
     static class MercGear
     {
-        const int MAX_STEPS = 16;           // upgrades per run, so a bad rule can never loop
+        const int MAX_STEPS = 16;
         const float RETURN_RANGE = 50f;     // a giver further than this is told, not handed the gift
         static MethodInfo s_WieldReq, s_GiveDirect;
 
@@ -148,8 +121,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A pack with room for each piece coming off (main pack first, then side packs), or null: the same
-        /// capacity test UnwieldToFullPack makes, counting what this swap already sends to each pack.</summary>
+        /// <summary>A pack with room for each piece coming off, or null</summary>
         static List<Container> Homes(Player merc, List<WorldObject> off)
         {
             var packs = new List<Container> { merc };
@@ -183,7 +155,7 @@ namespace RevivalGuard
             {
                 try
                 {
-                    var wo = merc.GetInventoryItem(gift);         // null: worn now, or the give never landed
+                    var wo = merc.GetInventoryItem(gift);
                     if (wo == null || (wo.ValidLocations ?? 0) == 0) continue;   // not gear: kept, as before
                     string why = run.NoRoom.TryGetValue(gift, out var what) ? $"no room left in the packs to put away the {what}"
                                : run.Worn.Contains(gift) ? "it already wears something better"
@@ -283,12 +255,7 @@ namespace RevivalGuard
                     return true;
                 }
 
-            // 3. armor and clothing, the biggest protection gain first. TOTAL PROTECTION, NOT THE BEST PIECE (ticket
-            // 261103-0032, "he gave it right back"): a stripped Brannoc wearing only 100-AL Bracers handed back a
-            // Luminous Robe (AL 100 on seven body parts) and an Olthoi Amuli Coat (AL 100 on three), because each was
-            // held against the best single piece it would replace (100 is not more than 100). What it replaces is what
-            // ACE makes it take off, the pieces in the same equip slots (a shirt under a coat stays), and protection is
-            // AL on every body part a piece covers, so a robe over bare legs and arms wins.
+            // 3. armor and clothing, the biggest protection gain first.
             WorldObject best = null; List<WorldObject> bestOff = null; int bestGain = int.MinValue;
             foreach (var a in carried.Where(i => i is Clothing && (i.ClothingPriority ?? 0) != 0 && !i.IsShield))
             {

@@ -13,68 +13,25 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE STAFF BASE'S WEAPON RACKS AND ARMOR STANDS WORK (owner LIVE ticket 261101-0012, "weapon rack and
-    /// armor stand dont let me use them"; owner 2026-11-01: "yes build the mod change that makes the rack
-    /// and stand work").
-    ///
-    /// The Staff Base (landblock 0x576B, staff only) is not a house, so it has no House object. The Mansion
-    /// Furniture (MansionFurniture.cs) only shows what it holds while it hangs on a Hook, and ACE's Hook
-    /// assumes every hook belongs to a house: Hook.OnAddItem and OnRemoveItem do
-    /// House.HouseCurrentHooksUsable-- / ++, AppraiseInfo reads hook.ParentLink.HouseOwner, and
-    /// Player.HandleActionPutItemInContainer reads hook.House.HouseMaxHooksUsable. With no house each of
-    /// those throws a NullReferenceException.
-    ///
-    /// So this, and ONLY for a hook with no house on landblock 0x576B (every player house hook has its
-    /// house, and nothing here touches one):
-    ///   - Hook.OnAddItem / OnRemoveItem run ACE's own steps without the house's hook count;
-    ///   - the hooks of datafix 2026-11-01-staff-base-decor-3 (SEED below) are given their rack or stand
-    ///     when the landblock first loads them empty; ACE then saves the hook (a Hook with inventory is a
-    ///     static object that persists, WorldObject.IsStaticThatShouldPersistToShard) and the furniture
-    ///     (ContainerId = the hook), so after a restart the hook loads from the shard with its furniture,
-    ///     and the furniture loads what is on it (MansionFurniture.Load);
-    ///   - anyone on the landblock may use the hook (it is staff only); a double-click shows the piece's
-    ///     status, as a house with hooks hidden does, never opening the hook as a container;
-    ///   - the rack or stand itself is fixed: it can never be taken off, and nothing else is hung on the
-    ///     hook. Dropping an item on the hook goes to the furniture (MansionFurniture.PutFromContainer);
-    ///   - appraising the hook appraises it as ACE does, with no "This hook is owned by" line.
-    /// What goes on a rack or stand, and who may take it down, is MansionFurniture's (MayHang / MayTake).
-    ///
-    /// THE FREE HOOKS (owner 2026-11-01: "Yes, build them", his 2026-10-29 ask for "lots of house hooks populated
-    /// so its decorated like a living space"): every other houseless hook on 0x576B (datafix
-    /// 2026-11-02-staff-base-decor-5, FREE_HOOKS in gen_staff_base_home.py) takes one item of the owner's own, as a
-    /// house hook does: drop a housing item from the pack onto an empty hook to hang it (its HookType must fit the
-    /// hook's, wall or floor; equipped items, packs and chests do not go up), double-click the hook to take it back
-    /// into the pack. ACE's own drag path reads hook.House for the hook limits and throws without one, so the move
-    /// is done here, as MansionFurniture moves a piece onto a rack. An empty free hook stays visible (no house
-    /// hides it). ACE keeps a hook with an item in ace_shard, so what hangs there survives restarts.
-    /// </summary>
+    /// <summary>The staff base's weapon racks and armor stands work.</summary>
     static class StaffBaseHooks
     {
         internal const ushort LANDBLOCK = 0x576B;
 
-        /// <summary>The hooks of 2026-11-01-staff-base-decor-3.sql (tools/gpubox-ace/gen_staff_base_home.py
-        /// HOOKS) and the furniture each holds.</summary>
         internal static readonly Dictionary<uint, uint> SEED = new Dictionary<uint, uint>
         {
             [0x7576B200] = MansionFurniture.RACK, [0x7576B201] = MansionFurniture.RACK,
             [0x7576B202] = MansionFurniture.STAND, [0x7576B203] = MansionFurniture.STAND,
-            // the owner's wardrobe (2026-11-02, "ill need about 10 so I can have my various armors"): ten armor stands of
-            // datafix 2026-11-02-staff-base-decor-6 (WARDROBE in gen_staff_base_home.py); MansionFurniture.TradeSuits
             [0x7576B230] = MansionFurniture.STAND, [0x7576B231] = MansionFurniture.STAND, [0x7576B232] = MansionFurniture.STAND,
             [0x7576B233] = MansionFurniture.STAND, [0x7576B234] = MansionFurniture.STAND, [0x7576B235] = MansionFurniture.STAND,
             [0x7576B236] = MansionFurniture.STAND, [0x7576B237] = MansionFurniture.STAND, [0x7576B238] = MansionFurniture.STAND,
             [0x7576B239] = MansionFurniture.STAND,
         };
 
-        /// <summary>The owner's estate (2026-11-03, test-only for now): the wood island, landblocks EF9A to F49F (x 0xEF-0xF4,
-        /// y 0x9A-0x9F), where the houses he picks from the showroom stand, with room for more. Its houseless hooks are free
-        /// hooks like the Staff Base's.</summary>
         static bool Estate(ushort lb) => (lb >> 8) >= 0xEF && (lb >> 8) <= 0xF4 && (lb & 0xFF) >= 0x9A && (lb & 0xFF) <= 0x9F;
 
         static bool Ours(ushort lb) => lb == LANDBLOCK || Estate(lb);
 
-        /// <summary>A hook with no house on the Staff Base landblock or the owner's estate.</summary>
         internal static bool Is(WorldObject wo)
         {
             if (!(wo is Hook hook) || hook.ParentLink != null) return false;
@@ -102,7 +59,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ seeding
 
-        /// <summary>Give an empty seeded hook its furniture. Runs on the hook's landblock.</summary>
+        /// <summary>Give an empty seeded hook its furniture.</summary>
         static void Seed(Hook hook)
         {
             try
@@ -124,7 +81,7 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Error($"[StaffBaseHooks] seed 0x{hook?.Guid.Full:X8}: {e}"); }
         }
 
-        /// <summary>A hook made from its weenie (never saved yet) has its inventory at once.</summary>
+        /// <summary>A hook made from its weenie has its inventory at once.</summary>
         [HarmonyPatch(typeof(Landblock), nameof(Landblock.AddWorldObject))]
         static class Added
         {
@@ -151,8 +108,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ ACE's hook steps, without a house
 
-        /// <summary>Hook.OnAddItem without House.HouseCurrentHooksUsable--. MansionFurniture.Hung's postfix
-        /// still runs (Harmony runs postfixes after a skipping prefix).</summary>
+        /// <summary>Hook.OnAddItem without House.HouseCurrentHooksUsable--.</summary>
         [HarmonyPatch(typeof(Hook), "OnAddItem")]
         static class AddItem
         {
@@ -178,7 +134,7 @@ namespace RevivalGuard
                         __instance.CurrentMotionState = new Motion(MotionStance.Invalid);
                     __instance.Placement = (Placement)(item.HookPlacement ?? (int)Placement.Hook);
                     item.EmoteManager.SetProxy(__instance);
-                    __instance.SaveBiotaToDatabase();   // as ACE: never lose an item to a crash before the next save
+                    __instance.SaveBiotaToDatabase();
                     __instance.EnqueueBroadcastUpdateObject();
                 }
                 catch (Exception e) { Mod.Log.Error($"[StaffBaseHooks] add 0x{__instance.Guid.Full:X8}: {e}"); }
@@ -188,9 +144,7 @@ namespace RevivalGuard
 
         static readonly ConcurrentDictionary<uint, WorldObject> s_Bare = new ConcurrentDictionary<uint, WorldObject>();
 
-        /// <summary>Hook.OnRemoveItem without House.HouseCurrentHooksUsable++: the hook goes back to a bare hook
-        /// (a free hook's item taken back; nothing takes a seeded rack or stand off, but if anything ever does,
-        /// nothing throws).</summary>
+        /// <summary>Hook.OnRemoveItem without House.HouseCurrentHooksUsable++: the hook goes back to a bare hook.</summary>
         [HarmonyPatch(typeof(Hook), "OnRemoveItem")]
         static class RemoveItem
         {
@@ -245,8 +199,6 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A double-click is the furniture's own (its status and how to use it), as with a house's
-        /// hooks hidden; the hook is never opened as a container, so the furniture cannot be dragged out.</summary>
         [HarmonyPatch(typeof(Hook), nameof(Hook.ActOnUse))]
         static class Use
         {
@@ -259,9 +211,7 @@ namespace RevivalGuard
                     var item = __instance.Item;
                     if (!SEED.ContainsKey(__instance.Guid.Full) && wo is Player owner)
                     {
-                        // A hooked item with a use of its own is used, as on a house with its hooks hidden (Hook.ActOnUse):
-                        // the Fireworks go off (owner 2026-11-03, "yes it should set it off"). Anything else comes back to the
-                        // pack. Any item also comes back when dragged off the hook into the pack (TakeOff below).
+                        // A hooked item with a use of its own is used, as on a house with its hooks hidden (Hook.ActOnUse): the Fireworks go off.
                         if (item != null && Usable(item)) { owner.LasUsedHookId = __instance.Guid; item.OnActivate(owner); }
                         else if (item != null) TakeBack(owner, __instance);
                         else owner.SendTransientError("This hook is empty. Drag a housing item from your pack onto it to hang it.");
@@ -274,8 +224,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The furniture stays on its hook, and a drop on the hook (a client that sends
-        /// PutItemInContainer for it) goes to the furniture. ACE's own path reads hook.House and throws.</summary>
+        /// <summary>The furniture stays on its hook, and a drop on the hook goes to the furniture.</summary>
         [HarmonyPatch(typeof(Player), nameof(Player.HandleActionPutItemInContainer))]
         static class PutIn
         {
@@ -284,7 +233,7 @@ namespace RevivalGuard
             {
                 try
                 {
-                    // DRAGGED OFF THE HOOK: the client lifts the hook itself (it is what the client sees) and puts it in the pack.
+                    // Dragged off the hook: the client lifts the hook itself (it is what the client sees) and puts it in the pack.
                     if (__instance.CurrentLandblock?.GetObject(itemGuid) is Hook off && Is(off))
                     {
                         if (SEED.ContainsKey(off.Guid.Full) || !off.HasItem) { Refuse(__instance, itemGuid, off.HasItem ? $"The {off.Item.Name} is fixed to the wall here." : null); return false; }
@@ -326,9 +275,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A Hooker (the Fireworks, the Pyreal Bell, the Snowmaker: house items used only while hooked) on a free
-        /// staff hook may be used: ACE's Hooker.CheckUseRequirements wants the hook to belong to an owned house and refuses
-        /// "You are not permitted to use that hook" otherwise.</summary>
+        /// <summary>A Hooker on a free staff hook may be used</summary>
         [HarmonyPatch(typeof(Hooker), nameof(Hooker.CheckUseRequirements))]
         static class HookerUse
         {
@@ -345,9 +292,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A storage chest with no house on the Staff Base or the estate (the Wardrobe Chest, decor-10; an admin character's
-        /// Storage; the estate's chests) opens for staff. ACE's Storage.CheckUseRequirements wants a house, and without one
-        /// lets in only a player with IgnoreHouseBarriers set (and logs "couldn't find RootHouse" for anyone else).</summary>
+        /// <summary>A storage chest with no house on the Staff Base or the estate opens for staff.</summary>
         [HarmonyPatch(typeof(Storage), nameof(Storage.CheckUseRequirements))]
         static class StaffStorage
         {
@@ -371,10 +316,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A drop on a free hook sent as a give (this client drops every item on an object as GiveObjectRequest,
-        /// AcNpcInteraction.Give): ACE would hand it to GiveObjectToNPC, which a hook ignores, so nothing was hung (owner M5
-        /// 261103-0056; the fireworks' HookType was the second refusal behind it). Hung as PutIn does. Runs after
-        /// MansionFurniture.GiveTo (a rack or stand on the hook takes its own drops) and ItemLock's refusal.</summary>
+        /// <summary>A drop on a free hook sent as a give: ACE would hand it to GiveObjectToNPC, which a hook ignores, so nothing was hung.</summary>
         [HarmonyPatch(typeof(Player), nameof(Player.HandleActionGiveObjectRequest))]
         static class GiveTo
         {
@@ -413,9 +355,7 @@ namespace RevivalGuard
             if (equipped) { Refuse(p, itemGuid, $"Take off the {item.Name} first."); return; }
             if (hook.HasItem) { Refuse(p, itemGuid, $"This hook already holds the {hook.Item.Name}. Double-click it to take that down first."); return; }
             if (item is Container) { Refuse(p, itemGuid, "Packs and chests do not go on a hook."); return; }
-            // Retail puts an item only on a hook its HookType names (Floor 1, Wall 2, Ceiling 4, Yard 8, Roof 0x10), and a house's
-            // hooks keep that rule. The Staff Base's free hooks take any hookable item (owner 2026-11-03 on M5 261103-0056, the
-            // yard/roof-only Fireworks 30735 on a floor hook: "Yes, allow it").
+            // Retail puts an item only on a hook its HookType names (Floor 1, Wall 2, Ceiling 4, Yard 8, Roof 0x10), and a house's hooks keep that rule.
             if ((item.HookType ?? 0) == 0) { Refuse(p, itemGuid, $"The {item.Name} does not go on a hook."); return; }
             if (p.IsTrading && item.IsBeingTradedOrContainsItemBeingTraded(p.ItemsInTradeWindow)) { Refuse(p, itemGuid, $"The {item.Name} is being traded."); return; }
             if (!p.TryRemoveFromInventoryWithNetworking(item.Guid, out var real, Player.RemoveFromInventoryAction.GiveItem)) { Refuse(p, itemGuid, null); return; }
@@ -434,8 +374,6 @@ namespace RevivalGuard
         }
 
         /// <summary>A free hook's item back into the player's pack (the double-click, after the walk).</summary>
-        /// <summary>Has a use of its own: a Use emote (the Fireworks 30735, the Pyreal Bell, the Snowmaker), as retail's
-        /// "Once hooked, use this ...".</summary>
         static bool Usable(WorldObject item) =>
             item is Hooker || (item.Biota.PropertiesEmote?.Any(e => e.Category == EmoteCategory.Use) ?? false);
 
@@ -457,9 +395,7 @@ namespace RevivalGuard
             Say(p, $"You take the {real.Name} off the hook.");
         }
 
-        /// <summary>ACE's appraisal of a hook reads hook.ParentLink.HouseOwner. For a staff hook the
-        /// appraisal runs with a stand-in parent (a bare hook made from the weenie, never in the world, with
-        /// no owner), which is put back to none afterwards.</summary>
+        /// <summary>ACE's appraisal of a hook reads hook.ParentLink.HouseOwner.</summary>
         [HarmonyPatch(typeof(AppraiseInfo), nameof(AppraiseInfo.BuildProfile))]
         static class Appraise
         {

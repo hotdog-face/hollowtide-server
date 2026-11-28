@@ -4,20 +4,11 @@ using System.Globalization;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE ADMIN READY KIT'S PLAN (pure C#, nettest AdminKitCase; server side AdminKit.cs). Owner 2026-11-25: make +an admin account
-    /// Face "ready for anything" from the admin panel: buffs and a cure, a restock, travel and combat tools. Ours, not retail;
-    /// staff only.
-    ///  - Restock: what each supply tops up to (counting what the pack already holds), the ammunition that suits the wielded
-    ///    launcher (its ammo kind and element; Deadly needs Missile Weapons 230, ace_world 2026-11-25, else Greater, which
-    ///    has no requirement), and a component target (tapers burn fastest).
-    ///  - The clamps on the panel's numbers (clear radius, freeze seconds) and the map's coordinates to a landblock cell.
-    /// </summary>
+    /// <summary>The admin ready kit's plan (pure C#, nettest AdminKitCase; server side AdminKit.cs).</summary>
     public static class AdminKitRule
     {
         public const string P_ON = "rg_admin_kit";
 
-        // ---- restock: (wcid, name, top up to). ace_world 2026-11-25.
         public static readonly (uint wcid, string name, int target)[] SUPPLIES =
         {
             (9229, "Treated Healing Kit", 3),      // retail's best kit, 50 uses
@@ -32,7 +23,7 @@ namespace RevivalGuard
         public const int AMMO_TARGET = 500;        // half a stack (1000) of the launcher's kind
         public const int DEADLY_SKILL = 230;       // Deadly ammunition's WieldDifficulty (Missile Weapons)
 
-        // ---- ammunition. AmmoType: 1 arrow, 2 bolt (quarrel), 4 atlatl. Damage type: ACE DamageType flags.
+        // ---- ammunition.
         public const int AMMO_ARROW = 1, AMMO_BOLT = 2, AMMO_ATLATL = 4;
         public const int DT_SLASH = 1, DT_PIERCE = 2, DT_BLUDGEON = 4, DT_COLD = 8, DT_FIRE = 16, DT_ACID = 32, DT_ELECTRIC = 64;
 
@@ -49,8 +40,7 @@ namespace RevivalGuard
         };
         static readonly (uint arrow, uint bolt, uint dart) GREATER = (5304, 5313, 15287);
 
-        /// <summary>The ammunition to carry for a launcher, best first: Deadly of the launcher's element (pierce when it has
-        /// none or several), when the skill reaches Deadly's requirement, else Greater. Empty for no launcher kind.</summary>
+        /// <summary>The ammunition to carry for a launcher, best first</summary>
         public static List<uint> AmmoFor(int ammoType, int damageType, int missileSkill)
         {
             var list = new List<uint>();
@@ -114,8 +104,7 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>Map coordinates to an outdoor cell and its local x, y: the client's map teleport run on the server
-        /// (AcWorldMapHud.AdvocateTeleport; RadarHud.Loc backwards: 240 m per map unit, 192 m landblocks, 24 m cells).</summary>
+        /// <summary>Map coordinates to an outdoor cell and its local x, y: the client's map teleport run on the server.</summary>
         public static void CellOf(float ns, float ew, out uint cell, out float x, out float y)
         {
             float gx = (ew + 101.95f) * 240f, gy = (ns + 101.95f) * 240f;

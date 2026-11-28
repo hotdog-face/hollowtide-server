@@ -15,41 +15,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE EVENT DIRECTOR: ROTATING LIVE EVENTS OUT OF CONTENT THE WORLD DATABASE ALREADY HAS.
-    /// Owner-approved 2026-09-27; docs/EVENT-DIRECTOR.md has the catalogue, the evidence for each
-    /// entry and how to add one. NOT retail: retail's live events were run by hand by staff (the
-    /// wiki's "Broadcast from +Name>" transcripts), and a scheduler is ours (docs/DIVERGENCES.md).
-    ///
-    /// HOW AN EVENT RUNS. ACE's EventManager holds one state per `ace_world.event` row. A generator
-    /// whose GeneratorTimeType is Event (PropertyInt 142 = 3) and whose GeneratorEvent
-    /// (PropertyString 34) names a row spawns only while that row is On; it checks every 5 s and
-    /// flips after two agreeing checks (WorldObject_Generators.HandleStatusStaged), so spawns follow
-    /// a start within about 10 s plus one RegenerationInterval (60 s for everything catalogued).
-    /// Starting and stopping are EventManager.StartEvent / StopEvent, the calls @event makes.
-    ///
-    /// CLEAN STOP. ACE's own stop runs each generator's GeneratorEndDestructionType, and several
-    /// catalogued generators carry Nothing or Undef (every Erupt*Gen, both Witshire gens), which
-    /// leaves their monsters standing after the event. So a stop also walks the loaded landblocks
-    /// for generators gated on the stopped rows and destroys what they spawned (children of
-    /// generators first), then repeats on the same generators at +12, +30 and +75 s to catch
-    /// anything spawned inside ACE's two-check window.
-    ///
-    /// RESTARTS. Event state is process-local (nothing in ACE writes an Event row back; see
-    /// SeasonalCalendar), and spawned monsters are never saved, so a shutdown cannot leave an event
-    /// behind. The schedule is saved to EventDirectorState.json beside the dll on every transition;
-    /// a running event resumes after a restart for the time it had left. On a shutdown countdown the
-    /// current event is stopped and despawned without an announcement, and started again if the
-    /// shutdown is cancelled.
-    ///
-    ///   @events                        players: what is running now and what is next
-    ///   @eventdirector                 admins/bots: status (list | on | off | next | skip | stop | start key)
-    ///
-    /// LIVE SWITCH. rg_event_director, default off: a shard runs no live events until staff say
-    /// `@eventdirector on`. FESTIVAL EVENTS (Festivals set) run only while SeasonalCalendar has one of
-    /// their festivals on, and get one slot after every event_director_festival_every (3) year-round events (EventDirectorRules.Choose). The rotation holds
-    /// during Anniversary Night and keeps clear of a world boss's window in his region.
-    /// </summary>
+    /// <summary>The event director: rotating live events out of content the world database already HAS.</summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class EventDirector
     {
@@ -73,18 +39,7 @@ namespace RevivalGuard
 
         const string LEAD = "Attention Citizens of Dereth! ";
 
-        /// <summary>
-        /// THE CATALOGUE. Every row name, level and place below was read from ace_world on
-        /// 2026-09-27 (docs/EVENT-DIRECTOR.md, "How each entry was verified"). The Olthoi swarm
-        /// sites are the ones the map already names ("Far Direlands Olothi Swarm", "North Tethana
-        /// Olothi Swarm", "Far West Osteth Olothi Swarm"), and their escalation is the creatures'
-        /// own Death emotes (a 1 in 20 chance per kill of the site's own worker, soldier or noble to
-        /// move the swarm on a stage); the stage lines are those emotes' own LocalBroadcast text,
-        /// sent world-wide. The eruptions are the Lady Aerfalle quest's volcano chain; Mount
-        /// Tenkarrdun runs WITHOUT its Hellfire (EruptTenkarrdunBossGen), because the Hellfire's
-        /// death erupts the port whose Relic Watchman starts three Aerfalle quest rows
-        /// (AerfalleUberGen, SluiceGolemGen, AerfalleKeepStopgapGen) that are not ours to run.
-        /// </summary>
+        /// <summary>The catalogue.</summary>
         static readonly Entry[] Catalogue =
         {
             new Entry
@@ -213,11 +168,7 @@ namespace RevivalGuard
                 Withdraw = "The Drudges have left Yaraq.",
                 Evidence = "ace73230-presentraidsyaraqgen at 0x7D64; Drudge Pilferers 200; Frostfell content (wiki: Drudge Present Raids)",
             },
-            // FESTIVAL EVENTS (owner 2026-10-22, "Seasonal Event Director runs"; docs/EVENT-DIRECTOR.md "Festival events").
-            // Retail festival creatures on rows of the director's own (Director*), from
-            // tools/public-shard/datafixes/2026-10-22-festival-director-events.sql. The festivals' own rows
-            // (EventFallFestival, springbunnyevent ...) stay SeasonalCalendar's: those creatures keep spawning all month
-            // where retail put them, and these entries only ever start and stop rows the calendar never turns.
+            // Festival events.
             new Entry
             {
                 Key = "fs-pumpkin-glenden", Title = "Pumpkin Lords March on Glenden Wood", Where = "29.7N, 27.2E", Levels = "15 to 60",
@@ -278,8 +229,6 @@ namespace RevivalGuard
                 Withdraw = "The Black Rabbits have hopped away from Eastham.",
                 Evidence = "902408, the Black Rabbit half of retail's Asheron's Island Harmless Gen 87091, x5 around Eastham, 2 each: Black Rabbit 87089 L4 (its Black Bunnies 87090 L2 come only while springbunnyevent is on); a Black Bunny's death leaves a Hulking Bunny 87088 L115 (3 xp), 1 in 12 a White Rabbit 87094 L666",
             },
-            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/bur-ritual.md): retail's Jan 2007 Bur Portal Summoning
-            // Ritual, Feb 2 to 8. Rows and gens from tools/gpubox-ace/gen_retired_feb2.py (2027-02-02-bur-1-ritual.sql).
             new Entry
             {
                 Key = "bur-ritual", Title = "The Falatacot Attack the Bur Portal Ritual", Where = "67.4N, 30.5E", Levels = "185",
@@ -290,10 +239,6 @@ namespace RevivalGuard
                 Withdraw = "The Falatacot have fallen back from the Portal to Bur.",
                 Evidence = "903738 at 0xA5D30026 (the Portal to Bur's pedestals): Urdhinivix 903732 (a copy of Matriarch Mirta'kir 34755, L185, the wiki's stats) and 6 Falatacot Raiders 39171 L185",
             },
-            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/prodigal.md): retail's Jan 2008 Aerbax's Prodigal
-            // Children, Feb 9 to 15: retail's three waves in the desert by Yaraq. Each wave's leader (ours) stops its row and
-            // starts the next as it dies; the Queen's death stops the last, which is the win (ProdigalChildren.Won: a Modified
-            // Hero Token to everyone near). Rows and gens from tools/gpubox-ace/gen_retired_feb9.py (2027-02-09-prodigal-1-*.sql).
             new Entry
             {
                 Key = "prodigal-children", Title = "Aerbax's Prodigal Children near Yaraq", Where = "22.4S, 1.5W", Levels = "160 to 999",
@@ -310,11 +255,6 @@ namespace RevivalGuard
                 Withdraw = "Aerbax has called its Prodigal Children back from the desert near Yaraq.",
                 Evidence = "gens 903750-903752 at 0x7D630024 (rows DirectorProdigal1-3): retail's wave lists (wiki rev 475683); leaders Prodigal Monouga 903753 (ours), Prodigal Harbinger 903754 (copy of 36178), Paradox-touched Olthoi Queen 903755 (copy of 35888)",
             },
-            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/mhoire.md): retail's Feb 25-26 2012 House Mhoire
-            // Risings, Feb 20 to Mar 6: two raids, retail's creature lists. The boss's death stops its row and starts a spoils
-            // row (retail's reward kit: a Luminance Wisp, a Chest of Mana Forge Keys and five Hero Tokens on the ground, each
-            // gone after 15 minutes); the spoils row is in Stop, so the entry runs its hour and ends with the Withdraw line
-            // either way. Rows and gens from tools/gpubox-ace/gen_retired_feb20.py (2027-02-20-mhoire-1-risings.sql).
             new Entry
             {
                 Key = "mhoire-tairla", Title = "Lady Tairla Mhoire Attacks near Dryreach", Where = "8.7S, 73.1E", Levels = "220 to 300",
@@ -343,10 +283,6 @@ namespace RevivalGuard
                 Withdraw = "The corrupted dead of House Mhoire have crumbled away near Ayan Baqur.",
                 Evidence = "903804 at 0x12330016 (row DirectorMhoirePyreOak): Corrupted Pyre Oak 903801 (copy of 38807, L300, 200,000 health), 4 Pyre Skeletons 35097, 2 Pyre Champions 35098, 4 Pyre Minions 35099, 2 Corrupted Dreads 35400 (wiki rev 443457); spoils 903805 (DirectorMhoirePyreOakSpoils): retail's kit 80520, 80523, 80525",
             },
-            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/hero-raids.md): retail's 2009 Hero Token raids, Mar 14
-            // to 28: the two with retail creature lists, both at Hebian-To. No boss: holding the site to the end of the hour is
-            // the win (HeldWins), and HeroRaids.Won gives each defender near a Hero Token. Rows and gens from
-            // tools/gpubox-ace/gen_retired_mar14.py (2027-03-14-heroraids-1-hebian.sql).
             new Entry
             {
                 Key = "hero-knath-hebian", Title = "The K'nath Invade Hebian-To", Where = "39.6S, 83.3E", Levels = "220",
@@ -367,10 +303,6 @@ namespace RevivalGuard
                 Withdraw = "The Apostates have fled Hebian-To.",
                 Evidence = "903831 at 0xE74D0018 (row DirectorHeroApostate): retail's Mar 16 2009 'Not a Dungeon Filled With Monsters' list (wiki rev 465495), Apostate Servant 40499, Hea Apostate Shock Trooper 40495, Gotrok Aetherium Miner 40492, Tremendous Baby Monouga 80150",
             },
-            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/burnja.md): retail's Apr 2007 Captain Burnja Attacks the
-            // Windmill, Mar 22 to 31: Burnja and his escorts at the old windmill's spot; his death stops the row (won). His
-            // windmill token goes to Jarvis Hammerstone for Knight of the Windmill (503). Rows and gens from
-            // tools/gpubox-ace/gen_retired_mar22.py (2027-03-22-burnja-1-windmill.sql).
             new Entry
             {
                 Key = "burnja-windmill", Title = "Captain Burnja Attacks the Windmill", Where = "25.0N, 45.5E", Levels = "135",
@@ -381,10 +313,6 @@ namespace RevivalGuard
                 Withdraw = "Captain Burnja and his drudges have slunk away from the windmill.",
                 Evidence = "903902 at 0xB89E0016 (row DirectorBurnjaWindmill): Captain Burnja 903900 (copy of 87383, L135), 4 Drudge Lurkers 1608, 4 Drudge Stalkers 1609 (wiki rev 443260); his death stops the row",
             },
-            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/burun-raids.md): retail's May 2004 Burun Raids, Jun 1 to
-            // 14: retail's own raid generators and rows (Event<Town>Vagrants High / Extreme / Uber) outside five towns, with a leader
-            // per tier (copies of Barluuk, Urgluuk, Jorgluuk) whose death stops his row; the third down wins. Rows and gens from
-            // tools/gpubox-ace/gen_retired_jun1.py (2027-06-01-burun-1-raids.sql).
             new Entry
             {
                 Key = "burun-hebianto", Title = "The Burun Raid Hebian-To", Where = "39.7S, 83.4E", Levels = "95 to 140",
@@ -435,9 +363,6 @@ namespace RevivalGuard
                 Withdraw = "The Burun have gone back to the swamps from Yanshi.",
                 Evidence = "retail's raid generators for Yanshi (the EventYanshiVagrants rows) twice each, and the three leader copies 903930-903932 (wiki rev 447715)",
             },
-            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/viridian-baishi.md): retail's Apr 24 2015 Viridian
-            // incursion at Baishi, Jun 1 to 14: Zerzelikyr and the Viridian Rise's camp lists outside Baishi; his death stops the
-            // row (won). Rows and gens from tools/gpubox-ace/gen_retired_jun1b.py (2027-06-01-viridian-1-baishi.sql).
             new Entry
             {
                 Key = "viridian-baishi", Title = "Zerzelikyr Leads the Viridian Rise against Baishi", Where = "48.3S, 63.0E", Levels = "265 to 400",
@@ -448,9 +373,6 @@ namespace RevivalGuard
                 Withdraw = "Zerzelikyr and the Viridian Rise have withdrawn from Baishi.",
                 Evidence = "903951 at 0xCE430009 (row DirectorViridianBaishi): Zerzelikyr 903950 (copy of 72002, L400, 200,200 health, his loot) and copies of retail's camp lists 70842-70845 (A'nekshen, Zefir, Gromnie, Brier Wasp, L265-300) two each (wiki rev 473904)",
             },
-            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/martine-attacks.md): retail's May to Jun 2002 Martine
-            // Attacks, Jun 1 to 7: Martine and four Virindi Renegades at one of two spots; the hour runs out (Martine vanishes).
-            // Rows and gens from tools/gpubox-ace/gen_retired_jun1d.py (2027-06-01-martine-1-attacks.sql).
             new Entry
             {
                 Key = "martine-obsidian", Title = "Martine on the Obsidian Plains", Where = "64.1S, 63.7W", Levels = "69",
@@ -471,10 +393,7 @@ namespace RevivalGuard
                 Withdraw = "Martine has vanished from Marae Lassel, and the Virindi Renegades with him.",
                 Evidence = "904024-904025 at 0x26C40023 (row DirectorMartineMarae): Martine 904021 (copy of 20028, L750, only fights back, takes Renegade's Token 20033) and four Virindi Renegades 904020 (renamed copy of 11622, L69, the token on every corpse; owner yes 2026-11-09) (wiki rev 443396)",
             },
-            // T'THUUN'S MARAUDERS (retail Nov 2008, revived 2026-11-01 for the owner's review; docs/EVENT-TESTS/tthuun-marauders.md).
-            // The twelve retail raid sites, one at a time while the calendar's "tthuun" festival runs (Nov 16 to 29). Rows and
-            // wave generators: tools/public-shard/datafixes/2026-11-16-tthuun-1-raids.sql; the waves after the first, the
-            // site stones, the Royal Scouts' kill tasks and the Sparks: TthuunRaids.cs (sites in TthuunRaidsRule.cs).
+            // T'thuun's marauders.
             new Entry
             {
                 Key = "tthuun-toutou", Title = "T'thuun's Marauders Raid Tou-Tou", Where = "26.9S, 96.8E", Levels = "200 to 220",
@@ -595,10 +514,6 @@ namespace RevivalGuard
                 Withdraw = "The raiders at Mayoi have slipped back through the Patriarchs' device.",
                 Evidence = "wiki T'Thuun's Marauders rev 477303 (raiders site, Nivinizk's Raid Commander); wave gens 2026-11-16-tthuun-1-raids.sql on DirectorTthuunMayoi; waves after the first: TthuunRaids.cs",
             },
-            // RETIRED LIVE EVENT (docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/bz-rampage.md): retail's Dec 2000 Bael'Zharon's Rampage,
-            // Nov 24 to 30: Bael'Zharon visits one town for 30 minutes, at most one visit every 10 hours (BZ_APART_S). No
-            // generator: the row only marks the visit; BaelRampage.cs puts him in the town and takes him away. Fort Tethana, Kara
-            // and Arwic are the wiki's; the other twelve are ours. Rows: tools/public-shard/datafixes/2026-11-24-bz-rampage-1-rows.sql.
             new Entry
             {
                 Key = "bz-fort-tethana", Title = "Bael'Zharon Visits Fort Tethana", Where = "1.6N, 71.8W", Levels = "all",
@@ -759,9 +674,7 @@ namespace RevivalGuard
                 Withdraw = "Bael'Zharon has left Holtburg.",
                 Evidence = "ours (owner 2026-11-21 \"add holtberg\"): BaelRampage.cs puts retail's unplaced Bael'Zharon 8503 north of the square, 63 m from the lifestone; never during a Holtburg raid",
             },
-            // Season 1 beat 1, "Omens" (docs/SEASON-THE-SHADOW-RETURNS.md, docs/MONSTERS-LORE-FACTIONS.md): Aerbax's
-            // Umbral Legion raids three towns. Ours, not retail: rows and gens from tools/gpubox-ace/lore-factions.sql.
-            // In the rotation only while event_director_omens is on (off by default); @eventdirector start works regardless.
+            // Season 1 beat 1, "Omens" (docs/SEASON-THE-SHADOW-RETURNS.md, docs/MONSTERS-LORE-FACTIONS.md): Aerbax's Umbral Legion raids three towns.
             new Entry
             {
                 Key = "omens-arwic", Title = "Shadows Gather over Arwic", Where = "33.7N, 57.6E", Levels = "80 to 90",
@@ -792,9 +705,7 @@ namespace RevivalGuard
                 Withdraw = "The shadows have withdrawn from Cragstone.",
                 Evidence = "acomensraidcragstonegen (901334) at 0xBC9E; Umbral Herald of Aerbax 901330 L150, Twisted Shadows 32791 L160, Maelstrom Shadows 22909 L100",
             },
-            // The champion hunt (owner 2026-11-27, balance review "unused dungeons"): an hour of champions in one under-used
-            // dungeon of a level band, bands in turn (HuntGroundsRule.Plan). Ours. No rows: existing monsters made champions
-            // (MonsterFun). Behind rg_hunt_grounds; it runs with the rotation off too. Words and place are set at its start.
+            // The champion hunt: an hour of champions in one under-used dungeon of a level band, bands in turn (HuntGroundsRule.Plan).
             new Entry
             {
                 Key = "hunt", Title = "Champions Gather", Where = "an under-used dungeon", Levels = "20 to 199",
@@ -806,16 +717,13 @@ namespace RevivalGuard
 
         // ---- switches (ordinary ACE server properties; @modifybool / @modifydouble / @modifystring) ----
 
-        // The master switch is rg_event_director, default OFF (2026-10-22, before the first live run). It replaced
-        // event_director_enabled (default on), which is no longer read: a fresh name cannot inherit a stored value, so
-        // a deploy never starts the rotation on a shard where nobody turned it on.
+        // The master switch is rg_event_director, default OFF.
         const string P_ENABLED = "rg_event_director", P_DURATION = "event_director_duration_min",
                      P_GAP = "event_director_gap_min", P_IDLE = "event_director_idle_end_min",
                      P_MINPLAYERS = "event_director_min_players", P_SKIP = "event_director_skip",
                      P_OMENS = "event_director_omens", P_FESTIVALS = "event_director_festivals",
                      P_FEST_EVERY = "event_director_festival_every";
 
-        /// <summary>Landblocks around an event's box that a world boss's lair must stay clear of during his window.</summary>
         const int BOSS_MARGIN = 4;
 
         static readonly (string key, double def, string desc)[] s_Doubles =
@@ -878,14 +786,12 @@ namespace RevivalGuard
         const string P_FROSTFELL = "rg_event_director_frostfell";
         const string P_TTHUUN = "rg_event_director_tthuun";
         static bool FrostfellSwitch => PropertyManager.GetBool(P_FROSTFELL, true).Item;
-        /// <summary>A self-running festival's own switch (EventDirectorRules.SELF_RUN): rg_event_director_frostfell,
-        /// rg_event_director_tthuun, or rg_event_director_retired for every revived retired event; all default on.</summary>
+        /// <summary>A self-running festival's own switch</summary>
         static bool SelfRunSwitch(string festival) =>
             festival.Equals(EventDirectorRules.TTHUUN, StringComparison.OrdinalIgnoreCase) ? PropertyManager.GetBool(P_TTHUUN, true).Item
             : festival.Equals(EventDirectorRules.FROSTFELL, StringComparison.OrdinalIgnoreCase) ? FrostfellSwitch
             : EventDirectorRules.RETIRED.Contains(festival, StringComparer.OrdinalIgnoreCase) && RetiredSwitch;
-        /// <summary>The director runs: rg_event_director on, or a self-running festival (Frostfell, T'thuun's Marauders, a
-        /// revived retired event) active with its switch on (EventDirectorRules.DirectorOn; then only that festival's own entries).</summary>
+        /// <summary>The director runs: rg_event_director on, or a self-running festival active with its switch on.</summary>
         static bool Running => EventDirectorRules.DirectorOn(Enabled, f => SelfRunSwitch(f) && SeasonalCalendar.IsFestivalActive(f)) || HuntOn;
         /// <summary>The champion hunt runs (rg_hunt_grounds), with the rotation off too.</summary>
         static bool HuntOn => HuntGrounds.On;
@@ -946,8 +852,7 @@ namespace RevivalGuard
                 bool enabled = Running;
                 if (s_WasEnabled != enabled)
                 {
-                    // Switched on (by @eventdirector on or @modifybool): the first event comes in ten minutes, not at
-                    // once from a schedule that fell due while it was off; time enough to switch it off again.
+                    // Switched on: the first event comes in ten minutes, not at once from a schedule that fell due while it was off
                     if (enabled && s_WasEnabled == false && s_State.NextAt < now + 600) { s_State.NextAt = now + 600; Save(); }
                     if (s_WasEnabled != null) Mod.Log.Info($"[RevivalGuard] EventDirector: switched {(enabled ? "ON" : "OFF")}; next {(enabled ? Stamp(s_State.NextAt) : "none")}");
                     s_WasEnabled = enabled;
@@ -961,8 +866,7 @@ namespace RevivalGuard
                     return;
                 }
 
-                // Anniversary Night (@anniversary start): the party has the world's attention. The rotation holds, an
-                // event it started closes with its withdraw line, and the next one comes a full gap after the party.
+                // Anniversary Night (@anniversary start): the party has the world's attention.
                 if (AnniversaryNight.On)
                 {
                     if (!s_PartyHold) { s_PartyHold = true; Mod.Log.Info("[RevivalGuard] EventDirector: holding for Anniversary Night"); }
@@ -1010,8 +914,6 @@ namespace RevivalGuard
                 s_State.Current = null;
                 s_State.Manual = false;
             }
-            // A deploy or restart never fires an event straight away: at least one gap first, and a
-            // schedule that fell due while the shard was down waits five minutes for the world to settle.
             if (s_State.NextAt <= 0) s_State.NextAt = now + Gap * 60;
             else if (s_State.NextAt < now + 300) s_State.NextAt = now + 300;
             Save();
@@ -1036,9 +938,7 @@ namespace RevivalGuard
             return null;
         }
 
-        /// <summary>Why this entry cannot start right now, or null if it can. `ignore` is the entry being
-        /// replaced (its rows are about to stop, so they do not count as busy). `manual` (an admin's start)
-        /// ignores the season, the skip list and the opt-in switches, never a busy region or a boss's window.</summary>
+        /// <summary>Why this entry cannot start right now, or null if it can.</summary>
         static string Blocked(Entry e, Entry ignore, bool manual, double now)
         {
             if (e.Hunt)
@@ -1072,8 +972,7 @@ namespace RevivalGuard
                         return region == EventDirectorRules.RAID_REGION ? "a Present Raid ran less than 4 hours ago (retail: one every 4 hours)"
                             : $"one of its group ({region}) started less than {apart / 3600:0.#} hours ago";
             }
-            // The same region, or the same rows, already busy: something outside the director (a
-            // player killing the Witshire minion, an admin's @event) or another entry is running.
+            // The same region, or the same rows, already busy: something outside the director or another entry is running.
             foreach (var other in Catalogue)
             {
                 if (other == ignore) continue;
@@ -1133,8 +1032,7 @@ namespace RevivalGuard
             s_State.StartedAt = now;
             s_State.EndsAt = now + Duration(e) * 60;
             s_State.LastRun[e.Key] = now;
-            // The rotation moves past whatever just started, however it was started (a manual
-            // `start witshire` left the pointer on witshire and the next pick ran it again).
+            // The rotation moves past whatever just started, however it was started.
             var p = new EventDirectorRules.Pick { Rotation = s_State.Rotation, FestRotation = s_State.FestRotation, SinceFest = s_State.SinceFest };
             EventDirectorRules.Advance(ref p, Array.IndexOf(Catalogue, e), e.IsFestival, Catalogue.Length);
             s_State.Rotation = p.Rotation; s_State.FestRotation = p.FestRotation; s_State.SinceFest = p.SinceFest;
@@ -1149,20 +1047,16 @@ namespace RevivalGuard
 
         static void WatchRunning(Entry cur, double now)
         {
-            // Stage announcements: a row of this event that has just turned On (the creatures' own
-            // emotes did it: a worker died, a Hellfire fell).
+            // Stage announcements: a row of this event that has just turned On (the creatures' own emotes did it: a worker died, a Hellfire fell).
             foreach (var (ev, text) in cur.Stages)
             {
                 if (IsOn(ev)) { if (s_StagesSeen.Add(ev)) { WorldBroadcast(text); Mod.Log.Info($"[RevivalGuard] EventDirector: {cur.Key} stage {ev}"); } }
             }
 
-            // Ended by the players: every row off for two checks running (the emotes that hand one
-            // stage to the next stop one row and start the other within a second or two).
+            // Ended by the players: every row off for two checks running.
             if (!cur.Hunt && !cur.Stop.Any(IsOn))
             {
-                // A Present Raid's rows also go off by themselves when the present is destroyed (its death starts
-                // PresentRaidsDead and the reset stopgap stops it all): a loss, not a win (box 2026-10-29: an undefended
-                // raid ended after 3 minutes "won by the players", with prizes for whoever stood near).
+                // A Present Raid's rows also go off by themselves when the present is destroyed: a loss, not a win.
                 bool lost = cur.Lost != null && s_StagesSeen.Contains(cur.Lost);
                 if (++s_AllOffChecks >= 2)
                 {
@@ -1256,8 +1150,7 @@ namespace RevivalGuard
 
         // ---- the clean stop ---------------------------------------------------------------------
 
-        /// <summary>Every loaded generator gated on one of these rows. One scan per stop; the re-sweeps
-        /// reuse the list.</summary>
+        /// <summary>Every loaded generator gated on one of these rows.</summary>
         static void CollectGenerators(HashSet<string> names)
         {
             s_SweepGens.Clear();
@@ -1285,10 +1178,7 @@ namespace RevivalGuard
             {
                 if (!wr.TryGetTarget(out var gen) || gen.IsDestroyed) continue;
                 if (IsOn(ev)) continue;   // restarted since (the next event, or an admin): leave it be
-                // ACE notices a stopped event only on the generator's second status check (HandleStatusStaged), so
-                // emptying it before then let it refill at once (box 2026-11-01 05:13:27: a fresh Holiday Present and
-                // 10 Grumps 4 s after the raid ended). Disabled first, it stays empty; the staged check agrees with
-                // it, and the event's next start enables it the usual way.
+                // ACE notices a stopped event only on the generator's second status check, so emptying it before then let it refill at once.
                 gen.GeneratorDisabled = true;
                 gone += DestroySpawn(gen, 0);
             }
@@ -1296,8 +1186,7 @@ namespace RevivalGuard
             if (s_SweepAt.Count == 0) s_SweepGens.Clear();
         }
 
-        /// <summary>Destroy what this generator spawned, children of spawned generators first. Dead
-        /// creatures are left alone: their corpses are the players' loot.</summary>
+        /// <summary>Destroy what this generator spawned, children of spawned generators first.</summary>
         static int DestroySpawn(WorldObject gen, int depth)
         {
             int n = 0;
@@ -1345,7 +1234,6 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>After a restart: the same dungeon and band again (false: it is no longer in the table).</summary>
         static bool ResumeHunt(Entry e)
         {
             var g = HuntGroundsRule.At((ushort)s_State.HuntLb);
@@ -1452,8 +1340,7 @@ namespace RevivalGuard
 
         static string Levels(Entry e) => e.Levels.Contains(' ') ? $"levels {e.Levels}" : $"level {e.Levels}";
 
-        /// <summary>What @events says, as lines for the Holtburg Notice Board (NoticeBoard): the event running now
-        /// and the next one. Empty when nothing runs and nothing is scheduled.</summary>
+        /// <summary>What @events says, as lines for the Holtburg Notice Board (NoticeBoard): the event running now and the next one.</summary>
         internal static List<string> BoardLines()
         {
             var lines = new List<string>();
@@ -1595,10 +1482,10 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Start one entry by hand (BaelRampage's @rampage visit): the same as @eventdirector start key. World thread.</summary>
+        /// <summary>Start one entry by hand (BaelRampage's @rampage visit): the same as @eventdirector start key.</summary>
         internal static void StartEntry(string key, string who, Session session) => Act("start", key, who, session);
 
-        /// <summary>Stop the running entry by hand if its key starts with this prefix (BaelRampage's @rampage leave). World thread.</summary>
+        /// <summary>Stop the running entry by hand if its key starts with this prefix (BaelRampage's @rampage leave).</summary>
         internal static void StopEntryIf(string prefix, string who, Session session)
         {
             string cur; lock (s_Lock) cur = s_State.Current;

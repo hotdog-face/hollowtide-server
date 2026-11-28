@@ -8,18 +8,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// #pk-deaths: EVERY PK KILL, ONE LINE IN DISCORD (player idea, Rekah in #ideas: "so we know who killed us if we are
-    /// not at keys"; owner 2026-11-26 "i like this idea if its possible. a new channel that shows this info."). Ours.
-    ///
-    /// A prefix on Player.OnDeath(lastDamager, damageType, criticalHit), declared on Player: the killing blow's damager
-    /// and damage type are both in hand there. A Darktide PK death only (ACE IsPKDeath: the victim is PK and the last
-    /// damager another player). Staff on either side and a Borg/merc killing another are left out; who, where (the
-    /// /deaths place words), the time and the damage type go to DiscordBridge.PkDeath, which batches 10 s windows
-    /// (PkDeathFeedRule). Never the dropped items. Kills on PK Night's hill are tagged "[PK Night]".
-    ///
-    /// CONFIG: "pkDeathsChannelId" in discord-bridge.json (the bridge's bot posts there). No field, no feed.
-    /// </summary>
     [HarmonyPatch]
     static class PkDeathFeed
     {

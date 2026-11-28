@@ -10,48 +10,11 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// DECLINING A LUMINANCE PURCHASE STILL EATS THE TOKEN (docs/STATE.md open bug 3).
-    ///
-    /// Nalicana (wcid 43398) sells her auras for a token the player hands back to her: the Give
-    /// emote set for the token checks AvailableLuminance (InqInt64Stat), the TestSuccess set asks
-    /// InqYesNo, and only the Yes branch runs SpendLuminance and grants the aura. ACE's
-    /// Player.GiveObjectToNPC takes the item FIRST (RemoveItemForGive, then ExecuteEmoteSet, then
-    /// Destroy) and the question is asked seconds later from the emote chain, so No, a timeout, or
-    /// "You do not have enough Luminance." all leave the player one token poorer for nothing.
-    ///
-    /// WHAT RETAIL DID. The wiki transcript for the sibling path on the same NPC (Blank Augmentation
-    /// Gem for 10,000 Luminance; AC-Wiki pages/N/Nalicana.md, revision 348995) reads, in order:
-    /// "You allow Nalicana to examine your Blank Augmentation Gem." then the question, then on No
-    /// "You decline to empower yourself with Luminance at this time.", and on Yes "Nalicana tells
-    /// you, 'Very well...'", "You hand over 1 of your Blank Augmentation Gems.", "You've earned
-    /// 10,000 Luminance." Retail examined the item, asked, and took it only after the Yes. That is
-    /// wiki-tier evidence (player-written, ranked below the decompile and the DATs), but the retail
-    /// server's emote logic is in neither of those, and the transcript is the only retail record of
-    /// this flow found. There is no transcript for an aura token itself.
-    ///
-    /// SO THE ITEM STAYS IN THE PACK UNTIL THE PLAYER SAYS YES. When a Give set's chain leads to an
-    /// InqYesNo and nothing of value is handed out before the question, the give is answered the way
-    /// ACE answers a Refuse emote (retail's "You allow X to examine your Y." line plus the client's
-    /// put-it-back event), the emote chain runs as normal, and the item is taken at the moment the
-    /// Yes arrives, with retail's TakeItems wording. No or a timeout run the NPC's own decline text
-    /// and the token is never touched.
-    ///
-    /// WHY THE WALK IS CONSERVATIVE. Deferring the take on a chain that awards something BEFORE the
-    /// question, or on a branch that never asks, would pay the reward for free. So every emote set
-    /// reachable from the give before an InqYesNo must consist only of talk, motion and inquiries
-    /// (<see cref="Harmless"/>); anything else (awards, stamps, gives, spells, teleports) leaves that
-    /// NPC on ACE's original take-first path. Nalicana's token sets are TurnToTarget + one inquiry,
-    /// and her failure sets are a Tell, so they qualify.
-    /// </summary>
-    /// <para>PATCHED ON <c>Player</c>, which declares the private <c>GiveObjectToNPC</c>, and on
-    /// <c>Confirmation_YesNo</c>, which declares its own <c>ProcessConfirmation</c> override. Naming a
-    /// type that does not declare the method throws "Undefined target method" inside PatchAll and
-    /// loads the whole mod Inactive (2026-09-22).</para>
+    /// <summary>Declining a luminance purchase still eats the token (docs/STATE.md open bug 3).</summary>
     [HarmonyPatch(typeof(Player), "GiveObjectToNPC")]
     public static class GiveAfterYes
     {
-        const double PENDING_TTL = 120.0;   // ACE's confirmation timeout is 30 s; a client that never answers must not hold the NPC for ever
+        const double PENDING_TTL = 120.0;
         const int WALK_LIMIT = 64;          // emote sets visited before giving up on the static walk (fall back to ACE)
 
         internal sealed class Pending { public uint Target; public uint Item; public uint Wcid; public string Npc; public DateTime At; }
@@ -76,10 +39,7 @@ namespace RevivalGuard
             EmoteType.InqContractsFull,
         };
 
-        /// <summary>True when every set reachable from <paramref name="start"/> before an InqYesNo is
-        /// harmless and at least one path reaches an InqYesNo. Follows any set on the NPC whose Quest
-        /// equals an action's Message (TestSuccess/TestFailure/QuestSuccess/QuestFailure/Goto all key
-        /// that way); the question's own branches are not entered.</summary>
+        /// <summary>True when every set reachable from start before an InqYesNo is harmless and at least one path reaches an InqYesNo.</summary>
         internal static bool AsksBeforeTaking(WorldObject npc, PropertiesEmote start)
         {
             var all = npc.Biota?.PropertiesEmote;
@@ -111,12 +71,6 @@ namespace RevivalGuard
             return asks;
         }
 
-        /// <summary>A HELD GIVE WHOSE QUESTION NEVER CAME. The chain can end without asking: Nalicana's
-        /// "You do not have enough Luminance." branch is a plain tell. The entry then sat for the whole
-        /// PENDING_TTL, and every give to anyone in that window was refused as "too busy to accept
-        /// gifts" (release check 2026-09-24: 45 s after the tell she was idle and still refused). It
-        /// is over when no Yes/No is waiting for the player AND either the same NPC has finished
-        /// its emotes (the caller has just checked IsBusy) or 15 s have gone by.</summary>
         static bool Unasked(Player p, Pending cur, WorldObject target)
         {
             try
@@ -148,8 +102,7 @@ namespace RevivalGuard
             if (emote == null || emote.Category != EmoteCategory.Give) return true;
             if (!AsksBeforeTaking(target, emote)) return true;
 
-            // One question at a time: a second token while the first is unanswered is refused the way
-            // ACE refuses a gift mid-emote (retail's AiRefuseItemDuringEmote string).
+            // One question at a time: a second token while the first is unanswered is refused the way ACE refuses a gift mid-emote.
             if (s_Pending.TryGetValue(p, out var cur) && (DateTime.UtcNow - cur.At).TotalSeconds < PENDING_TTL
                 && !Unasked(p, cur, target))
             {
@@ -161,8 +114,7 @@ namespace RevivalGuard
             var pend = new Pending { Target = target.Guid.Full, Item = item.Guid.Full, Wcid = item.WeenieClassId, Npc = target.Name, At = DateTime.UtcNow };
             s_Pending.AddOrUpdate(p, pend);
 
-            // Retail's line for an item shown but not taken (the same one ACE prints for a Refuse
-            // emote), and the event that makes the client keep the item in the pack.
+            // Retail's line for an item shown but not taken, and the event that makes the client keep the item in the pack.
             p.Session.Network.EnqueueSend(new GameMessageSystemChat($"You allow {target.Name} to examine your {item.NameWithMaterial}.", ChatMessageType.Broadcast));
             p.Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(p.Session, item.Guid.Full, WeenieError.TradeAiRefuseEmote));
 
@@ -178,8 +130,7 @@ namespace RevivalGuard
             return false;   // ACE's take-first path is skipped
         }
 
-        /// <summary>The Yes arrived: take the item now, then let the TestSuccess set run. No, a
-        /// timeout, a missing NPC or a missing item leave the player exactly as they were.</summary>
+        /// <summary>The Yes arrived: take the item now, then let the TestSuccess set run.</summary>
         internal static bool OnAnswer(Confirmation_YesNo c, bool response)
         {
             var p = c.Player;
@@ -225,7 +176,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>The answer to an InqYesNo. Patched on the class that declares this override.</summary>
+    /// <summary>The answer to an InqYesNo.</summary>
     [HarmonyPatch(typeof(Confirmation_YesNo), nameof(Confirmation_YesNo.ProcessConfirmation))]
     public static class GiveAfterYes_Answer
     {

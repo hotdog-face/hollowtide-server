@@ -16,28 +16,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ADMIN TEST PURCHASE OF A HOUSE. Ours, not retail; admins only. Owner, 2026-09-29, testing the
-    /// mansion hooks and allegiance hall: "yes. no changing of the retail rules" (admin accounts bypass
-    /// the monarch, rank and price rules for testing; players keep retail's).
-    ///
-    /// `@freehouse` buys the nearest dwelling for sale within 40 m through ACE's own
-    /// HandleActionBuyHouse, so ownership, the deed, the hooks and the allegiance hall all come out
-    /// exactly as a real purchase makes them. For the length of that one call only:
-    ///   the slumlord's HouseRequiresMonarch and AllegianceMinLevel are lifted (and put back after),
-    ///   VerifyPurchase answers true and GetConsumeItems takes nothing, so no price is charged.
-    /// DevHousing (same call) already skips the 15-day account and 30-day cooldown for dev accounts.
-    /// ACE's one-house-per-character rule stays.
-    ///
-    /// MAINTENANCE-FREE (2026-10-01). The owner logged in to "You have not paid your maintenance costs" and
-    /// "Your allegiance rank is now below the requirements for owning a mansion": ProcessRent would have
-    /// evicted him at the first rent date. A house an ADMIN ACCOUNT owns is set HouseStatus.InActive, ACE's
-    /// own maintenance-free state (ProcessRent keeps an InActive house whatever is paid or ranked; retail
-    /// has five such houses in ace_world). @freehouse does it on purchase; at start-up every house owned by
-    /// an admin account's character is swept the same way. Players' houses keep retail's rules.
-    /// On release (abandon, eviction, HouseRelease) the house goes back to its weenie's own status, so
-    /// the next buyer gets the house as retail made it.
-    /// </summary>
+    /// <summary>Admin test purchase of a house.</summary>
     public static class AdminHouse
     {
         [ThreadStatic] internal static bool t_Free;
@@ -84,8 +63,7 @@ namespace RevivalGuard
                 t_Free = false;
                 best.HouseRequiresMonarch = monarch;
                 best.AllegianceMinLevel = rank;
-                // The purchase saved the slumlord while its rules were lifted; save them back, or the
-                // database copy (which the owner's login and ProcessRent load) keeps no rank rule.
+                // The purchase saved the slumlord while its rules were lifted; save them back, or the database copy keeps no rank rule.
                 best.SaveBiotaToDatabase();
             }
             Mod.Log.Info($"[RevivalGuard] AdminHouse: {p.Name} used @freehouse on 0x{best.Guid.Full:X8} ({best.Name})");
@@ -144,8 +122,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Release paths (abandon, eviction, HouseRelease) all clear the owner and then call ClearPermissions
-    /// before saving the house, so the status goes back there.</summary>
     [HarmonyPatch(typeof(House), nameof(House.ClearPermissions))]
     static class AdminHouseRelease
     {
@@ -155,9 +131,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>The login rank warning (HandleHouseOnLogin_Inner) asks HasRequirements without looking at the
-    /// status, so an owned InActive house, which ProcessRent never evicts, warned anyway. Only that case
-    /// changes: the owner of an InActive house meets its requirements. Purchases never call this method.</summary>
     [HarmonyPatch(typeof(SlumLord), nameof(SlumLord.HasRequirements))]
     static class AdminHouseNoRankWarning
     {
@@ -170,8 +143,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Start-up: every house owned by an admin account's character becomes maintenance-free, on the
-    /// live landblock object (ApplyLive), so no cached copy holds the old status.</summary>
+    /// <summary>Start-up: every house owned by an admin account's character becomes maintenance-free, on the live landblock object</summary>
     [HarmonyPatch(typeof(HouseManager), nameof(HouseManager.BuildRentQueue))]
     static class AdminHouseSweep
     {
@@ -197,10 +169,7 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] AdminHouse sweep: {e.Message}"); }
         }
 
-        /// <summary>Sets the status on the LANDBLOCK'S house object, loading the landblock and retrying every 2 s
-        /// until its objects exist. Not HouseManager.GetHouse: for an unloaded landblock it hands its callback a
-        /// House.Load copy, and the live object, created from the database before the copy saved, stayed Active
-        /// and saved Active back over it (seen 2026-10-01 on the first deploy).</summary>
+        /// <summary>Sets the status on the LANDBLOCK'S house object, loading the landblock and retrying every 2 s until its objects exist.</summary>
         static void ApplyLive(uint houseGuid, string owner, int tries)
         {
             var id = new LandblockId((uint)(((houseGuid >> 12) & 0xFFFF) << 16 | 0xFFFF));

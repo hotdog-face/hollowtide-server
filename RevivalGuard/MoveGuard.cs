@@ -9,24 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// MOVEGUARD: speed hacks and Blink-style hops that fit inside MovementGuard's budget (owner's pick, 2026-11-14).
-    /// MovementGuard (Mod.cs) refills a bucket at run speed x slack and lets a full bucket out in one report, so a client can
-    /// hop several seconds of running at once, again every time the bucket refills, or run steadily up to the slack. Those
-    /// are what this catches: MoveGuardRule checks every accepted client position against the reports of the last 30 s and
-    /// flags one no honest client could have reached from some earlier report in the time available (the why and the late-
-    /// report handling are on MoveGuardRule). It judges only what MovementGuard has already accepted, and is called from it.
-    ///
-    /// rg_moveguard_mode: 0 off, 1 log (default: a line per flag, and a per-player summary every 15 min and at logout, for
-    /// the owner to review before enforcing), 2 enforce (the report is refused and the player snapped back, as MovementGuard
-    /// does). Staff are exempt unless rg_moveguard_staff is on (box tests drive admin characters). The thresholds are
-    /// Tunables (moveguard.*), not published; the defaults here are the lenient side.
-    ///
-    /// Top speed is 4 m/s x ACE's run rate for the Run skill with NO burden (exhaustion and pack weight only slow a player),
-    /// the highest in the last minute, so a buff that just ran out on the server, not yet on the client, never counts.
-    /// Teleports, portals, recalls, deaths, snap-backs and any server move that bumps the teleport or force-position
-    /// sequence start the track again from the server's position; knockbacks are credited (Knockback.cs).
-    /// </summary>
+    /// <summary>MOVEGUARD: speed hacks and Blink-style hops that fit inside MovementGuard's budget.</summary>
     static class MoveGuard
     {
         internal const string P_MODE = "rg_moveguard_mode";
@@ -106,7 +89,7 @@ namespace RevivalGuard
             return st.Rate;
         }
 
-        /// <summary>Called by MovementGuard for a report it is about to accept. False: refuse it (enforce mode only).</summary>
+        /// <summary>Called by MovementGuard for a report it is about to accept.</summary>
         internal static bool Allow(Player p, ACE.Entity.Position pos, DateTime at)
         {
             try
@@ -173,8 +156,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>The client leaves portal space: its first report is measured from the destination as of now, not from when
-    /// the teleport began (a long portal-space wait would otherwise count as running time).</summary>
+    /// <summary>The client leaves portal space</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.OnTeleportComplete))]
     static class MoveGuard_TeleportDone
     {

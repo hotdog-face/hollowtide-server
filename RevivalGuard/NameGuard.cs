@@ -16,22 +16,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// NO ONE ELSE MAY LOOK LIKE THE OWNER (owner 2026-10-16: no player may impersonate the owner's character by a
-    /// sound-alike name).
-    ///
-    /// A new character whose name is close to a protected name is refused as a banned name, unless the account creating it
-    /// is staff. "Close" is measured on a folded form of the name: lower case, letters only, doubled letters collapsed, and
-    /// look-alike letters folded together (i/l, o/0, vv/w, rn/m), then within an edit distance that grows with the length
-    /// (two for a long name). For a protected "Ab Cdef": "Ab Cdef", "A B Cdef", "Abb Cdef", "Ab Cdeg", "Ab Cde" and
-    /// "AbCdef" are all refused; "Ab" alone or "Cdef" alone are not.
-    ///
-    /// The protected names are Mods/RevivalGuard/protected-names.json (a JSON array of strings) on the server only, so no
-    /// name is in the source; with no file, nothing is protected and a warning is logged. DiscordBridge uses <see cref="IsLookalike"/> too: only the Discord server's owner is shown in
-    /// game under a protected name.
-    ///
-    /// The same hook refuses a player's new name ending " of Borg" (BorgRule.RefuseName; the shard's own accounts exempt).
-    /// </summary>
     [HarmonyPatch(typeof(CharacterHandler), "CharacterCreateEx")]
     static class NameGuard
     {
@@ -54,8 +38,7 @@ namespace RevivalGuard
                 if (File.Exists(path)) names = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(path)) ?? names;
                 else Mod.Log.Warn($"[RevivalGuard] NameGuard: no {FILE}; no names are protected");
             }
-            // A BROKEN FILE PROTECTS NOTHING (audit 2026-10-16): say so plainly, as an error, so it is not mistaken for
-            // working protection. There is no built-in default: no name may be in the source.
+            // A broken file protects nothing: say so plainly, as an error, so it is not mistaken for working protection.
             catch (Exception e) { Mod.Log.Error($"[RevivalGuard] NameGuard: {FILE} could not be read ({e.Message}); NO names are protected until it is fixed"); }
             s_Folded = names.Select(Fold).Where(f => f.Length >= 4).Distinct().ToArray();
             if (s_Folded.Length == 0) Mod.Log.Error($"[RevivalGuard] NameGuard: no names are protected");
@@ -118,7 +101,7 @@ namespace RevivalGuard
                 var info = new ACE.Entity.CharacterCreateInfo();
                 info.Unpack(message.Payload);
                 stream.Position = pos;                 // ACE's own Unpack reads it again from here
-                // the Borg suffix is the shard's own (BorgRule): its accounts may use it, a player may not (M5 test 2026-11-19)
+                // the Borg suffix is the shard's own (BorgRule): its accounts may use it, a player may not
                 string why = BorgRule.RefuseName(info.Name, BorgRule.IsShardAccountName(session.Account), staff: false)
                              ?? (IsLookalike(info.Name) ? "too close to a protected name" : null);
                 if (why == null) return true;

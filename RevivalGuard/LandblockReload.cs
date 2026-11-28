@@ -13,47 +13,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// @RELOADBLOCK: ONE LANDBLOCK BACK FROM THE DATABASE, WITHOUT A SHARD RESTART.
-    ///
-    /// ACE caches every landblock's `landblock_instance` rows the first time the block loads
-    /// (WorldDatabaseWithEntityCache.GetCachedInstancesByLandblock) and never re-reads them. A block
-    /// that idles out and loads again still comes back from that cache, so an edited row waits for a
-    /// world restart. 2026-09-22: sixteen new gem placements in Hotel Swank (0x018A) cost a restart.
-    ///
-    /// THE TEARDOWN IS ACE'S OWN. When a block has been idle for UnloadInterval, Landblock.Tick calls
-    /// LandblockManager.AddToDestructionQueue and, at the end of that world tick, UnloadLandblocks
-    /// runs Landblock.Unload (save, destroy, release physics) and drops the block from the manager.
-    /// This verb queues the block the same way and then runs UnloadLandblocks itself, straight away,
-    /// so that nothing can walk into the block between the occupancy check and the unload. Then it
-    /// clears the instance cache and loads the block again through LandblockManager.GetLandblock,
-    /// the call every visit makes. No new teardown, no new loader.
-    ///
-    /// PLAYERS IN THE BLOCK: REFUSED. Landblock.Unload removes every object including players, and a
-    /// player whose CurrentLandblock is null is the wedge this project knows too well (WHERE and FIND
-    /// keep answering, teleports are ignored, only a relog clears it). Teleporting someone out is a
-    /// worse answer than refusing, so the verb names who is there and stops. Outdoors, players in the
-    /// eight adjacent blocks count too: their clients hold this block's objects and ACE's unload path
-    /// does not tell them, so they would keep ghosts.
-    ///
-    /// THE WORK RUNS ON THE WORLD THREAD, from the PlayerManager.Tick postfix, not from the command
-    /// handler. A chat command runs inside NetworkManager.DoSessionWork at the end of a world tick,
-    /// but the console runs its commands on its own thread, and LandblockManager's lock and
-    /// Landblock.Unload both assume the world thread. The handler only queues the request; the next
-    /// PlayerManager.Tick (the first thing in a world tick, before any landblock ticks) does it. That
-    /// ordering is what makes the occupancy check trustworthy: between the check and the unload no
-    /// landblock ticks, no action queues run and no session is read.
-    ///
-    /// ACE ships @reload-landblock (Developer) which does the in-place variant: destroy every
-    /// non-player object in the block you stand in and Init(true) it again with the cache cleared,
-    /// keeping players where they are. It is not used here because it has not been tried on this
-    /// shard and it acts on the block the admin is standing in; this verb takes the block by id and
-    /// refuses an occupied one.
-    ///
-    ///   @reloadblock 018A        unload and reload landblock 0x018A (hex; 0x018A and 018A0000 work)
-    ///
-    /// Admin command feedback is ours, not retail's.
-    /// </summary>
+    /// <summary>@RELOADBLOCK: one landblock back from the database, without a shard restart.</summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class LandblockReload
     {
@@ -61,8 +21,7 @@ namespace RevivalGuard
 
         static readonly ConcurrentQueue<Request> s_Requests = new ConcurrentQueue<Request>();
 
-        // ACE's own queue drain. Private static, so by name; checked at Register so a rename in a
-        // future ACE build makes the verb refuse rather than throw inside the world loop.
+        // ACE's own queue drain.
         static readonly MethodInfo s_UnloadLandblocks =
             AccessTools.Method(typeof(LandblockManager), "UnloadLandblocks");
 
@@ -99,8 +58,7 @@ namespace RevivalGuard
             s_Requests.Enqueue(new Request { Landblock = lb, Session = session, Who = session?.Player?.Name ?? "console" });
         }
 
-        /// <summary>Hex only: 018A, 0x018A, 018A0000, 0x018AFFFF. Decimal is refused rather than
-        /// guessed, because 0394 and 394 name different blocks.</summary>
+        /// <summary>Hex only: 018A, 0x018A, 018A0000, 0x018AFFFF.</summary>
         internal static bool TryParseLandblock(string arg, out ushort landblock)
         {
             landblock = 0;
@@ -179,8 +137,7 @@ namespace RevivalGuard
             int before = world.GetCachedInstancesByLandblock(r.Landblock).Count;
             bool permaload = block.Permaload;
 
-            // ACE's idle path, run to completion here on the world thread: nothing can enter the
-            // block between the occupancy check above and the unload.
+            // ACE's idle path, run to completion here on the world thread: nothing can enter the block between the occupancy check above and the unload.
             world.ClearCachedInstancesByLandblock(r.Landblock);
             LandblockManager.AddToDestructionQueue(block);
             s_UnloadLandblocks.Invoke(null, null);

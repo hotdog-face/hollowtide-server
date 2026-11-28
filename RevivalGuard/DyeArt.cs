@@ -12,17 +12,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// DYES BY ART (owner 2026-10-19 "Yes lets do the dye improvements"; docs/findings/FINDINGS-dye-by-art.md). Ours.
-    /// ACE dyes any Clothing flagged Dyable (RecipeManager_New.GetNewRecipe). A dye sets PaletteTemplate; when the item's
-    /// ClothingTable (ClothingBase) has no ByShade entry for it, Creature_Networking falls back to the table's first entry
-    /// and the item looks wrong. Here the 9 classic pots and the 10 rare eternals take on a Clothing item iff its table has
-    /// the dye's template, whatever Dyable says: ~590 more items per dye, and Dyable items without the art are refused.
-    /// Kept as ACE has them: cookbook pairs to other recipes (stamps, flags, wedding raiment). Refused: society armour
-    /// (faction colours stay) and items only the Pigmentation Apparatus serves. The Apparatus itself is untouched.
-    ///   @modifybool dye_by_art false   ACE's original rule
-    /// The client's hover cursor follows the same rule from StreamingAssets/dye-art.json (tools/crafting/build_dye_art.py).
-    /// </summary>
+    /// <summary>DYES by art.</summary>
     static class DyeArt
     {
         internal const string P_ON = "dye_by_art";
@@ -32,7 +22,7 @@ namespace RevivalGuard
         static bool Eternal(uint wcid) => wcid >= 30082 && wcid <= 30091;
         static uint Kind(uint wcid) => CLASSIC.Contains(wcid) ? RECIPE_CLASSIC : Eternal(wcid) ? RECIPE_ETERNAL : 0;
 
-        // ClothingTable id -> its ByShade templates. Built on first use: the DATs load after mods start.
+        // ClothingTable id -> its ByShade templates.
         static readonly ConcurrentDictionary<uint, HashSet<uint>> s_Templates = new();
         static int s_Scanned;
         internal static long Allowed, Refused;
@@ -81,8 +71,7 @@ namespace RevivalGuard
             return set.Contains(template);
         }
 
-        /// <summary>0 when this is not ours to decide (not a dye, a special cookbook pair, or the switch is off);
-        /// otherwise the recipe to use, or uint.MaxValue to refuse.</summary>
+        /// <summary>0 when this is not ours to decide; otherwise the recipe to use, or uint.MaxValue to refuse.</summary>
         static uint Decide(WorldObject source, WorldObject target, out CookBook cook)
         {
             cook = null;
@@ -136,7 +125,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The refusal line, in place of ACE's "cannot be used on". ACE's own earlier checks run first.</summary>
+        /// <summary>The refusal line, in place of ACE's "cannot be used on".</summary>
         [HarmonyPatch]
         static class RefusalLine
         {

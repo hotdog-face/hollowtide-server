@@ -6,12 +6,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// RETAIL'S EVEN-SHARE TABLE. ACE's Fellowship.GetMemberSharePercent gives a 9-member fellowship 30% each (270% in
-    /// all); retail gave 31.1% (FellowshipSystem::GetEvenSplitXPPctg @005b9ba0, and the Feb 2002 Fever Dreams notes:
-    /// "now share xp at 31% instead of 30"), so the total stays at 280% from 7 members on. Sizes 1 to 8 agree to 7 digits
-    /// (retail's are floats). FellowshipShareRule holds the table. Switch: rg_fellow_share_retail (default on; false = ACE's table).
-    /// </summary>
+    /// <summary>Retail's even-share table.</summary>
     [HarmonyPatch]
     static class FellowshipShare
     {

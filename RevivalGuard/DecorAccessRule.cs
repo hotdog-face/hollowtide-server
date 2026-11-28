@@ -1,11 +1,6 @@
 namespace RevivalGuard
 {
-    /// <summary>
-    /// WHO MAY DECORATE WHERE, pure (no ACE types), so tools/nettest checks it by path ("decorgate"). Owner 2026-11-25: "Yes,
-    /// work on live". A test shard has the file Mods/RevivalGuard/decor/enabled (Developer and up, as before). Live has no such
-    /// file: there the ACE property rg_decor_live switches it on, for Admins only. Neither: off. Every @decor verb, "part"
-    /// and the read-only ones included, goes through Refuse before anything else runs.
-    /// </summary>
+    /// <summary>Who may decorate where, pure (no ACE types), so tools/nettest checks it by path ("decorgate").</summary>
     public static class DecorAccessRule
     {
         public enum Mode { Off, TestShard, Live }
@@ -25,7 +20,7 @@ namespace RevivalGuard
 
         public static int Need(Mode m) => m == Mode.Live ? ADMIN : DEVELOPER;
 
-        /// <summary>Why `access` may not run `verb` here; null = it may. The verb does not matter: one gate for all.</summary>
+        /// <summary>Why `access` may not run `verb` here; null = it may.</summary>
         public static string Refuse(Mode m, int access, string verb)
         {
             if (m == Mode.Off) return OFF;
@@ -33,8 +28,6 @@ namespace RevivalGuard
             return null;
         }
 
-        /// <summary>Live only: a portal into new ground (an area made by New island / New dungeon) would take players to land
-        /// their client does not have until a client release carries it, so it is refused there.</summary>
         public static string WhyNotWay(Mode m, bool newGround) => m == Mode.Live && newGround ? WAY_WAITS : null;
 
         /// <summary>Every verb Decor.Cmd answers (Decor.cs, DecorWorld.cs, DecorEncounters.cs), for the gate's test.</summary>

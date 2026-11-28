@@ -14,117 +14,42 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE CALENDAR TURNS, SO THE WORLD TURNS WITH IT.
-    ///
-    /// docs/GAP-ANALYSIS.md §1 found that nothing in this revival is driven by a date.
-    /// `ACE.Server/Managers/EventManager.cs` is a dictionary loaded from `ace_world.event` and
-    /// toggled by StartEvent/StopEvent; an event runs only if its stored State is already On, or if
-    /// an emote or a dev command turns it on by name. `ace_world.event` has 700 rows, 608 of them
-    /// Off, and among them is every pumpkin, scarecrow, zombie and gift box retail put on the
-    /// landscape for one month a year. This file is the thing that turns them.
-    ///
-    /// WHERE THE MAPPING CAME FROM, AND WHY IT IS NOT GUESSWORK. Retail shipped its own festival
-    /// switches and they survived into `ace_world`: a family of weenies named `...stopgap!` whose
-    /// Generation emote (EmoteCategory 9) fires StartEvent on a bundle of event names and whose
-    /// Death emote (category 3) fires StopEvent on the same bundle. Each is spawned by a matching
-    /// `...stopgapgen` generator that carries `GeneratorTimeType = RealTime` (PropertyInt 142 = 1)
-    /// with `GeneratorStartTime`/`GeneratorEndTime` (143/144) holding the actual retail window.
-    /// Those generators are placed at Hebian-To (landblock 0xE74E), which is the one landblock our
-    /// shard's Config.js permaloads, so they do tick. The bundles and the windows in the table
-    /// below are read straight off those rows; docs/archive/SEASONAL-EVENTS.md shows the queries.
-    ///
-    /// NAMES. The October event is Festival Season: that is what retail's NPCs call it (Ungrim the
-    /// Unpleasant Smelling: "Festival Season is one of my favorite times of year", and the Al-Jalima
-    /// town description's "autumn festival season brings rise to these undead"), 63 hits in the wiki
-    /// corpus. "Hollowtide" is this SHARD'S name (`WorldName` in Config.js), not Turbine's name for
-    /// the event, and it never appears in the corpus. Players and the log see Festival Season.
-    ///
-    /// SO WHY A SCHEDULER AT ALL, IF THE DATA ALREADY HAS DATES?
-    ///   1. Those windows are ABSOLUTE unix timestamps for one single year (2026, or 2026-12 into
-    ///      2027 for Frostfell). They are not a calendar. When 2027 arrives, every one of them has
-    ///      expired and Dereth never has another Festival Season.
-    ///   2. Nothing announces anything. Retail's only in-world signal was local: the Al-Jalima town
-    ///      crier is swapped for a zombified one who says "Brains! Grrr!". A player in Holtburg had
-    ///      no way to learn the festival had started.
-    ///   3. It is untestable. A seasonal event you can only see in October cannot be regression
-    ///      tested in March, and this project's whole method is "observe the failing scenario".
-    ///   4. The world-data path is fragile in a way that is nobody's fault but is worth routing
-    ///      around: `WorldObject_Generators.HandleStatusStaged` applies a status change only on the
-    ///      SECOND heartbeat after the condition flips, and the whole thing depends on one landblock
-    ///      staying permaloaded and one generator instance staying alive.
-    /// This scheduler asserts the same bundles against a RECURRING calendar, every minute, from the
-    /// world loop, so none of the four matter.
-    ///
-    /// IT DOES NOT WRITE TO THE DATABASE. `EventManager.StartEvent` mutates the in-memory `Event`
-    /// entity's State field and nothing in ACE.Database ever writes an Event back (there is no
-    /// SaveEvent and no caller; `GetAllEvents` is read once at startup, Program.cs:281). So every
-    /// change this makes is process-local and disappears on restart, which is exactly right: the
-    /// calendar is the source of truth and it reasserts itself within a minute of boot.
-    ///
-    /// COMMANDS
-    ///   @festival                  what is running now, and what is next
-    ///   @festival list             every festival, its window, and its event rows
-    ///   @festival on &lt;key&gt;         force one on, regardless of the date
-    ///   @festival off &lt;key&gt;        force one off, regardless of the date
-    ///   @festival auto &lt;key|all&gt;   hand it back to the calendar
-    ///   @festival say [&lt;key&gt; start|end|remind|login]   preview what players are told (FestivalNotices)
-    ///
-    /// OVERRIDES SURVIVE A RESTART. The first version held them in memory on the theory that a
-    /// forgotten override was a silent lie and a restart was the cheapest way to be sure. The
-    /// opposite happened: Festival Season was forced on for a playtest on 2026-09-20, the shard
-    /// restarted for an unrelated fix on 2026-09-22, and the festival went off with no announcement
-    /// and nobody noticing until the pumpkins were gone. A restart is not a decision anyone made
-    /// about the festival, so it should not change the festival. Overrides now live in
-    /// SeasonalOverrides.json beside the mod dll (the deploy script copies only the dll, so it
-    /// survives deploys too), with who set them and when, and the startup log says which festival
-    /// is active and whether that is the calendar or a person. `@festival auto` is the way to clear
-    /// one, and deleting the file clears them all.
-    /// </summary>
+    /// <summary>The calendar turns, so the world turns with it.</summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static partial class SeasonalCalendar
     {
 
-        /// <summary>How often the calendar is re-asserted. A festival boundary is a date, so a
-        /// minute of latency is invisible, and this runs on the world loop where cheap matters.</summary>
+        /// <summary>How often the calendar is re-asserted.</summary>
         const double CHECK_SECONDS = 60.0;
 
-        /// <summary>The override file, beside the mod dll. See OverridePath.</summary>
+        /// <summary>The override file, beside the mod dll.</summary>
         const string OVERRIDE_FILE = "SeasonalOverrides.json";
 
 
-        /// <summary>One forced state, as stored in SeasonalOverrides.json. By and At are for the
-        /// startup log and @festival, so a forced festival is never anonymous.</summary>
+        /// <summary>One forced state, as stored in SeasonalOverrides.json.</summary>
         sealed class Override
         {
             [JsonPropertyName("on")] public bool On { get; set; }
             [JsonPropertyName("by")] public string By { get; set; }
             [JsonPropertyName("at")] public string At { get; set; }
-            // NO OVERRIDE STAYS FOR EVER (owner 2026-10-25: the yearly buffer swap must not be left stuck by a test): one
-            // expires OVERRIDE_HOURS after it was set (At) unless set with "keep". Older files have neither: they expire too.
+            // No override stays for ever: one expires OVERRIDE_HOURS after it was set (At) unless set with "keep".
             [JsonPropertyName("keep")] public bool Keep { get; set; }
         }
 
-        /// <summary>Forced states, by festival key: On true means forced on, false forced off,
-        /// absent means follow the calendar. Mirrored to SeasonalOverrides.json on every change
-        /// and loaded from it in Register, so a restart does not clear them.</summary>
+        /// <summary>Forced states, by festival key: On true means forced on, false forced off, absent means follow the calendar.</summary>
         static readonly Dictionary<string, Override> s_Forced =
             new Dictionary<string, Override>(StringComparer.OrdinalIgnoreCase);
 
         static readonly object s_Lock = new object();
         static double s_NextCheck;
 
-        /// <summary>Every row the calendar turns, on or off. EventDirector never touches these: the
-        /// calendar re-asserts them every minute and would fight it.</summary>
+        /// <summary>Every row the calendar turns, on or off.</summary>
         internal static HashSet<string> OwnedRows() =>
             new HashSet<string>(Calendar.SelectMany(f => f.On.Concat(f.Off)), StringComparer.OrdinalIgnoreCase);
 
         internal static void Register()
         {
-            // Player access on the status read: "what festival is on" is in-world information that
-            // retail gave away with a town crier, and a player who cannot see it has no calendar.
-            // The two that change the world stay at Developer, beside @setevent, which is what they
-            // are. CommandManager.TryAddCommand checks access on every invocation itself.
+            // Player access on the status read
             CommandManager.TryAddCommand(FestivalCmd, "festival", AccessLevel.Player,
                 CommandHandlerFlag.None, "What festival is running, and force one on or off.",
                 "[list | on <key> [keep] | off <key> [keep] | auto <key|all> | say <key> start|end|remind|login]");
@@ -138,7 +63,6 @@ namespace RevivalGuard
             var now = ACE.Common.Time.GetUnixTime();
             if (now < s_NextCheck) return;
             s_NextCheck = now + CHECK_SECONDS;
-            // Apply reaches EventManager.StartEvent/StopEvent; a throw there must not end the world loop
             try { Apply(); }
             catch (Exception e) { TickGuard.Report("SeasonalCalendar", e); }
             // The start/end/reminder broadcasts and Discord posts, remembered across restarts (FestivalNotices)
@@ -152,7 +76,7 @@ namespace RevivalGuard
             catch (Exception e) { TickGuard.Report("FestivalChannel", e); }
         }
 
-        /// <summary>The local date the calendar is evaluated against. See RETAIL_UTC_OFFSET_HOURS.</summary>
+        /// <summary>The local date the calendar is evaluated against.</summary>
         static DateTime RetailNow() => DateTime.UtcNow.AddHours(RETAIL_UTC_OFFSET_HOURS);
 
         /// <summary>A forced state for the notices: true forced on, false forced off, null the calendar's.</summary>
@@ -162,12 +86,10 @@ namespace RevivalGuard
             lock (s_Lock) return s_Forced.TryGetValue(f.Key, out var o) ? o.On : (bool?)null;
         }
 
-        /// <summary>A Pending festival (waiting for the owner's yes) counts only once every row it turns on exists in
-        /// ace_world: its datafix is the switch, so the mod can ship before the content does.</summary>
+        /// <summary>A Pending festival counts only once every row it turns on exists in ace_world</summary>
         internal static bool Installed(Festival f) => (!f.Pending || f.On.All(EventManager.IsEventAvailable)) && Switched(f);
 
-        /// <summary>A festival behind a staff switch as well (default off): Bael'Zharon's Rampage, rg_bz_rampage (the admin
-        /// panel's Events page). Off, it is off for the notices, the director and the client's calendar alike.</summary>
+        /// <summary>A festival behind a staff switch as well: Bael'Zharon's Rampage, rg_bz_rampage.</summary>
         static bool Switched(Festival f) =>
             !f.Key.Equals(BaelRampage.FESTIVAL, StringComparison.OrdinalIgnoreCase) || BaelRampage.SwitchOn;
 
@@ -183,12 +105,11 @@ namespace RevivalGuard
                 if (s_Forced.TryGetValue(f.Key, out var forced)) return forced.On;
                 forcedOn = Calendar.Where(x => s_Forced.TryGetValue(x.Key, out var o) && o.On).ToList();
             }
-            // a festival with another town dressing forced on keeps this one's dressing down (Displaced, ticket 261030-0001)
+            // a festival with another town dressing forced on keeps this one's dressing down
             return InWindow(f, local) && !Displaced(f, false, forcedOn);
         }
 
-        /// <summary>Is the festival with this key running now (calendar or forced)? Unknown keys are
-        /// false. For SeasonalDrops, which holds festival items back outside their season.</summary>
+        /// <summary>Is the festival with this key running now (calendar or forced)?</summary>
         internal static bool IsFestivalActive(string key)
         {
             var f = Calendar.FirstOrDefault(x => x.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
@@ -221,7 +142,6 @@ namespace RevivalGuard
                     + $"expired after {OVERRIDE_HOURS} h; back on the calendar");
         }
 
-        /// <summary>"2026-10-25 15:03 UTC" as written by FestivalCmd; null when unreadable (then it expires at once).</summary>
         static DateTime? ParseAt(string at)
         {
             if (string.IsNullOrWhiteSpace(at)) return null;
@@ -231,14 +151,7 @@ namespace RevivalGuard
 
         // ---- persistence -------------------------------------------------------------------
 
-        /// <summary>
-        /// Beside the dll, resolved through ACE's own mod container so it is right wherever
-        /// Config.js puts ModsDirectory. GetModContainerByName is exact-match here on purpose; the
-        /// partial match would also take a mod merely named like ours. If the container cannot be
-        /// found (it always can at Register time, but a wrong answer here must not throw inside
-        /// Mod.Initialize) fall back to ModPath/RevivalGuard, which is the same folder by ACE's
-        /// convention: FolderName is the dll name.
-        /// </summary>
+        /// <summary>Beside the dll, resolved through ACE's own mod container so it is right wherever Config.js puts ModsDirectory.</summary>
         static string OverridePath()
         {
             string folder = null;
@@ -263,8 +176,7 @@ namespace RevivalGuard
                     s_Forced.Clear();
                     foreach (var kv in loaded)
                     {
-                        // A key the calendar does not know (a renamed festival, a typo edited in by
-                        // hand) is logged and dropped rather than kept as a phantom override.
+                        // A key the calendar does not know is logged and dropped rather than kept as a phantom override.
                         if (Calendar.Any(f => f.Key.Equals(kv.Key, StringComparison.OrdinalIgnoreCase)) && kv.Value != null)
                             s_Forced[kv.Key] = kv.Value;
                         else
@@ -274,7 +186,6 @@ namespace RevivalGuard
             }
             catch (Exception e)
             {
-                // A corrupt file must not take the mod down with it; the calendar still runs.
                 Mod.Log.Error($"[RevivalGuard] seasonal: could not read {path}: {e.Message}");
             }
         }
@@ -302,11 +213,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>
-        /// Said once at startup so nobody has to ask the shard what season it thinks it is. A forced
-        /// festival names who forced it and when, because the point of persisting it is that a
-        /// restart is not a decision; a person's decision should still be visible as one.
-        /// </summary>
+        /// <summary>Said once at startup so nobody has to ask the shard what season it thinks it is.</summary>
         static void LogStartupState()
         {
             var local = RetailNow();
@@ -339,34 +246,22 @@ namespace RevivalGuard
 
         // ---- the scheduler -----------------------------------------------------------------
 
-        /// <summary>
-        /// Work out what every event row this file knows about should be, then move only the ones
-        /// that are wrong. Deliberately a full re-assertion rather than an edge trigger: something
-        /// else on the shard can turn these rows (a stopgap object dying, an admin's @setevent), and
-        /// re-asserting means the calendar wins within a minute instead of silently losing.
-        /// </summary>
+        /// <summary>Work out what every event row this file knows about should be, then move only the ones that are wrong.</summary>
         static void Apply()
         {
             ExpireOverrides();
             var local = RetailNow();
             var active = Calendar.Where(f => IsActive(f, local)).ToList();
-            // ON beats OFF; a row a festival suppresses is On outside it (SeasonalCalendar.Table.cs Desired)
+            // On beats OFF; a row a festival suppresses is On outside it (SeasonalCalendar.Table.cs Desired)
             var (wantOn, wantOff) = Desired(active);
             // a Pending festival's missing rows are not news every minute (its datafix is not applied yet)
             foreach (var f in Calendar) if (f.Pending && !f.On.All(EventManager.IsEventAvailable)) wantOff.ExceptWith(f.On);
 
             foreach (var name in wantOn) Set(name, true);
             foreach (var name in wantOff) Set(name, false);
-            // Telling players (start, end, reminder, login) is FestivalNotices, which remembers what it
-            // last said in SeasonalAnnounced.json so a restart neither repeats nor misses a transition.
         }
 
-        /// <summary>
-        /// Move one event row, if it is ours to move. A row whose state is Disabled (2) was switched
-        /// off deliberately by whoever built the world database and EventManager refuses to touch it
-        /// anyway; a name that is not in the table at all means this shard's `ace_world.event` does
-        /// not carry that content, which is worth a log line once and not worth failing over.
-        /// </summary>
+        /// <summary>Move one event row, if it is ours to move.</summary>
         static void Set(string name, bool on)
         {
             if (!EventManager.IsEventAvailable(name))
@@ -395,9 +290,7 @@ namespace RevivalGuard
             return -1;
         }
 
-        /// <summary>What @festival tells a player, as lines for the Holtburg Notice Board (NoticeBoard): each
-        /// festival open now with its last day and hint, then those opening within lookAheadDays. A name that
-        /// appears twice in the table (Fireworks) is said once.</summary>
+        /// <summary>What @festival tells a player, as lines for the Holtburg Notice Board</summary>
         internal static List<string> BoardLines(int lookAheadDays = 45)
         {
             var local = RetailNow();
@@ -486,8 +379,7 @@ namespace RevivalGuard
                                                           Keep = parameters.Length > 2 && parameters[2].Equals("keep", StringComparison.OrdinalIgnoreCase) };
                 }
                 SaveOverrides();
-                // Forcing is for testing, so it does not broadcast: an admin proving the spawns work
-                // in March should not tell every player that Festival Season has begun.
+                // Forcing is for testing, so it does not broadcast
                 Apply();
                 Say(session, verb == "auto"
                     ? $"{f.Name} follows the calendar again, and is currently {(IsActive(f, local) ? "on" : "off")}."

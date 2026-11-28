@@ -11,18 +11,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// GENERATOR SPAWNS LAND (report 261023-0008, a Virindi Observer 9 m up over the Direlands). Retail generator data puts
-    /// many spawns in the air on purpose: rifts summon at +9 m, Marae's brood at +20/+40 m, electrical storms at +20 m,
-    /// Specific profiles and indoor scatter keep the generator's height. Retail's server ran gravity on every creature, so
-    /// they fell and landed. ACE seats a spawn where the data says (enter_world placement never drops) and ticks an idle
-    /// monster's physics only on its first frame, so it hangs there until a player wakes it and it moves (then it falls).
-    /// Here a generator-spawned creature with Gravity that ACE placed touching nothing is swept straight down with ACE's
-    /// own transition and seated on the walkable surface under it, before any client is told it exists; its Home moves
-    /// with it. Players, AI-immobile creatures (tentacles, Rynthid stones), and anything without Gravity are untouched;
-    /// no floor within 200 m, or one too steep to stand on, leaves ACE's position. docs/findings/floating-creatures-2026-10-23.md.
-    ///   @modifybool rg_spawn_ground false   ACE's own heights again (from the next spawn)
-    /// </summary>
+    /// <summary>Generator spawns land.</summary>
     [HarmonyPatch]
     static class SpawnGround
     {

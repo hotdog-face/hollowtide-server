@@ -3,27 +3,7 @@ using System.Collections.Generic;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of MoveGuard (no ACE types; tools/nettest compiles it by path, MoveGuardCase).
-    ///
-    /// A PROOF, NOT A BUDGET. MovementGuard's budget lets a full bucket out in one report (several seconds of running at
-    /// once) and lets a steady pace up to its slack through, because bunched reports must never be snapped. This rule asks
-    /// a narrower question: is there an earlier accepted report the player could NOT have run from in the time available?
-    /// For every kept report a in the window, the new report is legal if
-    ///     dist(a, new) &lt;= vmax x tol x (now - e(a)) + margin + knockback credit since a,
-    /// where e(a) is the earliest the client could have SENT report a. The new report was sent no later than now, so a
-    /// violation of any anchor is impossible for an honest client whatever the network did in between. Any anchor failing
-    /// flags the report; one long window (default 30 s) catches a steady 1.3x pace that no single report shows.
-    ///
-    /// LATE REPORTS (the false-positive trap). A report can arrive late. An ordinary one by at most `lateness` seconds (wifi
-    /// jitter, a bufferbloated queue that builds and drains); one that arrives in the flush after a silence (a wifi stall, its
-    /// reliable retransmits arriving together) by up to the whole silence. So a silence of g seconds gives every report that
-    /// arrives within `flush` seconds after it a lateness carry of g, and e(r) = max(e(prev), arrival - lateness - carry): a
-    /// flushed report shares the send-time bound of the report before the stall. A held report (the client holding its reports
-    /// while a room's cell is unresolved) is measured from the report before the hold, so the hold counts as running time. A
-    /// silence buys exactly the running it lasted, so a lag switch gains nothing; after the flush window the carry is gone, so
-    /// standing silent does not weaken the window for long.
-    /// </summary>
+    /// <summary>The pure part of MoveGuard (no ACE types; tools/nettest compiles it by path, MoveGuardCase).</summary>
     public sealed class MoveGuardParams
     {
         public double Tol = 1.25;      // x the run speed: slopes, rounding, a run rate a hair behind the client's
@@ -63,8 +43,7 @@ namespace RevivalGuard
         public const long OFF = 0, LOG = 1, ENFORCE = 2;
         public static long Mode(long raw) => raw <= OFF ? OFF : raw >= ENFORCE ? ENFORCE : LOG;
 
-        /// <summary>A new baseline: the server's position, as of <paramref name="since"/> (the teleport or snap that
-        /// caused it; the client may have run from it since).</summary>
+        /// <summary>A new baseline: the server's position, as of since.</summary>
         public static void Reset(MoveTrack tr, double since, double x, double y, MoveGuardParams p)
         {
             tr.Kept.Clear(); tr.Credits.Clear();
@@ -74,15 +53,13 @@ namespace RevivalGuard
             tr.Kept.Add(tr.Last);
         }
 
-        /// <summary>The server threw the player (a knockback): that many metres are allowed on top, against every anchor
-        /// older than now.</summary>
+        /// <summary>The server threw the player (a knockback): that many metres are allowed on top, against every anchor older than now.</summary>
         public static void Credit(MoveTrack tr, double now, double metres)
         {
             if (metres > 0) tr.Credits.Add((now, metres));
         }
 
-        /// <summary>Judges a report arriving at <paramref name="now"/> at (x, y) for a player whose top speed over the
-        /// window is <paramref name="vmax"/> m/s. Does not record it (Accept does).</summary>
+        /// <summary>Judges a report arriving at now at for a player whose top speed over the window is vmax m/s. Does not record it.</summary>
         public static MoveVerdict Judge(MoveTrack tr, double now, double x, double y, double vmax, MoveGuardParams p)
         {
             var v = new MoveVerdict();

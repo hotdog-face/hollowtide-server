@@ -5,14 +5,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE GAUNTLET ARENA SAYS WHY IT REFUSED YOU (owner report 261115-0024: "tell players exactly why i cant enter").
-    /// The three society arena portals (world data, unchanged) send one DirectBroadcast, "You do not have access to this
-    /// arena.", for every refusal: no fellowship (QuestNoFellow), no ticket stamp on the fellowship, an expired one, or a
-    /// stamp for another society's arena. That line is rewritten here, after EmoteManager.Replace, into the actual reason,
-    /// read from the same fellowship and player quest state the arena and the Master of the Gauntlet check. Every client
-    /// gets it, retail included. Wording and order: GauntletAccessRule.
-    /// </summary>
+    /// <summary>The gauntlet arena SAYS why it refused you.</summary>
     [HarmonyPatch(typeof(EmoteManager), nameof(EmoteManager.Replace))]
     static class GauntletAccess
     {

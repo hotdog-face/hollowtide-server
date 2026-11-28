@@ -3,18 +3,7 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// HOLLOWTIDE ESSENCES IN THE NORMAL ESSENCE LOOT, the pure part (HollowEssences.cs patches ACE; tools/nettest
-    /// HollowEssenceCase compiles this file by path). Owner 2026-11-24: "add them to loot tables like similar items of
-    /// that type drop ... knath dont only drop from knath kills"; "why only maronette? we have lots of other creatures".
-    /// ACE's PetDeviceWcids.Roll picks a pet level for the tier and one of retail's 36 families; then RATE of those rolls
-    /// whose level has Hollowtide essences become one of ours at that same level, picked evenly over every Hollowtide
-    /// family of that level. Total essences and the levels per tier do not change; only the family does.
-    /// RATE stays 0.10: every level has at least 5 of ours, so each of ours is at most 2.0% of that level's essences,
-    /// under any one retail family (0.90 / 36 = 2.5%). 15% would need 7 at every level to stay under (0.85 / 36 = 2.36%).
-    /// Ids: 2026-11-24-summon-1-marionette.sql (919100-919105), 2026-11-25-summon-2-families.sql (919106-919181,
-    /// tools/gpubox-ace/gen_summon_families.py prints this table).
-    /// </summary>
+    /// <summary>Hollowtide essences in the normal essence loot, the pure part.</summary>
     public static class HollowEssenceRule
     {
         /// <summary>About 1 in 10 essence rolls at a covered level (docs/proposals/summoning-plan.md "How they're given").</summary>
@@ -68,7 +57,7 @@ namespace RevivalGuard
             { 919180, ("Virindi", 200) },
         };
 
-        /// <summary>Pet level -> our essences at that level (one picked evenly). Levels missing here stay all retail.</summary>
+        /// <summary>Pet level -> our essences at that level (one picked evenly).</summary>
         public static readonly IReadOnlyDictionary<int, uint[]> ByLevel = Essences
             .GroupBy(kv => kv.Value.level)
             .ToDictionary(g => g.Key, g => g.Select(kv => kv.Key).OrderBy(w => w).ToArray());
@@ -82,10 +71,7 @@ namespace RevivalGuard
 
         public static string FamilyOf(uint wcid) => Essences.TryGetValue(wcid, out var e) ? e.family : null;
 
-        /// <summary>
-        /// What one ACE essence roll at <paramref name="petLevel"/> becomes: 0 keeps ACE's pick, otherwise one of our
-        /// wcids of that same level. <paramref name="swap01"/> and <paramref name="pick01"/> are uniform in [0, 1).
-        /// </summary>
+        /// <summary>What one ACE essence roll at petLevel becomes: 0 keeps ACE's pick, otherwise one of our wcids of that same level.</summary>
         public static uint Pick(int petLevel, double swap01, double pick01, double rate = RATE)
         {
             if (!(swap01 < rate)) return 0;                      // NaN or above the rate: retail's essence stands

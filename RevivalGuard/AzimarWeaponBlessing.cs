@@ -6,38 +6,18 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AZIMAR'S WEAPON BLESSINGS (2026-11-02; Discord request "can buffbot also buff weapons? heart drinker, swift
-    /// killer, etc."; owner 2026-11-02 "yes i agree with your recommendation": on, a level below an Item Magic
-    /// specialist, shorter than a self-cast, all tunable). NOT RETAIL: retail's Pumpkin Buffer (32205), whose spells
-    /// Azimar's creature and life blessing copies, cast 59 "Incantation of ... Other" creature/life spells and no item
-    /// spells.
-    /// His emote table (gen_buff_zefir.py) has an inert step tagged "AzimarWeapon" after his creature and life spells
-    /// (EmoteType 0: ACE does nothing with it, so without this rule nothing happens). Here it casts the six weapon auras
-    /// ("Aura of ... Other": Blood Drinker, Heart Seeker, Swift Killer, Defender, Spirit Drinker, Hermetic Link) on the
-    /// player. ACE keeps them on the PLAYER and adds them to whatever enchantable weapon or wand is wielded
-    /// (WorldObject_Weapon, BaseDamageMod), so one set fits a sword, a bow and a wand, and a swapped weapon has them.
-    /// A lower level never surpasses a stronger one already on the player (a mage's own buffs win). Then the tell
-    /// "AzimarLines:weapon" (AzimarVoice) says nothing with a weapon in hand, else weapon.none / weapon.proof.
-    ///   @modifybool azimar_weapon_buffs false      off (no auras, no tell)
-    ///   @modifylong azimar_weapon_level N          a fixed spell level 1-8 for everyone; 0 = by character level (TIERS)
-    ///   @modifystring azimar_weapon_tiers "1:1,..." character level : the level an Item Magic specialist casts there
-    ///   @modifylong azimar_weapon_duration_s N     seconds each aura lasts (never longer than the spell's own)
-    ///   @modifylong azimar_weapon_max_level N      characters above level N get none; 0 = no cap
-    /// </summary>
+    /// <summary>Azimar's weapon blessings.</summary>
     static class AzimarWeaponBlessing
     {
         internal const string TAG = "AzimarWeapon";
         internal const string P_ON = "azimar_weapon_buffs", P_LEVEL = "azimar_weapon_level", P_TIERS = "azimar_weapon_tiers",
             P_DURATION = "azimar_weapon_duration_s", P_MAX = "azimar_weapon_max_level";
-        // The level an Item Magic specialist casts from each character level (an estimate for the owner to tune: the
-        // character level a specialised mage usually reaches each spell level's difficulty); Azimar casts one below.
+        // The level an Item Magic specialist casts from each character level; Azimar casts one below.
         internal const string DEFAULT_TIERS = "1:1,6:2,12:3,20:4,30:5,40:6,60:7,100:8";
         internal const long DEFAULT_DURATION = 1800;   // 30 min (a self-cast aura runs its spell's own, 1 h or more)
         const float GAP = 0.2f;                        // his paced casts' own gap (gen_buff_zefir.py CAST_GAP)
 
-        /// <summary>Each aura's "Other I" id; levels I-VII are the next six ids and the Incantation (VIII) the one after
-        /// (ace_world.spell, read 2026-11-02: e.g. Blood Drinker Other I 5990 ... VII 5996, Incantation 5997).</summary>
+        /// <summary>Each aura's "Other I" id; levels I-VII are the next six ids and the Incantation (VIII) the one after.</summary>
         internal static readonly (string name, uint other1)[] Auras =
         {
             ("Blood Drinker", 5990), ("Heart Seeker", 6007), ("Swift Killer", 6024),
@@ -94,8 +74,7 @@ namespace RevivalGuard
             return LevelFor(On, lvl, tiers, max, p.Level ?? 1);
         }
 
-        /// <summary>The emote step: cast the six auras on the player, paced, each trimmed to the duration switch.
-        /// Returns the seconds the casts take (the next step waits for them), or -1 when none are cast.</summary>
+        /// <summary>The emote step: cast the six auras on the player, paced, each trimmed to the duration switch.</summary>
         internal static float Bless(WorldObject azimar, Player p)
         {
             int level = LevelFor(p);
@@ -134,8 +113,7 @@ namespace RevivalGuard
             return GAP * (Auras.Length + 2);
         }
 
-        /// <summary>His aura on the player (if it took: a stronger one already there is left alone) lasts dur seconds at
-        /// most from now.</summary>
+        /// <summary>His aura on the player (if it took: a stronger one already there is left alone) lasts dur seconds at most from now.</summary>
         static string Trim(Player p, WorldObject azimar, uint spellId, long dur)
         {
             var e = p.EnchantmentManager.GetEnchantment(spellId, azimar.Guid.Full);

@@ -16,19 +16,7 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE DECORATOR INDOORS AND ON NEW GROUND (decor-world, owner 2026-11-24: "improvements to the way holtberg looks, a custom
-    /// island, a highly curated and good looking boss dungeon"). Test shard only, as all of Decor.
-    ///   Indoor poses: a pose's cell is the room's own (0xXXYY0100 and up), x y z landblock-local as everywhere in AC. Every verb that
-    ///     puts something somewhere checks the cell exists and the point is inside the rooms (WhyNotCell). A room's map piece is
-    ///     "static &lt;cell&gt; ..." (key t:&lt;cell&gt;:&lt;id&gt;); decor.py rewrites that EnvCell's object list in the overlay.
-    ///   New ground: "newisland flat|hills" and "newdungeon &lt;retail block&gt;" make a NEW AREA on a free sea landblock: the cell
-    ///     DAT records (island terrain, or a retail dungeon's rooms with every object stripped) are written as
-    ///     Mods/RevivalGuard/cell-overlay/area-&lt;id&gt;.bin (CellOverlay loads it at every start), put into ACE's DAT cache now,
-    ///     and sent to the client ("world"), which loads the same bytes into its own overlay. Nothing goes into the database.
-    ///   Ways: "way in|out" puts a portal at your feet (into the area's spot, or back out to the way in), kept as an edit of kind
-    ///     "way" (undo, Clear area), made again when its landblock loads; decor.py publishes each as a portal weenie copy + row.
-    /// </summary>
+    /// <summary>The decorator indoors and on new ground.</summary>
     internal static partial class Decor
     {
         // ---- indoor poses ----
@@ -45,8 +33,7 @@ namespace RevivalGuard
             return false;
         }
 
-        /// <summary>True (and the reason said) when a pose cannot stand where it says: an indoor pose's room must exist and hold the
-        /// point (or a room it sees must). Outdoor poses are the land's: always fine.</summary>
+        /// <summary>True when a pose cannot stand where it says: an indoor pose's room must exist and hold the point.</summary>
         static bool WhyNotCell(ACE.Entity.Position p, Action<string> reply)
         {
             uint cell = p.Cell;
@@ -129,8 +116,7 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>The first n x n patch of empty sea, with a ring of empty sea round it, in the far east ocean (where the staff
-        /// islands are), skipping every landblock some overlay or new area already uses. 0xFFFF = none.</summary>
+        /// <summary>The first n x n patch of empty sea, with a ring of empty sea round it, in the far east ocean</summary>
         static uint FreePatch(int n)
         {
             var held = OverlayBlocks();
@@ -139,7 +125,6 @@ namespace RevivalGuard
             for (int x = 0xE0; x + n < 0xFF; x += n + 1)
                 for (int y = 0x10; y + n < 0xF0; y += n + 1)
                 {
-                    // never beside the staff islands (estate EF9A-F49F, showroom F5A4-FEAD), even on a shard without islands.bin
                     if (x + n >= 0xEE && y + n >= 0x99 && y - 1 <= 0xAE) continue;
                     bool ok = true;
                     for (int i = -1; i <= n && ok; i++)
@@ -150,8 +135,7 @@ namespace RevivalGuard
             return 0xFFFF;
         }
 
-        /// <summary>The island's ground height in metres at patch metres (X, Y). flat: a level plateau 8 m up with a beach round
-        /// it (a building site); hills: low rolling ground (tools/cell-overlay Isle's "wood" look, lower).</summary>
+        /// <summary>The island's ground height in metres at patch metres. flat</summary>
         static float IslandHeight(string look, float X, float Y, int n)
         {
             float size = n * 192f, c = size / 2, R = size * 0.36f, dx = X - c, dy = Y - c;
@@ -229,8 +213,7 @@ namespace RevivalGuard
             return ms.ToArray();
         }
 
-        /// <summary>A retail dungeon's rooms (geometry, doorways, what each room sees) copied to a free sea landblock with the same
-        /// room numbers, every object stripped: clean rooms to dress. Its block list has the rooms and nothing else.</summary>
+        /// <summary>A retail dungeon's rooms copied to a free sea landblock with the same room numbers, every object stripped</summary>
         static void NewDungeon(Session s, Player me, uint src, string name, Action<string> reply)
         {
             LandblockInfo info = null;
@@ -255,8 +238,7 @@ namespace RevivalGuard
             MakeWorldArea(s, me, "dungeon", title, new List<string> { $"{dst:X4}" }, recs, null, src, reply);
         }
 
-        /// <summary>An EnvCell record renumbered and stripped of its objects (and its house restriction): the bytes up to its
-        /// visible-cell list are the DAT's own (tools/cell-overlay Overlay.WriteRoom's layout).</summary>
+        /// <summary>An EnvCell record renumbered and stripped of its objects: the bytes up to its visible-cell list are the DAT's own.</summary>
         static byte[] StripRoom(byte[] raw, uint id)
         {
             uint flags = BitConverter.ToUInt32(raw, 4);
@@ -350,8 +332,7 @@ namespace RevivalGuard
 
         const int WORLD_CHUNK = 12000;   // base64 characters a message
 
-        /// <summary>A new area's overlay bytes to the client, in parts ("world": id, i, n, b64). go = it was just made: the client
-        /// goes there once its rooms or land are ready.</summary>
+        /// <summary>A new area's overlay bytes to the client, in parts. go = it was just made</summary>
         static void SendWorld(Session s, string id, bool go)
         {
             if (id == null || !s_Areas.TryGetValue(id, out var ar) || !(ar.Layer["world"] is JsonObject world)) return;
@@ -367,8 +348,7 @@ namespace RevivalGuard
                 });
         }
 
-        /// <summary>dropworld &lt;id&gt;: a new area taken away whole: its overlay file, its layer and undo, its ways. The rooms or land
-        /// leave ACE's cache now; a landblock already loaded keeps them until the next restart.</summary>
+        /// <summary>dropworld &lt;id&gt;: a new area taken away whole: its overlay file, its layer and undo, its ways.</summary>
         static void DropWorld(Session s, Player me, string id, Action<string> reply)
         {
             if (id == null || !s_Areas.TryGetValue(id, out var ar) || !(ar.Layer["world"] is JsonObject)) { reply("That is not a new island or dungeon."); return; }
@@ -393,7 +373,7 @@ namespace RevivalGuard
 
         const uint WAY_WCID = 902561;
 
-        /// <summary>way in|out: a portal at your feet. In leads to the area's spot; out leads back to where the way in stands.</summary>
+        /// <summary>way in|out: a portal at your feet.</summary>
         static void Way(Player me, string[] a, Action<string> reply)
         {
             string dir = a.Length > 1 ? a[1].ToLowerInvariant() : "";

@@ -14,18 +14,7 @@ using K = RevivalGuard.PkSuitRule.Kind;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// `@pksuit` (Admin, ours, not retail; owner 2026-11-22, docs/proposals/staff-event-toolkit.md item 1): everything the
-    /// staff member WEARS and WIELDS becomes PvP-ready in place: the legendary spells PkSuitRule plans for its slot, the
-    /// tinkers a 10-tink retail piece carries (ACE's own mutation scripts, so the numbers are a player's tinker's),
-    /// Bonded (Player.CalculateDeathItems skips Bonded != 0: never drops on death), and item mana for an evening. Wield
-    /// requirements are not touched. New spells on worn items are cast at once (CreateItemSpell, as equipping does).
-    ///
-    /// `@pksuit undo` puts back every property and spell the verb changed, on the worn, wielded and carried items that
-    /// have a record. Records: PkSuit/&lt;item guid&gt;.json beside the mod: the value each changed property had before the
-    /// FIRST @pksuit (absent = it had none) and the spells it added. A second @pksuit keeps the first values.
-    /// Every item is named in the Audit channel (AuditTrail keeps it on disk).
-    /// </summary>
+    /// <summary>`@pksuit`: everything the staff member WEARS and WIELDS becomes PvP-ready in place</summary>
     public static class PkSuit
     {
         const AccessLevel LEVEL = AccessLevel.Admin;
@@ -106,8 +95,7 @@ namespace RevivalGuard
             _ => MaterialType.BlackOpal,
         };
 
-        /// <summary>One tinker exactly as RecipeManager applies it: the mutation script, then the TinkerLog entry.
-        /// Also PvpKit's (the missile pack's launchers).</summary>
+        /// <summary>One tinker exactly as RecipeManager applies it: the mutation script, then the TinkerLog entry.</summary>
         internal static bool Tink(WorldObject wo, uint mutation)
         {
             var script = MutationCache.GetMutation(mutation);
@@ -192,8 +180,7 @@ namespace RevivalGuard
             Say(session, $"[PK suit] {changed} of {items.Count} items changed. '@pksuit undo' puts them back.");
         }
 
-        // ---------------------------------------------------------------- property snapshot, diff, undo records
-        // Keys are "i:<PropertyInt>", "f:", "s:", "b:", "d:" (DataId), "l:" (Int64); a null value means "had none".
+        // property snapshot, diff, undo records
         static Dictionary<string, string> Snapshot(WorldObject wo)
         {
             var d = new Dictionary<string, string>();
@@ -206,7 +193,7 @@ namespace RevivalGuard
             return d;
         }
 
-        /// <summary>The before value of every key that changed (null: it was absent).</summary>
+        /// <summary>The before value of every key that changed.</summary>
         static Dictionary<string, string> Diff(Dictionary<string, string> a, Dictionary<string, string> b)
         {
             var d = new Dictionary<string, string>();

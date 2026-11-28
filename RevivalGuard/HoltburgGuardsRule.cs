@@ -3,11 +3,7 @@ using System.Collections.Generic;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of HoltburgGuards (no ACE types; tools/nettest compiles it by path, HeldKeys.cs HoltburgGuards):
-    /// time-of-day buckets, which pool a line comes from, lines without repeats, who a guard may fight, the town's bounds,
-    /// greetings heard in chat, and the patrol state machine. Coordinates are metres local to landblock A9B4.
-    /// </summary>
+    /// <summary>The pure part of HoltburgGuards</summary>
     public static class HoltburgGuardsRule
     {
         // ---- time of day (Dereth's 16 hours: 1 Darktide ... 9 Midsong ... 13 Evensong, 15 Gloaming) ----
@@ -23,7 +19,7 @@ namespace RevivalGuard
 
         public static string Key(Bucket b) => b switch { Bucket.Dawn => "dawn", Bucket.Day => "day", Bucket.Dusk => "dusk", _ => "night" };
 
-        /// <summary>The pool an ambient line comes from. <paramref name="r"/> is a roll in [0, 1).</summary>
+        /// <summary>The pool an ambient line comes from.</summary>
         public static string PickPool(Bucket b, string season, bool afterFight, bool busy, bool quiet, double r)
         {
             if (afterFight) { if (r < 0.5) return "event.after"; r = (r - 0.5) / 0.5; }
@@ -34,10 +30,6 @@ namespace RevivalGuard
             return "general";
         }
 
-        /// <summary>
-        /// Lines without repeats: each pool is dealt from a shuffled deck, so a guard says every line of a pool once before
-        /// any line of it again, and a new deck never starts with the line that ended the last one.
-        /// </summary>
         public sealed class LineBag
         {
             readonly Dictionary<string, Queue<int>> m_Decks = new Dictionary<string, Queue<int>>();
@@ -62,7 +54,7 @@ namespace RevivalGuard
 
         // ---- ambient pacing ----
         public const double AMBIENT_GAP_MIN = 240, AMBIENT_GAP_SPAN = 240;   // one guard: a line every 4 to 8 minutes at most
-        public const double ANY_GUARD_GAP = 45;                               // two guards never speak within 45 s of each other
+        public const double ANY_GUARD_GAP = 45;
         public const float EARSHOT = 20f;                                     // a player this close, or no ambient line
 
         public static bool MaySpeak(double now, double guardNext, double lastAnyGuard, bool playerInEarshot, bool onDuty)
@@ -99,11 +91,6 @@ namespace RevivalGuard
 
         public enum Verdict { Hostile, Player, Pet, NotMonster, Peaceful, Dead, Guard, OutOfTown, TooFar }
 
-        /// <summary>
-        /// Only a hostile monster in town: never a player (PK or not, a Borg, a mercenary or a bot: all are players), a pet or
-        /// summon of anyone, an NPC, a creature that does not attack players on its own (Tolerance NoAttack / Retaliate: town
-        /// critters, training targets), another guard, or anything outside the town.
-        /// </summary>
         public static Verdict Eligible(Candidate c)
         {
             if (c.IsPlayer) return Verdict.Player;
@@ -117,25 +104,16 @@ namespace RevivalGuard
             return Verdict.Hostile;
         }
 
-        // ---- whose fight is it (owner 2026-11-12: newcomers fight drudges near town; guards must not take their kills) ----
+        // ---- whose fight is it ----
         public const int NEWCOMER_LEVEL = 15;       // a player under this level is a newcomer
         public const double ENGAGE_WINDOW = 10;     // s: a player who hit the monster this recently, or is its target, is fighting it
         public const float RESCUE_HEALTH = 0.25f;   // a newcomer below this share of health is in real trouble
 
-        /// <summary>A player fighting the monster: one who damaged it within the window (Since = seconds ago), or is its
-        /// current target (IsTarget). A combat pet's damage or a monster fighting a pet counts as its owner.</summary>
+        /// <summary>A player fighting the monster: one who damaged it within the window, or is its current target (IsTarget).</summary>
         public struct Engager { public int Level; public double Since; public float Health; public bool IsTarget; }
 
         public enum Call { Engage, Rescue, HoldNewcomer, HoldPlayerFight }
 
-        /// <summary>
-        /// May a guard fight this hostile monster in town (and keep fighting it)?
-        ///   a newcomer is fighting it              never (break off at once), unless that newcomer is in real trouble (Rescue)
-        ///   it is attacking someone (it swung at a player or a guard within the window)   yes
-        ///   no player has fought it within the window                                     yes
-        ///   otherwise (a player is fighting it and it has not swung yet)                  not yet
-        /// Whoever fought it keeps the full credit either way: a guard's damage is never recorded.
-        /// </summary>
         public static Call Decide(bool attacking, IList<Engager> engagers, int newcomerLevel = NEWCOMER_LEVEL,
                                     double window = ENGAGE_WINDOW, float rescueHealth = RESCUE_HEALTH)
         {
@@ -185,12 +163,7 @@ namespace RevivalGuard
             return PAct.WalkTo;
         }
 
-        /// <summary>
-        /// One think (about a second apart). <paramref name="dist"/> is the distance to waypoint m.Index, <paramref name="posts"/>
-        /// says which waypoints are posts (index 0 is the station), <paramref name="mayLeave"/> the stagger rule, <paramref name="on"/>
-        /// the switch, <paramref name="playerNear"/> whether a player could see a teleport, <paramref name="r"/> a roll in [0, 1).
-        /// Duty is decided outside; after it, ReturnFrom.
-        /// </summary>
+        /// <summary>One think (about a second apart).</summary>
         public static PAct Step(Mind m, double now, float dist, bool[] posts, bool mayLeave, bool on, bool playerNear, double r)
         {
             int n = posts.Length;
@@ -251,9 +224,7 @@ namespace RevivalGuard
         /// <summary>The stagger: a guard may leave its station if fewer than MAX_AWAY are out and none left lately.</summary>
         public static bool MayLeave(int away, double now, double lastDeparture) => away < MAX_AWAY && now - lastDeparture >= DEPART_GAP;
 
-        // ---- gestures (owner 2026-11-13: "a muscle flex. a bow. etc.") ----
-        // Retail emote actions from the human motion table 0x09000001 (NonCombat, from Ready). Read offline from the DATs:
-        // it has no flex (no such command exists) and no ChestBeat; Akimbo (fists on hips) stands in for the flex.
+        // gestures
         public enum Gesture { None, Akimbo, Stretch, LookAround, WarmHands, Bow, Salute, Cheer }
         public enum GestureFor { Idle, Greeted, MetGuard, Victory }
 
@@ -267,8 +238,7 @@ namespace RevivalGuard
             GestureFor.Greeted => Gesture.Bow, GestureFor.MetGuard => Gesture.Salute, GestureFor.Victory => Gesture.Cheer, _ => Gesture.None,
         };
 
-        /// <summary>An idle gesture at a post: fists on hips, a stretch, a look over the horizon; warming the hands only at
-        /// night or in winter. Never the one it made last. <paramref name="r"/> in [0, 1).</summary>
+        /// <summary>An idle gesture at a post</summary>
         public static Gesture PickIdle(Bucket b, string season, Gesture last, double r)
         {
             var pool = new List<Gesture> { Gesture.Akimbo, Gesture.Stretch, Gesture.LookAround };
@@ -278,8 +248,7 @@ namespace RevivalGuard
             return pool[Math.Min(pool.Count - 1, (int)(r * pool.Count))];
         }
 
-        /// <summary>A gesture only from a guard standing still (at its station or paused at a post), not fighting, not in the
-        /// middle of another gesture, with a player near enough to see it.</summary>
+        /// <summary>A gesture only from a guard standing still, not fighting, not in the middle of another gesture</summary>
         public static bool MayGesture(PState s, bool moving, bool playerNear, double now, double busyUntil)
             => (s == PState.Station || s == PState.Paused) && !moving && playerNear && now >= busyUntil;
 

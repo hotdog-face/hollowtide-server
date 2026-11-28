@@ -12,39 +12,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// PK NIGHT: HOLD THE SPOT (owner 2026-11-09, docs/proposals/pk-night-decisions.md; design docs/proposals/pk-night.md).
-    /// Ours. Off until `rg_pk_night` is true.
-    ///
-    /// SIDES (owner 2026-11-22, docs/proposals/pk-night-fellowship.md): pk_night_sides = fellowship (the default, and what an
-    /// unset value means) or allegiance. In fellowship mode a side is a fellowship (FellowKey: the Fellowship object, kept
-    /// through a leader change) or a player alone, with the anti-hop lock (PkNightRules.Admit), and the banner goes to the
-    /// winning fellowship's leader once per player. Only PK Night: bounties, renown and the ladder keep PkCommon.Side.
-    /// What follows says "allegiance"; read "side".
-    ///
-    /// Every other Sunday at 7 PM Pacific (PkNightRules.INTERVAL_DAYS), for ROUND_MINUTES (40), the allegiance that holds a known outdoor landmark longest wins.
-    /// The spot rotates once per round (PkNightRules.SPOTS) and is announced a day, 30 minutes and ten minutes ahead. During
-    /// the round, every TICK seconds, the player killers within pk_night_radius metres of the hill are counted by
-    /// allegiance (PkCommon.Side: the monarch, or a lone player): the side with more of its members there than every
-    /// other side holds it and earns the tick ("outnumber to score", owner 2026-11-25); a tie for most is a contest. Mercenaries never count; the Borg count like any
-    /// allegiance (Mercenaries.IsHollowCompany). v2 (owner 2026-11-22): the hill moves within the spot every 10 minutes,
-    /// torches mark it, and players near it hear the standings every 15 s (PkNightHill.cs, PkNightHillRules.cs). Normal Hollowtide PK death rules apply, this changes nothing about dying.
-    ///
-    /// The reward is glory: a title (pk_night_title, a retail CharacterTitle) to the winners who stood there, a
-    /// world line, a line for the Town Crier (CrierLine), a leaderboard of nights, and a small token (pk_night_token,
-    /// a weenie; 0 = none until the owner picks one). State: PkLedger/pknight.json beside the dll (ModFolder).
-    ///
-    ///   @pknight                          what is next, or the standings now (any player; a retail client's board)
-    ///   @pknight start [minutes] [spot] [record]   staff: a round now (default 10 minutes, the next round's spot; `record`
-    ///                                     counts it on the leaderboard; without it the round is a rehearsal)
-    ///   @pknight stop                     staff: end the running round now
-    ///   @pknight say                      staff: every line players are told, to you only
-    ///   @pknight gate                     staff: the event portals now (PkNightGate.cs)
-    ///   @pknight reset                    staff: forget every round (test shards)
-    ///
-    /// The board: PkBoard sends "night" JSON with the rest of the PK board, which our client draws on the Social
-    /// panel's PK Boards tab (AcPkBoardHud) and a Borg client reads the same way.
-    /// </summary>
+    /// <summary>PK night: hold the spot.</summary>
     public static partial class PkNight
     {
         internal const string P_ON = "rg_pk_night", P_RADIUS = "pk_night_radius", P_TOKEN = "pk_night_token",
@@ -53,8 +21,7 @@ namespace RevivalGuard
         const double LOGIN_DELAY_S = 8;   // after the login's own lines and Mail (FestivalNotices)
 
         internal static bool On => PkCommon.On(P_ON);
-        /// <summary>pk_night_sides now (an unset or unknown value is fellowship mode). A running round keeps the mode it
-        /// opened with (Live.Sides).</summary>
+        /// <summary>pk_night_sides now (an unset or unknown value is fellowship mode).</summary>
         static bool FellowshipNow => IsFellowshipMode(PkCommon.Str(P_SIDES, SIDES_FELLOWSHIP));
         static bool ByFellowship(Live live) => live != null ? live.ByFellowship : FellowshipNow;
         static double Radius => Math.Clamp(PkCommon.Long(P_RADIUS, DEFAULT_RADIUS), 5, 200);
@@ -93,11 +60,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ fellowship sides
 
-        /// <summary>Each fellowship's side key, by object: ACE keeps one Fellowship object from its creation to its disband,
-        /// through a leader leaving (QuitFellowship assigns a new leader), so the key holds for the fellowship's lifetime
-        /// (FellowPassword keys its passwords the same way). The leader's guid would change with the leader, and ACE keeps
-        /// no creation time. A restart dissolves every fellowship and forgets this table: s_FirstKey marks the first key of
-        /// this process, and a fellowship formed again takes back its members' old key (AdoptKey).</summary>
+        /// <summary>Each fellowship's side key, by object</summary>
         static readonly ConditionalWeakTable<Fellowship, StrongBox<uint>> s_FellowKeys = new ConditionalWeakTable<Fellowship, StrongBox<uint>>();
         static readonly HashSet<uint> s_Adopted = new HashSet<uint>();
         static readonly object s_KeyLock = new object();
@@ -129,8 +92,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The side a player counts for at PK Night: in fellowship mode the fellowship (label: its name, else its
-        /// leader's) or the player alone; in allegiance mode PkCommon.Side. Leader: the fellowship's leader (alone: the player).</summary>
+        /// <summary>The side a player counts for at PK Night</summary>
         static Presence NightSide(Player p, Live live, bool byFellowship)
         {
             if (!byFellowship) return new Presence { Side = PkCommon.Side(p), Label = PkCommon.SideLabel(p), Guid = p.Guid.Full };
@@ -218,8 +180,7 @@ namespace RevivalGuard
             foreach (var p in PlayerManager.GetAllOnline())
             {
                 bool here = Eligible(p) && Dist(p.Location, centre) <= Radius;
-                // fellowship mode looks at every player already locked this round, in the circle or not, so a fellowship
-                // changed away from the spot is seen too (the anti-hop rule)
+                // fellowship mode looks at every player already locked this round, in the circle or not
                 if (!here && (!fs || !locked.ContainsKey(p.Guid.Full))) continue;
                 var x = NightSide(p, live, fs);
                 x.Away = !here;
@@ -256,7 +217,7 @@ namespace RevivalGuard
             try
             {
                 return p != null && p.IsPK && !p.IsDead && !p.Teleporting && p.Location != null
-                    && p.CloakStatus != CloakStatus.On && !Mercenaries.IsHollowCompany(p);   // the Borg count (owner 2026-11-22)
+                    && p.CloakStatus != CloakStatus.On && !Mercenaries.IsHollowCompany(p);   // the Borg count
             }
             catch { return false; }
         }
@@ -268,8 +229,7 @@ namespace RevivalGuard
             if (s_Centre != null && s_CentreKey == key) return s_Centre;
             try
             {
-                // the exact map point (CellOfMap), the one the corpse sites, the landing, the quiet ground and the markers use;
-                // ACE's map constructor lands 12 m south-west of it (box 2026-11-20: 84.72N 58.42E gave C8E9 88.8, 64.8)
+                // the exact map point, the one the corpse sites, the landing, the quiet ground and the markers use
                 var at = HillPoints(spot)[Math.Clamp(hill, 0, HillPoints(spot).Length - 1)];
                 var (cell, x, y) = CellOfMap(at.Ns, at.Ew);
                 var pos = new ACE.Entity.Position(cell, x, y, 0f, 0f, 0f, 0f, 1f);
@@ -293,8 +253,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ begin and end
 
-        /// <summary>A recorded round with this key has already ended (stopped early by staff, or the hour ran out and
-        /// the tick came round again before the clock left the hour).</summary>
+        /// <summary>A recorded round with this key has already ended.</summary>
         static bool Played(string key)
         {
             lock (s_Lock)
@@ -391,6 +350,16 @@ namespace RevivalGuard
 
         static string TitleKey() => PkCommon.Str(P_TITLE, "KingofDarktide").Trim();
 
+        // The PK Night token is given only on a character's first win.
+        static string TokenGiven(uint wcid) => "PkNightTokenGiven" + wcid;
+        static string TokenKey(uint wcid) => "pknight-token:" + wcid;
+        static bool TryToken(string key, out uint wcid)
+        {
+            wcid = 0;
+            return key != null && key.StartsWith("pknight-token:", StringComparison.Ordinal)
+                && uint.TryParse(key.Substring("pknight-token:".Length), out wcid);
+        }
+
         static CharacterTitle? Title()
         {
             var key = TitleKey();
@@ -416,11 +385,20 @@ namespace RevivalGuard
                 catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] PkNight: title {t} for {p.Name}: {e.Message}"); }
             }
             long wcid = PkCommon.Long(P_TOKEN, 0);
-            if (wcid > 0 && !Give(p, (uint)wcid)) { lock (s_Lock) { Owe(p.Guid.Full, HeldGroundBannerRule.ItemKey((uint)wcid)); Save(); } }
+            if (wcid > 0 && !GiveTokenOnce(p, (uint)wcid)) { lock (s_Lock) { Owe(p.Guid.Full, TokenKey((uint)wcid)); Save(); } }
         }
 
-        /// <summary>The night's one Cragstone Guise piece (rg_rune_skins, off: nothing; owner 2026-11-25): to the winner who
-        /// stood on the hill longest (RuneSkinsRule.PkWinner, proposed), now if online, else at their login.</summary>
+        static bool GiveTokenOnce(Player p, uint wcid)
+        {
+            string flag = TokenGiven(wcid);
+            if (p?.QuestManager == null) return false;
+            if (p.QuestManager.HasQuest(flag)) return true;
+            if (!Give(p, wcid)) return false;
+            p.QuestManager.Stamp(flag);
+            return true;
+        }
+
+        /// <summary>The night's one Cragstone Guise piece: to the winner who stood on the hill longest, now if online, else at their login.</summary>
         static void GiveRunePrize(Standing w)
         {
             uint wcid = RuneSkins.PkNightPrize();
@@ -432,14 +410,14 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] PkNight: Cragstone piece {wcid} for {g:X8} waits for their login");
         }
 
-        /// <summary>Add a title key or an "item:" key to what a guid is owed at login. Call under s_Lock.</summary>
+        /// <summary>Add a title key or an "item:" key to what a guid is owed at login.</summary>
         static void Owe(uint guid, string key)
         {
             if (!s_State.Pending.TryGetValue(guid, out var l)) s_State.Pending[guid] = l = new List<string>();
             l.Add(key);
         }
 
-        /// <summary>One item into the player's pack, with its line. False when it does not exist or did not fit.</summary>
+        /// <summary>One item into the player's pack, with its line.</summary>
         static bool Give(Player p, uint wcid)
         {
             try
@@ -463,8 +441,7 @@ namespace RevivalGuard
         const string BannerLine = "The Banner of the Held Ground is yours. Hang it on a floor or yard hook in your house; "
             + "your allegiance may draw on it once a day.";
 
-        /// <summary>The winning side's banner: to its monarch (or the lone winner; in fellowship mode the leader) now if
-        /// online, else at their login.</summary>
+        /// <summary>The winning side's banner: to its monarch now if online, else at their login.</summary>
         static void GiveBanner(uint side, string sideName)
         {
             var p = PlayerManager.GetOnlinePlayer(side);
@@ -487,7 +464,7 @@ namespace RevivalGuard
                         if (s_State.Pending.TryGetValue(__instance.Guid.Full, out var l) && l.Count > 0) { owed = l.ToList(); s_State.Pending.Remove(__instance.Guid.Full); Save(); }
                     if (owed != null)
                     {
-                        var items = owed.Where(k => HeldGroundBannerRule.TryItem(k, out _)).ToList();
+                        var items = owed.Where(k => HeldGroundBannerRule.TryItem(k, out _) || TryToken(k, out _)).ToList();
                         if (items.Count > 0)
                         {
                             var p = __instance;
@@ -496,8 +473,13 @@ namespace RevivalGuard
                             give.AddAction(p, () =>
                             {
                                 foreach (var key in items)
-                                    if (HeldGroundBannerRule.TryItem(key, out var wcid) && (p.Session == null || !Give(p, wcid)))
-                                        lock (s_Lock) { Owe(p.Guid.Full, key); Save(); }
+                                {
+                                    bool token = TryToken(key, out var tokenWcid);
+                                    uint wcid = token ? tokenWcid : (HeldGroundBannerRule.TryItem(key, out var itemWcid) ? itemWcid : 0);
+                                    if (wcid == 0) continue;
+                                    bool paid = p.Session != null && (token ? GiveTokenOnce(p, wcid) : Give(p, wcid));
+                                    if (!paid) lock (s_Lock) { Owe(p.Guid.Full, key); Save(); }
+                                }
                             });
                             give.EnqueueChain();
                         }
@@ -534,7 +516,6 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ what the crier and the calendar read
 
-        /// <summary>The Town Crier's line about the last night (null until a round has been recorded).</summary>
         internal static string CrierLine() { lock (s_Lock) return On ? s_State.CrierLine : null; }
 
         /// <summary>The Town Crier's answer to "when is PK Night": the night running now, or the next one with its way.</summary>
@@ -674,7 +655,6 @@ namespace RevivalGuard
             lock (s_Lock) { live = s_State.Live; rounds = s_State.Rounds.ToList(); }   // only recorded rounds are kept (a forced round with `record` counts)
             uint mySide = MySide(asker, live);
             sb.Append(",\"night\":{");
-            // the board's words (AcPkBoardHud, from the client after 0.1.125; an older client ignores it and says "allegiance")
             sb.Append("\"sides\":").Append(ByFellowship(live) ? "\"fellowship\"," : "\"allegiance\",");
             if (live != null)
             {

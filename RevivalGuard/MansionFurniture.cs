@@ -19,53 +19,7 @@ using Position = ACE.Entity.Position;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// MANSION FURNITURE THAT SHOWS WHAT IS ON IT (owner, 2026-09-27: mansions are "mostly useless
-    /// inside"; approved sculpted furniture, "useful pieces plus trophy displays"). docs/MANSION-FURNITURE.md.
-    ///
-    /// Four hook items, weenies 900500-900503 (tools/gpubox-ace/mansion-furniture.sql), each a Hooker
-    /// so ACE's own hook rules apply (hung by the owner, used through the hook with hooks off):
-    ///
-    ///   Weapon Rack       wall  4 weapons, bows, wands or shields, hung flat side by side
-    ///   Armor Stand       floor a wooden figure (weenie 900510) wearing up to 9 pieces of armour
-    ///   Portal Gem Shelf  wall  8 portal gems on two shelves; anyone let into the house can use them
-    ///   Trophy Wall       wall  4 trophies (the trophy mounts, mounted heads, fish) two by two
-    ///
-    /// HOW AN ITEM GOES ON: drag it from your pack onto the piece (our client sends GiveObjectRequest
-    /// for a drop on any world object, AcNpcInteraction.Give). Anyone with the house's STORAGE
-    /// permission may hang things (the owner, their account, the allegiance when storage is granted
-    /// to it). HOW IT COMES OFF: double-click it (Use) or pick it up (F, PutItemInContainer); the
-    /// one who hung it, or the house owner for anything not attuned. On the gem shelf a double-click
-    /// USES a gem instead, and picking it up takes the stack back.
-    ///
-    /// WHERE THE ITEMS LIVE. The real item stays a real biota with ContainerId = the furniture, like
-    /// an item in a pack: ACE saves it, never loads it on its own (the furniture is not a Container,
-    /// so nothing asks for its inventory) and never decays it. This file loads it when the furniture
-    /// is hung (Hook.OnAddItem, which also runs when the hook loads from the shard) and keeps it in
-    /// memory for the life of the server. The furniture cannot leave its hook while it holds
-    /// anything, so an item can never be carried off inside it.
-    ///
-    /// WHAT THE WORLD SEES is a COPY per item: a new object of the same weenie with every property
-    /// and spell of the real one, Stuck, ethereal, never rotting, and never saved
-    /// (IsDynamicThatShouldPersistToShard says no). The client draws it exactly as it draws the item
-    /// anywhere (own model, colours, expansion art) and appraising it shows the real item's
-    /// qualities, which is the showing off. Copies are made again whenever the hook loads.
-    /// The Armor Stand's figure (weenie 900510) is an object on the human setup and the statue
-    /// NO motion table (2026-09-30: 0x090000F3, the statue table, is the full human table and our
-    /// client played its breathing idle; with none the client draws the part-node export
-    /// 0x02000001_0x00000000, still); FigureDress gives it the look of a body wearing the
-    /// copies, with the wooden parts in expansion/models/0x01FF0510-0x01FF0520 wherever nothing
-    /// covers it, and its appraisal lists what it wears.
-    ///
-    /// PLACEMENT. A copy hangs in its own Hook placement (103), as it would on a real wall hook, at
-    /// a slot offset in the hook's frame (SLOTS; the geometry in expansion/housing/build_furniture.py
-    /// is built around the same numbers, DAT offset = (-x, -y, z) of Blender's). Its hook-pose bounds
-    /// are read from the DAT (setup parts, placement frames, gfxobj vertices): a weapon that hangs
-    /// across is turned upright about the wall normal, and anything too big for its slot is scaled
-    /// down with ObjScale. Gems sit on the shelves in their Resting placement (101).
-    /// Custom properties (ours, never sent to a client): PropertyBool 29120 (a copy),
-    /// PropertyInstanceId 29121 (who hung it), PropertyInt 29122 (its slot).
-    /// </summary>
+    /// <summary>Mansion furniture that shows what is on it. docs/MANSION-FURNITURE.md.</summary>
     [HarmonyPatch]
     static class MansionFurniture
     {
@@ -74,8 +28,7 @@ namespace RevivalGuard
         internal const PropertyInstanceId HUNG_BY = (PropertyInstanceId)29121;
         internal const PropertyInt SLOT = (PropertyInt)29122;
 
-        /// <summary>The trophy mounts (TrophyMounts.cs) draw as a kit-bashed board about 0.9 x 0.75 m
-        /// that their Plaque setup does not describe, so their bounds are given here.</summary>
+        /// <summary>The trophy mounts draw as a kit-bashed board about 0.9 x 0.75 m that their Plaque setup does not describe</summary>
         static readonly HashSet<uint> s_ExpansionTrophies = new HashSet<uint> { 900060, 900061, 900062, 900063, 900205 };
 
         sealed class Spec
@@ -85,8 +38,7 @@ namespace RevivalGuard
             public float MaxW, MaxH;          // the room a slot gives (metres across, up)
         }
 
-        // Wall pieces: the wall is 0.085 m behind the hook's origin (DAT +y); the backboard's face
-        // is where an item's back rests. Slot y is that face.
+        // Wall pieces: the wall is 0.085 m behind the hook's origin (DAT +y); the backboard's face is where an item's back rests.
         static readonly Dictionary<uint, Spec> s_Spec = new Dictionary<uint, Spec>
         {
             [RACK] = new Spec
@@ -161,8 +113,7 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>@furniture [refresh] (staff): every piece on this landblock, what it holds, and
-        /// each copy's state; `refresh` makes the copies again.</summary>
+        /// <summary>@furniture [refresh]: every piece on this landblock, what it holds, and each copy's state</summary>
         static void FurnitureCommand(ACE.Server.Network.Session session, params string[] parameters)
         {
             var p = session?.Player;
@@ -190,7 +141,6 @@ namespace RevivalGuard
             yield return AccessTools.Method(typeof(WorldObject), nameof(WorldObject.IsDynamicThatShouldPersistToShard));
         }
 
-        /// <summary>A copy is never saved: it is made again from the real item whenever it is needed.</summary>
         static void Postfix(WorldObject __instance, ref bool __result)
         {
             if (__result && s_Copies.ContainsKey(__instance.Guid.Full)) __result = false;
@@ -229,9 +179,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The real items are loaded once per server run; after that the in-memory list is
-        /// the truth (every change is saved as it happens), so a landblock reload only makes the
-        /// copies again. Two loads of one biota would be two live objects for one item.</summary>
+        /// <summary>The real items are loaded once per server run</summary>
         static void Load(Display d)
         {
             lock (d.Lock)
@@ -296,9 +244,7 @@ namespace RevivalGuard
 
         static readonly DisplayPaceRule s_Pace = new DisplayPaceRule(2.0);
 
-        /// <summary>A Refresh from the load path (first load, landblock reload, the 3 s retry), paced to at
-        /// most one display per landblock tick (DisplayPaceRule). All of a mansion's displays used to come
-        /// due in one tick: 0x576B ticks of 0.8-2.4 s on live. Player actions still Refresh at once.</summary>
+        /// <summary>A Refresh from the load path, paced to at most one display per landblock tick.</summary>
         static void RefreshPaced(Display d)
         {
             try
@@ -322,7 +268,7 @@ namespace RevivalGuard
             catch (Exception e) { TickGuard.Report("MansionFurniture.RefreshPaced", e); }
         }
 
-        /// <summary>Make every copy again from the real items. Runs on the hook's landblock.</summary>
+        /// <summary>Make every copy again from the real items.</summary>
         static void Refresh(Display d)
         {
             lock (d.Lock)
@@ -359,8 +305,6 @@ namespace RevivalGuard
         static readonly HashSet<PropertyInt> s_SkipInt = new HashSet<PropertyInt>
         { PropertyInt.CurrentWieldedLocation, PropertyInt.PlacementPosition, SLOT, PropertyInt.Placement };
 
-        /// <summary>A new object of the same weenie carrying every property and spell of the real one
-        /// (so appraisal shows its real qualities), with no container, wielder or owner.</summary>
         static WorldObject Clone(WorldObject real)
         {
             var c = WorldObjectFactory.CreateNewWorldObject(real.WeenieClassId);
@@ -392,8 +336,7 @@ namespace RevivalGuard
             else if (!PoseBounds(real.SetupTableId, (int)pose, out lo, out hi)) { lo = new Vector3(-0.1f); hi = new Vector3(0.1f); }
             lo *= baseScale; hi *= baseScale;
 
-            // A rack shows every weapon upright: one that hangs across the wall is turned 90 degrees
-            // about the wall's normal (DAT y), about its own centre.
+            // A rack shows every weapon upright: one that hangs across the wall is turned 90 degrees about the wall's normal, about its own centre.
             var extra = Quaternion.Identity;
             if (d.Wcid == RACK && hi.X - lo.X > hi.Z - lo.Z)
             {
@@ -403,17 +346,11 @@ namespace RevivalGuard
             var size = hi - lo;
             float fit = shelf ? Math.Min(spec.MaxW / Math.Max(0.01f, Math.Max(size.X, size.Y)), spec.MaxH / Math.Max(0.01f, size.Z))
                               : Math.Min(spec.MaxW / Math.Max(0.01f, size.X), spec.MaxH / Math.Max(0.01f, size.Z));
-            // A WEAPON ON THE RACK IS SHOWN AT ITS TRUE SIZE (owner, 2026-09-29: "crossbow was small on
-            // the rack"). Fitting it into the 0.34 x 1.30 m slot shrank everything wider or longer than
-            // that: a crossbow's limbs (Heavy Crossbow at about half size), a spear, a staff, a
-            // two-hander. A rack now never scales: a weapon taller than the slot stands on the rack's
-            // bottom rail and rises above it, and a wide one may overlap its neighbour, as on a real
-            // rack. The shelf and the trophy wall still fit their items to their places.
+            // A weapon on the rack is shown at its true size.
             float s = d.Wcid == RACK ? 1f : Math.Min(1f, fit);
             var centre = (lo + hi) * 0.5f * s;
             float rackZ = d.Wcid == RACK && size.Z > spec.MaxH ? s0.Z - spec.MaxH * 0.5f - lo.Z : s0.Z - centre.Z;
-            // wall pieces: the item's back (its most wall-ward point) on the backboard; shelf: its
-            // bottom on the shelf, its middle over the slot
+            // wall pieces: the item's back (its most wall-ward point) on the backboard; shelf: its bottom on the shelf, its middle over the slot
             var offset = shelf
                 ? new Vector3(s0.X - centre.X, s0.Y - centre.Y, s0.Z - lo.Z * s)
                 : new Vector3(s0.X - centre.X, s0.Y - hi.Y * s, rackZ);
@@ -440,12 +377,6 @@ namespace RevivalGuard
             return c;
         }
 
-        /// <summary>THE FIGURE IS AN OBJECT, NOT A CREATURE. The first cut spawned a statue creature and
-        /// equipped copies on it; ACE's physics walked it a metre off its plinth within a minute
-        /// and, after the next teleport, stopped sending it to the client at all. As a Generic
-        /// object (the human setup with no motion table, so it never animates) it stays
-        /// exactly where it is put, like every other copy, and appraising it shows its LongDesc:
-        /// the list of what it wears. Its dressed look is built by FigureDress below.</summary>
         static void SpawnFigure(Display d)
         {
             var fig = WorldObjectFactory.CreateNewWorldObject(FIGURE);
@@ -467,9 +398,7 @@ namespace RevivalGuard
                 if (c == null) continue;
                 if (InHand(real))
                 {
-                    // HELD AS A CHARACTER HOLDS IT (owner 2026-11-06, "weapon in hand and the shield on the arm"): the copy is
-                    // sent as the figure's child, as ACE sends a creature's wielded item (Creature.TryWieldObject: wielder,
-                    // parent location, placement; the figure's Children list), so the client hangs it on the hand part.
+                    // HELD as a character holds it
                     var (loc, pose, parent) = HandPose(real);
                     c.CurrentWieldedLocation = loc;
                     c.WielderId = fig.Guid.Full;
@@ -487,17 +416,13 @@ namespace RevivalGuard
             d.Wear = wear;
             d.Held = held;
             fig.Stuck = true;
-            // solid on the Staff Base (owner M5 261103-0060 "armor stands need collision"): the client blocks on a Stuck,
-            // non-Ethereal object's DAT volume, here the human setup's two 0.48 m spheres (the plinth's setup 0x02000B0E
-            // has none). A house's stand stays walk-through, as retail furniture is. IgnoreCollisions keeps the server's
-            // physics off it either way.
+            // solid on the Staff Base: the client blocks on a Stuck, non-Ethereal object's DAT volume, here the human setup's two 0.48 m spheres.
             fig.Ethereal = !StaffBaseHooks.Is(d.Hook);
             fig.IgnoreCollisions = true;
             fig.GravityStatus = false;
             fig.TimeToRot = -1;
             fig.UseRadius = ReachOf(d);
-            // on the plinth's top, turned to face out the way the plinth's nameplate does (a body
-            // faces its own +y; the furniture's face is -y)
+            // on the plinth's top, turned to face out the way the plinth's nameplate does (a body faces its own +y; the furniture's face is -y)
             fig.Location = new Position(want);
             s_Figures[fig.Guid.Full] = wear;
             s_FigureHeld[fig.Guid.Full] = held;
@@ -513,9 +438,7 @@ namespace RevivalGuard
                 Mod.Log.Warn($"[RevivalGuard] MansionFurniture: the figure would not enter the world at {fig.Location?.ToLOCString()}");
                 return;
             }
-            // ACE's placement stands a human-setup object on the floor whatever it is told (its
-            // step-down), which sank the figure's feet into the plinth. It never moves, so the
-            // position it is SENT at is the one that matters: put that back on the plinth's top.
+            // ACE's placement stands a human-setup object on the floor whatever it is told (its step-down), which sank the figure's feet into the plinth.
             if (fig.Location != null && Math.Abs(fig.Location.PositionZ - want.PositionZ) > 0.01f)
             {
                 fig.Location = new Position(want);
@@ -524,19 +447,14 @@ namespace RevivalGuard
             d.Copies.Add(fig);
         }
 
-        /// <summary>HOW FAR A COPY CAN BE USED FROM: its hook's own UseRadius (ACE authors 10 m on
-        /// wall, floor, ceiling and yard hooks, 50 m on roof hooks), never less than 2.5. A fixed 2.5
-        /// m left a rack on a high cottage wall hook (3.5 m up, 2026-09-30 sweep) out of reach: a
-        /// double-click walked, never arrived, and nothing could be taken back down.</summary>
         static float ReachOf(Display d) => Math.Max(2.5f, d.Hook?.UseRadius ?? 2.5f);
 
-        /// <summary>Figure guid -> the copies it wears (never in the world themselves).</summary>
+        /// <summary>Figure guid -> the copies it wears.</summary>
         static readonly ConcurrentDictionary<uint, List<WorldObject>> s_Figures = new ConcurrentDictionary<uint, List<WorldObject>>();
         /// <summary>Figure guid -> the copies in its hands, sent to each player who sees the figure (FigureSeen).</summary>
         static readonly ConcurrentDictionary<uint, List<WorldObject>> s_FigureHeld = new ConcurrentDictionary<uint, List<WorldObject>>();
 
-        /// <summary>A player who starts seeing a figure is sent what it holds, after the figure itself, as ACE's
-        /// TrackObject sends a creature's wielded items (TrackEquippedObject).</summary>
+        /// <summary>A player who starts seeing a figure is sent what it holds, after the figure itself</summary>
         [HarmonyPatch(typeof(Player), nameof(Player.TrackObject))]
         static class FigureSeen
         {
@@ -554,8 +472,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Appraising the weapon or shield in a figure's hand shows the real item's qualities (ACE finds only objects
-        /// in a landblock or held by a creature, and the figure is neither).</summary>
+        /// <summary>Appraising the weapon or shield in a figure's hand shows the real item's qualities.</summary>
         [HarmonyPatch(typeof(Player), nameof(Player.HandleActionIdentifyObject))]
         static class AppraiseHeld
         {
@@ -577,8 +494,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>What a player walks to and acts on for a guid: the copy itself, or, for the weapon or shield in a figure's
-        /// hand (never in the world on its own), the figure.</summary>
+        /// <summary>What a player walks to and acts on for a guid</summary>
         static WorldObject Shown(Display d, uint guid)
         {
             var c = d.Copies.FirstOrDefault(x => x.Guid.Full == guid);
@@ -619,9 +535,7 @@ namespace RevivalGuard
 
         static readonly ConcurrentDictionary<(uint, int), (Vector3, Vector3)?> s_Bounds = new ConcurrentDictionary<(uint, int), (Vector3, Vector3)?>();
 
-        /// <summary>The object's extent in a placement, the way the client draws it: each part's
-        /// gfxobj vertices, scaled by the setup's default scale, through that placement's frame
-        /// (the default frame when the setup has none for it).</summary>
+        /// <summary>The object's extent in a placement, the way the client draws it</summary>
         static bool PoseBounds(uint setupId, int placement, out Vector3 lo, out Vector3 hi)
         {
             var r = s_Bounds.GetOrAdd((setupId, placement), key =>
@@ -657,8 +571,7 @@ namespace RevivalGuard
 
         static House RootHouseOf(Display d) => d.Hook?.House?.RootHouse;
 
-        /// <summary>Hang things: the house's storage permission (owner, their account, storage
-        /// guests, the allegiance when it has storage), or an admin who walks through barriers.</summary>
+        /// <summary>Hang things: the house's storage permission, or an admin who walks through barriers.</summary>
         static bool MayHang(Player p, Display d) =>
             p.IgnoreHouseBarriers || StaffBaseHooks.Is(d.Hook) || (RootHouseOf(d)?.HasPermission(p, true) ?? false);
 
@@ -671,8 +584,7 @@ namespace RevivalGuard
             return owner?.Account != null && owner.Account.AccountId == p.Account.AccountId;
         }
 
-        /// <summary>Take something down: the one who hung it; the house owner, unless it is
-        /// attuned (an attuned item goes back only to the one it is bound to).</summary>
+        /// <summary>Take something down: the one who hung it; the house owner, unless it is attuned.</summary>
         static bool MayTake(Player p, Display d, WorldObject real) =>
             (real.GetProperty(HUNG_BY) ?? 0) == p.Guid.Full
             || (!real.IsAttunedOrContainsAttuned && (IsHouseOwner(p, d) || p.IgnoreHouseBarriers
@@ -704,7 +616,7 @@ namespace RevivalGuard
                 case STAND:
                     if (HandSlot(item) is int hand)
                     {
-                        // one weapon and one shield, as a character holds them (owner 2026-11-06)
+                        // one weapon and one shield, as a character holds them
                         var same = d.Items.FirstOrDefault(o => (o.GetProperty(SLOT) ?? -1) == hand);
                         if (same != null) return $"The figure already holds the {same.Name}. Take it off first.";
                         var other = d.Items.FirstOrDefault(o => (o.GetProperty(SLOT) ?? -1) == (hand == HAND_WEAPON ? HAND_SHIELD : HAND_WEAPON));
@@ -723,8 +635,6 @@ namespace RevivalGuard
                     if (!IsPortalGem(item)) return "Only portal gems go on the portal gem shelf.";
                     break;
                 case TROPHY:
-                    // Generic wall hangings, and books that hang (the retail Mounted Fish is a Book);
-                    // never the Allegiance Hall Board, which only works on its own hook.
                     bool trophy = s_ExpansionTrophies.Contains(item.WeenieClassId)
                         || ((item.WeenieType == WeenieType.Generic || item.WeenieType == WeenieType.Book)
                             && ((item.HookType ?? 0) & (int)HookType.Wall) != 0 && !(item.GetProperty(Mansions.BOARD) ?? false));
@@ -774,10 +684,6 @@ namespace RevivalGuard
         }
 
         /// <summary>The display a guid belongs to: a hook holding furniture, or one of its copies.</summary>
-        /// <summary>COPIES REPLACED IN THE LAST MINUTE, by their old guid. Every piece put up rebuilds the copies (the figure too)
-        /// under new guids, so a selection dropped on a figure (owner 261102-0045, "dragging and dropping multiple items at once
-        /// doesnt work"), given one item at a time by the client, aimed every item after the first at a figure that was gone.
-        /// Such a give lands on the furniture's hook instead. (A destroyed copy's guid is recycled only much later.)</summary>
         static readonly ConcurrentDictionary<uint, (Display d, DateTime at)> s_Retired = new ConcurrentDictionary<uint, (Display, DateTime)>();
 
         static Display DisplayAt(Player p, uint guid, out WorldObject target)
@@ -806,8 +712,7 @@ namespace RevivalGuard
             return null;
         }
 
-        /// <summary>A drop on a Staff Base hook sent as PutItemInContainer (StaffBaseHooks.PutIn): put it on
-        /// the furniture the hook holds, as a drop on the furniture is. False when the hook holds none.</summary>
+        /// <summary>A drop on a Staff Base hook sent as PutItemInContainer</summary>
         internal static bool PutFromContainer(Player p, Hook hook, uint itemGuid)
         {
             if (!IsFurniture(hook.Item) || !s_Displays.TryGetValue(hook.Item.Guid.Full, out var d)) return false;
@@ -830,9 +735,7 @@ namespace RevivalGuard
             var spec = s_Spec[d.Wcid];
             var item = p.FindObject(itemGuid, Player.SearchLocations.MyInventory | Player.SearchLocations.MyEquippedItems, out _, out _, out bool equipped);
             if (item == null) { Refuse(p, itemGuid, null); return; }
-            // A WORN PIECE dragged from the paper doll (owner 261102-0045, "dragging items from equipped to the wooden figure
-            // doesnt work"): on a Staff Base piece it comes off you and goes up, the double-click store's rule (TradeSuits);
-            // a house's furniture still asks you to take it off first.
+            // A worn piece dragged from the paper doll
             if (equipped && !StaffBaseHooks.Is(d.Hook)) { Refuse(p, itemGuid, $"Take off the {item.Name} first."); return; }
             if (!MayHang(p, d)) { Refuse(p, itemGuid, $"Only someone with storage rights in this house can put things on the {spec.Name.ToLowerInvariant()}."); return; }
             if (item is Container) { Refuse(p, itemGuid, $"Empty packs and chests do not go on the {spec.Name.ToLowerInvariant()}."); return; }
@@ -915,9 +818,7 @@ namespace RevivalGuard
                     if (!s_Copies.TryGetValue(itemGuid, out var hit)) return true;
                     var d = hit.d;
                     var copy = Shown(d, itemGuid);
-                    // EVERY USE ENDS WITH UseDone, as ACE's own HandleActionUseItem does. Without it the
-                    // client's use stays busy: the owner's 2026-09-29 log, "the server never finished
-                    // use 0x8000114B Wooden Figure (12 s, no UseDone)".
+                    // Every use ENDS with UseDone, as ACE's own HandleActionUseItem does.
                     if (copy == null) { __instance.SendUseDoneEvent(); return false; }
                     __instance.CreateMoveToChain(copy, ok =>
                     {
@@ -992,9 +893,7 @@ namespace RevivalGuard
             lock (d.Lock)
             {
                 var list = realGuid != 0 ? d.Items.Where(i => i.Guid.Full == realGuid).ToList() : d.Items.ToList();
-                // A BARE FIGURE HAS NOTHING TO GIVE BACK. This used to Refresh, which destroys the
-                // figure and makes a new one (a new guid on every double-click), and said nothing; the
-                // owner double-clicked it expecting to dress it (2026-09-29). Say how instead.
+                // A bare figure HAS nothing to give back.
                 if (list.Count == 0 && realGuid == 0 && d.Wcid == STAND)
                 {
                     Say(p, StaffBaseHooks.Is(d.Hook)
@@ -1039,17 +938,14 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>How many pieces the furniture holds. An armor stand's figure takes 9 (a suit of armor); a Staff Base
-        /// stand takes 16, so a whole suit with its underclothes fits for TradeSuits.</summary>
+        /// <summary>How many pieces the furniture holds.</summary>
         static int Limit(Display d) => d.Wcid == STAND ? (StaffBaseHooks.Is(d.Hook) ? 16 : 9) : s_Spec[d.Wcid].Slots.Length;
 
         // ------------------------------------------------------------------ trading suits (the Staff Base's stands)
 
         static readonly System.Reflection.MethodInfo s_WieldCheck = AccessTools.Method(typeof(Player), "CheckWieldRequirements");
 
-        // THE FIGURE'S HANDS (owner 2026-11-06: stands "also hold weapons and a shield, so a stand can show a full outfit
-        // with the weapon in hand and the shield on the arm"). Their own two places, apart from the 9 (house) or 16 (Staff
-        // Base) pieces of armor and clothing, kept in SLOT as 100 and 101.
+        // The figure's hands.
         const int HAND_WEAPON = 100, HAND_SHIELD = 101;
 
         static bool IsShieldItem(WorldObject i) => i.ItemType == ItemType.Armor && ((i.ValidLocations ?? EquipMask.None) & EquipMask.Shield) != 0;
@@ -1081,9 +977,7 @@ namespace RevivalGuard
             return (EquipMask.MeleeWeapon, Placement.RightHandCombat, ParentLocation.RightHand);
         }
 
-        /// <summary>Two pieces that cannot be worn together. ACE's rule (Creature.GetEquippedItems): armor and clothing clash
-        /// by coverage (ClothingPriority), not by slot bits: a shirt and pants share AbdomenWear and boots and pants
-        /// LowerLegWear, yet a character wears them together (ticket 261118-0012).</summary>
+        /// <summary>Two pieces that cannot be worn together.</summary>
         static bool SameBodyPart(WorldObject a, WorldObject b)
         {
             if (a is Clothing && b is Clothing && a.ClothingPriority != null && b.ClothingPriority != null)
@@ -1095,19 +989,11 @@ namespace RevivalGuard
         static bool StandPiece(WorldObject item)
         {
             const EquipMask worn = EquipMask.Armor | EquipMask.Clothing | EquipMask.HeadWear | EquipMask.HandWear | EquipMask.FootWear
-                        | EquipMask.Cloak;   // cloaks too (owner M5 261103-0003, "capes are also not able to be worn on armor stands")
+                        | EquipMask.Cloak;   // cloaks too
             var loc = item.ValidLocations ?? EquipMask.None;
             return (item.ItemType & (ItemType.Armor | ItemType.Clothing)) != 0 && (loc & worn) != 0 && (loc & EquipMask.Shield) == 0;
         }
 
-        /// <summary>THE OWNER'S WARDROBE (owner 2026-11-02: "give me armor housing items so I can line up my suits of armor and
-        /// choose them from the mannequin as i see fit"). On a Staff Base armor stand a double-click on the figure TRADES SUITS:
-        /// the armor and clothing you wear go up on the figure, and the figure's suit comes to you and is put on (ACE's own
-        /// wield, with its requirements; a piece that cannot be worn stays in the pack). An empty figure just takes your suit
-        /// (store it); wearing nothing, you just take the figure's suit back. The main-hand weapon and the shield go with the suit
-        /// (owner 2026-11-06); jewelry and a dual-wielded off-hand weapon stay where they are.
-        /// The pieces are the real items throughout (enchantments, attunement and ownership go with them, as on any stand),
-        /// saved at each step. Player houses' stands keep the double-click take-down (TakeDown).</summary>
         static void TradeSuits(Player p, Display d)
         {
             lock (d.Lock)
@@ -1156,8 +1042,6 @@ namespace RevivalGuard
                 }
 
                 // 3. the figure's suit comes to your pack now, and is put on a second later in its own step: the client
-                //    takes a wield only for an item it has already been sent (box 2026-11-02: wielded in the same tick as
-                //    its create, the server had it worn and the client still listed it in the pack)
                 var packed = new List<WorldObject>();
                 foreach (var real in theirs)
                 {
@@ -1196,8 +1080,7 @@ namespace RevivalGuard
                                 if (p.FindObject(real.Guid.Full, Player.SearchLocations.MyInventory, out _, out _, out bool on) == null || on) continue;   // moved or worn since
                                 var why = s_WieldCheck?.Invoke(p, new object[] { real }) is WeenieError we ? we : WeenieError.None;
                                 var wantLoc = HandSlot(real) != null ? HandPose(real).loc : real.ValidLocations;
-                                // ACE's own rule (Creature.WieldedLocationIsAvailable: clothing by coverage), not slot bits: a shirt
-                                // and pants both list AbdomenWear, boots LowerLegWear, yet go on together (ticket 261118-0012)
+                                // ACE's own rule, not slot bits: a shirt and pants both list AbdomenWear, boots LowerLegWear, yet go on together
                                 if (why == WeenieError.None && wantLoc is EquipMask loc && loc != EquipMask.None
                                     && p.WieldedLocationIsAvailable(real, loc))
                                     p.HandleActionGetAndWieldItem(real.Guid.Full, loc);
@@ -1225,9 +1108,7 @@ namespace RevivalGuard
             return 0;
         }
 
-        /// <summary>A gem on the shelf is used as it would be from a pack (Gem.UseGem): a summoning
-        /// gem opens its portal in front of the user, a sending gem sends them, and one is used up.
-        /// Anyone let into the house may use it; that is what the shelf is for.</summary>
+        /// <summary>A gem on the shelf is used as it would be from a pack</summary>
         static void UseGem(Player p, Display d, uint realGuid)
         {
             WorldObject gem;
@@ -1259,8 +1140,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Double-click on the furniture with hooks off: what it holds, and how to use it.
-        /// (Hook.ActOnUse redirects to the item's OnActivate after Hooker's permission checks.)</summary>
+        /// <summary>Double-click on the furniture with hooks off: what it holds, and how to use it.</summary>
         [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.OnActivate))]
         static class Status
         {
@@ -1301,11 +1181,7 @@ namespace RevivalGuard
         const uint HUMAN = 0x02000001;       // the figure's setup, which every ClothingTable keys on
         const uint WOOD_BASE = 0x01FF0510;   // wooden stand-ins for human parts 0-16
 
-        /// <summary>THE FIGURE'S LOOK: Creature.CalculateObjDesc's clothing pass, run on the copies
-        /// it wears. Clothes first, then armour bottom layer to top, each ClothingTable's parts,
-        /// textures and palettes for the human setup; then any expansion item's own part rows (as
-        /// ACE's ApplyOwnAnimParts does for a wearer); then WOOD on every part 0-16 nothing covers,
-        /// the head included (a helm's part replaces the head, so a helmed figure has the helm's).</summary>
+        /// <summary>The figure's look: Creature.CalculateObjDesc's clothing pass, run on the copies it wears.</summary>
         [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.CalculateObjDesc))]
         static class FigureDress
         {

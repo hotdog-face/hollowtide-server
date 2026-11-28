@@ -8,17 +8,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// "YOU ARE NOT TRAINED IN THAT SKILL" NAMES THE SKILL (owner, 2026-09-26: "trying to tailor, it
-    /// says You are not trained in that skill. can it say the skill im not trained in so its more
-    /// clear"). Ours. ACE's RecipeManager.GetRecipeChance sends WeenieError 0x043B, a fixed string
-    /// with no room for a name.
-    ///
-    /// This prefix runs the same check first, in the same order (tinkering has its own path; a
-    /// recipe with no difficulty needs no skill; pre-MoA skills fold into their MoA form). When it
-    /// fails it says which skill, and returns null exactly as the original would. Every other case
-    /// runs ACE's own method untouched.
-    /// </summary>
     [HarmonyPatch(typeof(RecipeManager), nameof(RecipeManager.GetRecipeChance))]
     static class NamedTradeSkill
     {

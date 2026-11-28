@@ -16,27 +16,12 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// KNOCKBACK. Ours, not retail: AC never had it. Owner, playtest 2026-09-29, of the
-    /// Unbound Queen: "some sort of knockback ... where a boss causes ... something to be afraid of".
-    ///
-    /// A player's position is the client's to report, so the server cannot shove one. It asks: a
-    /// hit from a listed creature that takes at least a set share of the player's health sends
-    /// "knock" on the mod channel with a world velocity (AC axes: x east, y north, z up, m/s), and our
-    /// client hands that to its physics body the way a jump leaves the ground. Retail clients never
-    /// read the channel and are never sent it, so they are simply not knocked. The movement guard is
-    /// credited with the distance first, so the landing is not refused as a speed cheat.
-    ///
-    /// Switch `rg_knockback`, default OFF (tools/gpubox-ace/live-switch.sh). `@knockme [m/s]` (admin)
-    /// knocks you backwards to feel it.
-    /// </summary>
+    /// <summary>Knockback.</summary>
     public static class Knockback
     {
         public const string P_ON = "rg_knockback";
 
-        /// <summary>Which creatures knock, how hard, and how big a hit must be: horizontal m/s, lift
-        /// m/s, and the share of the target's maximum health one hit has to take. First-pass tuning:
-        /// 7 m/s out and 3 m/s up is about 0.6 s in the air and 4 m of ground.</summary>
+        /// <summary>Which creatures knock, how hard, and how big a hit must be</summary>
         static readonly Dictionary<uint, (float h, float up, float frac)> KNOCKERS = new Dictionary<uint, (float, float, float)>
         {
             [900803] = (6f, 2.5f, 0.10f),  // The Unbound Queen
@@ -61,7 +46,7 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] Knockback: {KNOCKERS.Count} knockers, {(On ? "ON" : "off")} ({P_ON}), @knockme");
         }
 
-        /// <summary>Is this a hit that knocks? Called after the damage has landed.</summary>
+        /// <summary>Is this a hit that knocks?</summary>
         internal static void OnHit(Player p, WorldObject source, int damage)
         {
             if (p == null || source == null || damage <= 0 || p.IsDead || !On) return;
@@ -81,8 +66,16 @@ namespace RevivalGuard
             return Send(p, Vector3.Normalize(dir) * h + new Vector3(0f, 0f, up));
         }
 
-        /// <summary>Knock a player away from a point in the same landblock (a slam's centre, say),
-        /// if the switch is on.</summary>
+        /// <summary>Knock a player along a heading (world axes; a staff spell's bolt, ExperimentalSpells).</summary>
+        public static bool PushAlong(Player p, Vector3 dir, float h, float up)
+        {
+            if (p?.Location == null) return false;
+            dir.Z = 0f;
+            if (dir.LengthSquared() < 0.0001f) dir = -Facing(p);
+            return Send(p, Vector3.Normalize(dir) * h + new Vector3(0f, 0f, up));
+        }
+
+        /// <summary>Knock a player away from a point in the same landblock (a slam's centre, say), if the switch is on.</summary>
         public static bool PushFrom(Player p, Vector3 point, float h, float up)
         {
             if (p?.Location == null || !On) return false;
@@ -102,13 +95,10 @@ namespace RevivalGuard
         static bool Send(Player p, Vector3 v)
         {
             if (p.Session == null || !ModChannel.Capable(p.Session)) return false;
-            // Credit the movement guard with the flight before the client moves: the budget refills at
-            // run speed, and a knock is faster than a run.
+            // Credit the movement guard with the flight before the client moves: the budget refills at run speed, and a knock is faster than a run.
             if (MovementGuard.s_State.TryGetValue(p, out var st)) st.Budget += new Vector2(v.X, v.Y).Length() * 1.5f + 2f;
             MoveGuard.Credit(p, new Vector2(v.X, v.Y).Length() * 1.5f + 2f);
-            // A KNOCK BREAKS YOUR ATTACK (owner, 2026-09-29: "knockback should cancel a players attacks when
-            // hit with it"). ACE's own cancel, the one the client's Cancel Attack message calls: a swing in
-            // progress is marked cancelled and the auto-repeat stops, so the player has to re-engage.
+            // A knock breaks your attack.
             p.HandleActionCancelAttack();
             ModChannel.Send(p.Session, "knock", string.Format(CultureInfo.InvariantCulture, "{0:F3} {1:F3} {2:F3}", v.X, v.Y, v.Z));
             return true;
@@ -130,8 +120,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Monster melee lands through this overload (Monster_Melee.cs:108). The patch's Prepare
-    /// registers the feature, so Mod.cs needs no line for it.</summary>
+    /// <summary>Monster melee lands through this overload (Monster_Melee.cs:108).</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.TakeDamage), new Type[] { typeof(WorldObject), typeof(DamageEvent) })]
     static class KnockbackOnHit
     {
@@ -139,7 +128,7 @@ namespace RevivalGuard
         static void Postfix(Player __instance, WorldObject source, int __result)
         {
             try { Knockback.OnHit(__instance, source, __result); }
-            catch (Exception e) { TickGuard.Report("Knockback", e); }   // landblock thread: never let it reach the world loop
+            catch (Exception e) { TickGuard.Report("Knockback", e); }
         }
     }
 }

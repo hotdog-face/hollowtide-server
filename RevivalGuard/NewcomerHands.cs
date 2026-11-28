@@ -9,16 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// NO PASSING ITEMS ON UNTIL LEVEL 10 (owner 2026-10-23). A free browser guest per tab, and as many characters per
-    /// account as it likes, made every per-character freebie farmable: the Pathwarden turn-in rewards, the Founder's
-    /// Banner (one per account, hookable so not attuned), the 10,000 starting pyreals of ACE's starter gear. A character
-    /// under level 10 cannot give an item to another player, put one in a trade, drop one, or put one into a container it
-    /// does not carry (a chest or a corpse on the ground). Giving to NPCs (quest turn-ins), selling to vendors, picking up
-    /// and receiving are untouched; staff are exempt. What a newcomer sells is not put up for resale (ACE lists a sold item for
-    /// anyone to buy for vendor_unique_rot_time): a sale to a vendor with a second tab buying it back was a give.
-    /// DIVERGENCES row "Newcomers keep their items"; docs/findings/freebie-audit-2026-10-24.md.
-    /// </summary>
+    /// <summary>No passing items on until level 10.</summary>
     static class NewcomerHands
     {
         internal const int LEVEL = 10;
@@ -85,9 +76,7 @@ namespace RevivalGuard
         }
     }
 
-    // THE STACK PATHS (ticket 261024-0041 audit). A split or a merge moves items without DropItem or PutItemInContainer:
-    // split part of a stack to the ground (9,999 of the 10,000 starting pyreals), split it into a chest, or merge a
-    // carried stack into one sitting in a chest. Between the player's own packs, and anything taken out, stays free.
+    // The stack paths.
     [HarmonyPatch(typeof(Player), nameof(Player.HandleActionStackableSplitTo3D))]
     static class NewcomerHandsSplitDrop
     {

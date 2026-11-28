@@ -10,18 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ELEMENTAL KNIGHT ARMOUR (owner 2026-11-27; ElementalKnightRule has the ids, the colours and the rates).
-    ///   - The colour, ON whenever our tables are served (rg_custom_clothing): in a creature's ObjDesc (players,
-    ///     mannequins, the Dressing Room), every worn piece whose ClothingBase is one of ours has its knight textures drawn
-    ///     in its PaletteTemplate: an element tint or the dye a player put on it (ACE's dye recipes copy the dye's template
-    ///     onto a Dyable piece). Natural pieces are left as retail's own texture.
-    ///   - The drops, switch rg_elemental_knights, default OFF: an Empyrean knight or guard (ElementalKnightRule.Knights)
-    ///     killed by a player rolls once for a piece of its own finish and colour (Guardians 15%, packs 2%) and once for
-    ///     its finish's token (10%); a Flame or Water Guardian kill opens the keeper's gate (ElemKnightSlain0-3).
-    ///     elemental_knight_drop_force (1-100) replaces the piece and token rates, for tests.
-    /// The keeper's trade (nine tokens for the next piece, weekly) is data: tools/gpubox-ace/gen_elemental_knight.py.
-    /// </summary>
+    /// <summary>Elemental knight armour. - The colour, ON whenever our tables are served</summary>
     static class ElementalKnights
     {
         internal const string P_ON = "rg_elemental_knights", P_FORCE = "elemental_knight_drop_force";

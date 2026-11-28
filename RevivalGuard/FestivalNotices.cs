@@ -20,23 +20,7 @@ using Festival = RevivalGuard.SeasonalCalendar.Festival;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// TELL PEOPLE (seasonal improvement #1, owner-approved 2026-10-21). Festivals used to turn on with one
-    /// broadcast to whoever was online at that minute, and none at all if the shard restarted across the boundary.
-    ///
-    ///   Login: every player, while a festival runs, "Festival Season is on in Dereth until Nov 1 (11 days left)."
-    ///          plus where to find it (the table's Hint); within 7 days before one, "X begins in N days."
-    ///   World: a broadcast when a festival starts, 24 h before it ends (festivals longer than a day), and when it
-    ///          ends. Starts and ends also go to Discord #announcements (DiscordBridge.Announce).
-    ///
-    /// WHAT WAS SAID IS REMEMBERED in SeasonalAnnounced.json beside SeasonalOverrides.json, per festival: which
-    /// window (its first day) and whether its start, reminder and end were said. So a restart mid-festival says
-    /// nothing, and a start or end that fell while the shard was down is said when it comes back (an end only
-    /// within 48 h). No file (the first boot with this code): the current state is recorded silently.
-    ///
-    /// PUBLIC STATE is the calendar's window, minus a festival a person forced off. Forcing one ON outside its
-    /// window is a staff test and is never announced; a forced-off festival is not said to end.
-    /// </summary>
+    /// <summary>Tell people.</summary>
     public static class FestivalNotices
     {
         const string STATE_FILE = "SeasonalAnnounced.json";
@@ -72,7 +56,7 @@ namespace RevivalGuard
 
         internal static DateTime LocalOf(DateTime utc) => utc.AddHours(SeasonalCalendar.RETAIL_UTC_OFFSET_HOURS);
 
-        /// <summary>The window containing this local day: its first and last days. False outside every window.</summary>
+        /// <summary>The window containing this local day: its first and last days.</summary>
         internal static bool Window(Festival f, DateTime day, out DateTime first, out DateTime last)
         {
             first = last = day.Date;
@@ -136,10 +120,7 @@ namespace RevivalGuard
             return lines;
         }
 
-        /// <summary>
-        /// Compare the calendar with what was last said and return what to say now, updating state. seed: record
-        /// the present silently (no state file yet). changed: whether state needs saving.
-        /// </summary>
+        /// <summary>Compare the calendar with what was last said and return what to say now, updating state. seed</summary>
         internal static List<Notice> Decide(Dictionary<string, Record> state, DateTime utcNow, Func<Festival, bool?> forced, bool seed, out bool changed)
         {
             changed = false;

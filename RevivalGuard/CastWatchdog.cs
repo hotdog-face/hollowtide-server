@@ -6,32 +6,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A cast that never finishes leaves the caster "too busy" for good (player report, Owls 2026-10-22: "Sometimes
-    /// casting will glitch out and you'll become too busy to do anything instead of fizzle").
-    ///
-    /// Every character here is a PK type (pk_server), so ACE runs the FastTick cast: event driven, finished only by
-    /// the server body's motion-done callback for the cast gesture (Player_Magic HandleMotionDone_Magic) or by a turn
-    /// completing (OnMoveComplete_Magic). MagicState.OnCastStart sets IsBusy and IsCasting and nothing times them
-    /// out (Entity/MagicState.cs has no timeout), so if that callback is lost (the motion queue cleared under the
-    /// cast, an interrupted turn), every later cast, use and attack answers "You're too busy!" until relog. The fast
-    /// chug has the same shape (FINDINGS-overnight-reports.md 0043).
-    ///
-    /// The rescue: a cast still running CAST_STUCK seconds after it started is failed the way ACE fails one
-    /// (UseDone YourSpellFizzled, OnCastDone clears IsBusy; no mana or components spent). Not while ACE is waiting on
-    /// purpose for the player to let go of a held turn key (PendingTurnRelease). A legit cast, turn included, takes
-    /// 1-4 s. Runs on PlayerManager.Tick (TeleportWatchdog explains why not Heartbeat); the fail itself is queued
-    /// on the player's own action queue so it runs on the thread that owns the cast. Switch: rg_cast_watchdog.
-    /// With the server body off walkable ground (ServerFooting) neither the turn nor the gesture can play, so a cast is
-    /// failed once the body has been off it cast.unfooted_seconds (2 s), not after the full 10 s (report 261023-0014).
-    /// On walkable ground a gesture with no motion-done past its own length plus cast.footed_grace_seconds (1 s; 3 s until 261107-0013) is finished
-    /// the way that callback finishes it, so the spell lands (report 261024-0003, CastWatchdogRule.FinishNow).
-    /// A cast in its turn with the body standing still on walkable ground and the heading fixed for 1.5 s will never
-    /// complete the turn (261029-0010, often on a slope): it ends then, with no mana or components spent
-    /// (CastTurnStallRule, switch rg_cast_turn_stall). Checked every 0.25 s so the 1.5 s is not rounded up to 3.
-    /// A turn that keeps turning without arriving (3 s+ turning, over 360 degrees in all; a turn to a target is at most
-    /// 180) ends the same way (CastTurnStallRule.SpinNow, switch rg_cast_turn_spin, cast.spin_seconds / cast.spin_degrees).
-    /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class CastWatchdog
     {
@@ -42,9 +16,7 @@ namespace RevivalGuard
         static double SPIN_DEGREES => Tunables.D("cast.spin_degrees", CastTurnStallRule.SpinDegrees);
         static double CAST_STUCK => Tunables.D("cast.stuck_seconds", 10.0);
         static double UNFOOTED => Tunables.D("cast.unfooted_seconds", 2.0);
-        // 1 s, was 3 (ticket 261107-0013): Mark the Noble's self heals stalled this way 171 times in one night (gesture 0.3 s,
-        // finished at 3.3-3.4 s), so each heal took about 5.8 s from cast to cast and could not keep up with an Armored
-        // Tusker. A body whose gesture has not finished a second past its own length is not going to finish it.
+        // 1 s, was 3: Mark the Noble's self heals stalled this way 171 times in one night
         static double FOOTED_GRACE => Tunables.D("cast.footed_grace_seconds", 1.0);
         static double s_Next;
         static readonly System.Collections.Generic.Dictionary<uint, double> s_Unfooted = new System.Collections.Generic.Dictionary<uint, double>();
@@ -53,16 +25,14 @@ namespace RevivalGuard
         {
             public int CastNum; public double At, Since = double.NaN; public float Heading; public ACE.Server.Physics.Common.Position Pos;
             public double SpinSince = double.NaN, Turned;   // CastTurnStallRule.Spin: turning since, degrees turned in all
-            // for the 10 s line: why the turn-stall rule did not end this cast (audit 2026-11-09: 7 of 11 full fizzles read
-            // "turning True, velocity 0, walkable" and the rule fired once)
+            // for the 10 s line: why the turn-stall rule did not end this cast
             public double Rate, Speed, MaxRate, MaxSpeed; public int Samples, StalledSamples;
             public string Describe() => Samples == 0 ? "turn watch: no samples"
                 : $"turn watch: {StalledSamples}/{Samples} samples stalled, heading rate {Rate:F0} (max {MaxRate:F0}) deg/s, speed {Speed:F2} (max {MaxSpeed:F2}) m/s";
         }
         static readonly System.Collections.Generic.Dictionary<uint, TurnSample> s_Turn = new System.Collections.Generic.Dictionary<uint, TurnSample>();
 
-        // Diagnostics only (cast-spin audit 2026-11-10, H1): per cast, how often ACE restarted its turn and what the client sent
-        // meanwhile. Written only while casting (IsCasting first: no lookup otherwise); see CastProbe for the threads.
+        // Diagnostics only: per cast, how often ACE restarted its turn and what the client sent meanwhile.
         static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Player, CastProbe> s_Probe =
             new System.Runtime.CompilerServices.ConditionalWeakTable<Player, CastProbe>();
 
@@ -202,9 +172,7 @@ namespace RevivalGuard
                 Mod.Log.Warn($"[RevivalGuard] cast watchdog: {p.Name} (0x{p.Guid.Full:X8}) cast #{castNum} {why} "
                     + $"({age:F1}s into the cast; heading {heading:F0}, velocity {po.Velocity.Length():F2}, {ProbeLine(p, castNum)}, {ServerFooting.Describe(p)}): ended, nothing spent");
                 BusyLedger.Note(p, $"cast watchdog: cast #{castNum} {why}, ended at {age:F1}s");
-                // FailCast(tryFizzle: false) without its DoCastSpell_Inner: no mana, no components; the fizzle answer so the
-                // client and the assistant see the cast end. OnCastDone first, so the cancelled turn's OnMoveComplete_Magic
-                // finds no cast to carry on.
+                // FailCast without its DoCastSpell_Inner: no mana, no components; the fizzle answer so the client and the assistant see the cast end.
                 p.SendUseDoneEvent(ACE.Entity.Enum.WeenieError.YourSpellFizzled);
                 m.OnCastDone();
                 try { po.cancel_moveto(); } catch (System.Exception e) { Mod.Log.Warn($"[RevivalGuard] cast watchdog: cancel turn: {e.Message}"); }
@@ -234,7 +202,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Counts ACE's cast turn (re)starts for CastWatchdog's probe. Diagnostics only: a prefix that returns nothing.</summary>
+    /// <summary>Counts ACE's cast turn (re)starts for CastWatchdog's probe.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.TurnTo_Magic))]
     static class CastProbeTurnTo
     {

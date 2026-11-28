@@ -3,14 +3,7 @@ using System.Collections.Generic;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of a fellowship's listing on the Looking for Group board (LfgBoard; owner 2026-11-21: "let players
-    /// join the group from that ui panel"). No ACE types: tools/nettest compiles it by path (LfgListingCase.cs).
-    /// A leader lists the fellowship with a short note and picks how others get in:
-    ///   open      Join adds them at once (FellowPassword.TryJoin with no password: same checks as a password join)
-    ///   password  Join asks for the fellowship password (/fpass) inline
-    ///   request   Ask sends the leader a Yes/No (LfgBoard.RequestJoin), the board's original behaviour and the default
-    /// </summary>
+    /// <summary>The pure part of a fellowship's listing on the Looking for Group board.</summary>
     public static class LfgListingRule
     {
         public const string OPEN = "open", PASSWORD = "password", REQUEST = "request";
@@ -27,8 +20,6 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>What the board shows and Join does: a password listing whose password was cleared (a new leader, /fpass
-        /// off) falls back to request, never to open.</summary>
         public static string Effective(string chosen, bool hasPassword)
         {
             if (chosen == OPEN) return OPEN;
@@ -44,7 +35,7 @@ namespace RevivalGuard
             return hi == 0 ? (1, 1) : (lo, hi);
         }
 
-        /// <summary>The chat line a leader reads after picking a mode. No em dashes (player text).</summary>
+        /// <summary>The chat line a leader reads after picking a mode.</summary>
         public static string ModeLine(string mode, bool listed) => mode switch
         {
             OPEN => listed ? "Your fellowship is listed open: anyone can join from the Looking for Group list."

@@ -3,11 +3,7 @@ using System.Collections.Generic;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of the Pancake House diner (Diner.cs; no ACE types: tools/nettest compiles it by path, DinerCase.cs):
-    /// the menu, the hours (breakfast rush, quiet nights, stools up late), the special of the day, the well-fed rule,
-    /// the contest's day and its best, and the tip tiers. Every line a player can read is here. No em dashes.
-    /// </summary>
+    /// <summary>The pure part of the Pancake House diner</summary>
     public static class DinerRule
     {
         // ---- the menu (tools/gpubox-ace/gen_diner.py makes these weenies; the prices are their values, Bo Lin sells at 1.0)
@@ -26,7 +22,7 @@ namespace RevivalGuard
             PIE => "Gladys's Apple Pie", COFFEE => "Diner Coffee", _ => "the special",
         };
 
-        // ---- the hours (Dereth's 16: 0-4 night, 5-8 the breakfast rush, 9-12 midday, 13-15 evening) ----
+        // ---- the hours ----
         public enum Hours { Night, Rush, Midday, Evening }
 
         public static Hours HoursOf(int derethHour)
@@ -37,8 +33,7 @@ namespace RevivalGuard
             return Hours.Night;
         }
 
-        /// <summary>How many of the three regulars sit in their booths: all three at the rush, two at midday, one (always
-        /// Old Tsuyoshi, the first) in the evening, none at night.</summary>
+        /// <summary>How many of the three regulars sit in their booths</summary>
         public static int RegularsIn(Hours h) => h switch { Hours.Rush => 3, Hours.Midday => 2, Hours.Evening => 1, _ => 0 };
 
         /// <summary>Seconds Gladys waits at her post between rounds of the tables: busy at the rush, slow at night.</summary>
@@ -53,26 +48,24 @@ namespace RevivalGuard
         /// <summary>Late at night the stools go up on the counter.</summary>
         public static bool StoolsUp(Hours h) => h == Hours.Night;
 
-        // ---- the special of the day (Pacific days: the owner's day) ----
+        // ---- the special of the day ----
         static readonly uint[] SPECIALS = { TALL_STACK, EGGS, SPECIAL_PLATE, PIE, SHORT_STACK };
 
-        /// <summary>Days since 2026-01-01 (any fixed epoch: only the change at midnight matters).</summary>
         public static int DayNumber(DateTime localDate) => (int)(localDate.Date - new DateTime(2026, 1, 1)).TotalDays;
 
-        /// <summary>Today's special: one of the meals, a different one each day (never coffee), in a fixed round.</summary>
+        /// <summary>Today's special: one of the meals, a different one each day, in a fixed round.</summary>
         public static uint Special(int day) => SPECIALS[((day % SPECIALS.Length) + SPECIALS.Length) % SPECIALS.Length];
 
         public static string SpecialLine(int day) => $"Today's special is the {MealName(Special(day))}. Eat it at a booth and Gladys brings you a coffee on the house.";
 
-        // ---- well fed (owner: "a little health and stamina regen for ~30 min ... modest and non-stacking") ----
+        // ---- well fed ----
         public const uint REGEN_I = 165, REJUV_I = 54;      // Regeneration Self I, Rejuvenation Self I (retail spells)
         public const double FED_S = 1800;                   // half an hour
-        public const float AT_TABLE_M = 2.8f, AT_STOOL_M = 0.9f;   // a player at a booth's open end stands ~2.3 m from its middle (box shard3, 2026-11-17)
+        public const float AT_TABLE_M = 2.8f, AT_STOOL_M = 0.9f;   // a player at a booth's open end stands ~2.3 m from its middle
         public const string FED_LINE = "You feel well fed. Your health and stamina come back a little faster for half an hour.";
         public const string NOT_SEATED_LINE = "Eat it at a booth or the counter and you would feel well fed.";
 
-        /// <summary>At a booth: within AT_TABLE_M of a booth table's middle (its benches and open ends), or AT_STOOL_M of a
-        /// counter stool, and inside the hall.</summary>
+        /// <summary>At a booth: within AT_TABLE_M of a booth table's middle, or AT_STOOL_M of a counter stool, and inside the hall.</summary>
         public static bool Seated(float x, float y, IList<(float x, float y)> tables, IList<(float x, float y)> stools, float hx0, float hy0, float hx1, float hy1)
         {
             if (x < hx0 || x > hx1 || y < hy0 || y > hy1) return false;
@@ -99,7 +92,7 @@ namespace RevivalGuard
 
         public static string ChampionLine(string name, int eaten) => $"{name} ate {eaten} pancakes in a minute: the best today! Hungry Hungry Hippo!";
 
-        /// <summary>Does this result take the day's best? Strictly more than the day's best (a tie keeps the first).</summary>
+        /// <summary>Does this result take the day's best?</summary>
         public static bool NewDayBest(int dayOfBest, int today, int best, int eaten) => eaten > 0 && (dayOfBest != today || eaten > best);
 
         // ---- tips for Gladys ----
@@ -141,7 +134,7 @@ namespace RevivalGuard
         public static readonly string[] COOK_BELL = { "Order up!", "Order up! Pick it up while it's hot!" };
         public static readonly string[] CLERK_IDLE = { "Coffee's fresh!", "Pancake Challenge, anyone? One minute, all you can eat." };
 
-        /// <summary>Two-voice exchanges: (who speaks, line). "regular1" is Old Tsuyoshi, who always says his eggs are cold.</summary>
+        /// <summary>Two-voice exchanges: (who speaks, line).</summary>
         public static readonly (string Who, string Line)[][] EXCHANGES =
         {
             new[] { ("regular1", "Gladys, these eggs are cold."), ("gladys", "They were hot when they left the kitchen, hon.") },

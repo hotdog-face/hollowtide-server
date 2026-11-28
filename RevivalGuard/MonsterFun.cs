@@ -23,22 +23,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// MONSTER FUN (owner, 2026-11-03: monsters that add fun, not frustration; docs/MONSTER-FUN.md). Ours, not retail.
-    /// Three parts, each on its own switch, all default OFF:
-    ///
-    ///   rg_champions           a rare generator spawn becomes a named champion: more health, a little more damage,
-    ///                          one family trick, an extra loot roll a tier up, a named trophy, a server line on death.
-    ///                          One per landblock, none where one player has been farming (the busy rule).
-    ///   rg_boss_phases         per-boss table: at 50 % and 25 % a boss changes swing speed, spells, weakness, or
-    ///                          calls helpers. Beside the world data's own phase lines and WorldBoss.cs's extras.
-    ///   rg_boss_heavy_attacks  one telegraphed area hit per boss: line + boss_shadowfall, 3.5 s wind-up, then a hit
-    ///                          round where the boss stood. Never lethal on its own; walk out and it misses.
-    ///
-    /// Hooks: WorldObject.EnterWorld prefix (champion roll, before the client first sees the name), Creature.Monster_Tick
-    /// postfix (tricks, phases, heavy attacks), Creature.GenerateTreasure postfix (champion loot), Creature.OnDeath
-    /// postfix (server line, busy-rule kill log). Every target is declared where patched; misses are logged, not thrown.
-    /// </summary>
+    /// <summary>Monster fun.</summary>
     static class MonsterFun
     {
         public const string P_CHAMP = "rg_champions", P_PHASES = "rg_boss_phases", P_HEAVY = "rg_boss_heavy_attacks";
@@ -83,7 +68,7 @@ namespace RevivalGuard
 
         internal sealed class BossSpec { public string Name; public Phase[] Phases; public Heavy Heavy; }
 
-        /// <summary>The first set (docs/MONSTER-FUN.md). Adding a boss is one more entry.</summary>
+        /// <summary>The first set (docs/MONSTER-FUN.md).</summary>
         internal static readonly Dictionary<uint, BossSpec> Bosses = new Dictionary<uint, BossSpec>
         {
             [WorldBoss.BAEL] = new BossSpec
@@ -228,7 +213,7 @@ namespace RevivalGuard
         }
 
         static bool Eligible(Creature c) =>
-            c.WeenieClassId < 900000                              // never our own creatures (bosses, event and staff content)
+            c.WeenieClassId < 900000
             && c.Attackable && !(c is CombatPet)
             && (c.Tolerance & (Tolerance.NoAttack | Tolerance.Retaliate)) == 0
             && (c.Level ?? 0) >= D("rg_champion_min_level")
@@ -300,7 +285,7 @@ namespace RevivalGuard
             }
             Mod.Log.Info($"[RevivalGuard] MonsterFun: {ch.Name} loot: {string.Join(", ", items.Select(i => i.Name))} (tier {up.Tier})");
         }
-        const uint TROPHY = 34204;   // Tremendous Monouga Skull: retail, wall hook, no quest or emote uses it (ace_world 2026-11-03)
+        const uint TROPHY = 34204;   // Tremendous Monouga Skull: retail, wall hook, no quest or emote uses it
 
         internal static void OnDeath(Creature c)
         {
@@ -458,7 +443,7 @@ namespace RevivalGuard
                 double ang = 2 * Math.PI * i / n + ThreadSafeRandom.Next(0.0f, 0.6f);
                 var p = c.Location.Pos + new Vector3((float)Math.Cos(ang) * 4f, (float)Math.Sin(ang) * 4f, 0.5f);
                 h.Location = new ACE.Entity.Position(c.Location.Cell, p.X, p.Y, p.Z, 0, 0, 0, 1);
-                h.Lifespan = 600;   // helpers fade after ten minutes, never pile up at a spawn
+                h.Lifespan = 600;
                 if (!h.EnterWorld()) { h.Destroy(); continue; }
                 made++;
                 h.EnqueueBroadcast(new GameMessageScript(h.Guid, PlayScript.Create));
@@ -506,7 +491,6 @@ namespace RevivalGuard
                 float frac = dist <= h.Radius ? h.Frac : dist <= h.Radius + h.Graze ? h.GrazeFrac : 0f;
                 who.Add($"{p.Name} {dist:0.0}m");
                 if (frac <= 0f) continue;
-                // never lethal on its own: it stops at 1 health
                 uint amount = (uint)Math.Min(frac * p.Health.MaxValue, Math.Max(0, (int)p.Health.Current - 1));
                 if (amount == 0) continue;
                 int dealt = p.TakeDamage(c, DamageType.Bludgeon, amount, BodyPart.Chest);

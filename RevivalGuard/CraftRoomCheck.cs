@@ -9,26 +9,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A CRAFT THAT HAS NOWHERE TO PUT ITS RESULT DOES NOT HAPPEN (docs/CRAFTING-ALCHEMY.md, CRAFT-01).
-    ///
-    /// ACE's RecipeManager.CreateDestroyItems destroys the target and the source FIRST and only then
-    /// calls CreateItem, which hands the new object to TryCreateInInventoryWithNetworking and ignores
-    /// the answer. With the main pack and every side pack full (or the burden at its limit) that answer
-    /// is false: the ingredients are already gone and the result is never placed anywhere, so an
-    /// alchemist or cook with a full pack loses both. ACE's own Tailoring checks room first
-    /// (Tailoring.HasAvailableSpace, "You do not have enough pack space to tailor that!"); the
-    /// recipe path never did.
-    ///
-    /// This prefix makes the same check before the roll, for BOTH outcomes that create something
-    /// (success and failure items), and counts a slot as free when the recipe is certain to destroy a
-    /// whole carried stack before the create. When there is no room it says so and the craft is not
-    /// attempted: nothing is consumed and no skill is rolled. Tinkering creates nothing and is left
-    /// alone, as is every craft that has room.
-    ///
-    /// The sentences are ours, in the shape of ACE's tailoring ones; retail's no-room text for a craft
-    /// is not known (HandleFailureEvent @00571990 has none).
-    /// </summary>
     [HarmonyPatch(typeof(RecipeManager), nameof(RecipeManager.HandleRecipe))]
     public static class CraftRoomCheck
     {
@@ -48,7 +28,6 @@ namespace RevivalGuard
             }
             catch (Exception e)
             {
-                // Never let the guard itself break crafting.
                 Mod.Log.Warn($"[RevivalGuard] CraftRoomCheck: {e.Message}");
                 return true;
             }
@@ -70,8 +49,7 @@ namespace RevivalGuard
             Freed(p, source, success ? r.SuccessDestroySourceChance : r.FailDestroySourceChance,
                   success ? r.SuccessDestroySourceAmount : r.FailDestroySourceAmount, containerSlot, ref freedSlots, ref freedBurden);
 
-            // CreateItem makes ONE object whatever the amount (a stackable gets that stack size), so
-            // one slot is always enough.
+            // CreateItem makes one object whatever the amount (a stackable gets that stack size), so one slot is always enough.
             int free = containerSlot ? p.GetFreeContainerSlots() : p.GetFreeInventorySlots();
             if (free + freedSlots < 1) return NoRoom;
 
@@ -80,9 +58,7 @@ namespace RevivalGuard
             return null;
         }
 
-        /// <summary>Room a certain destruction gives back before the create. Only a carried item
-        /// counts (a worn one or one in the world frees no pack slot), and only a whole stack frees
-        /// its slot.</summary>
+        /// <summary>Room a certain destruction gives back before the create.</summary>
         static void Freed(Player p, WorldObject item, double chance, uint amount, bool containerSlot, ref int slots, ref int burden)
         {
             if (chance < 1.0 || item == null) return;

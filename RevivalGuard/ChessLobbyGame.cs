@@ -16,27 +16,10 @@ using R = RevivalGuard.ChessLobbyRule;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE CHESS LOBBY, IN THE GAME (F7 261125-0055..0058 from the live lobby, and the owner's extras of 2026-11-25). All
-    /// behind rg_chess_lobby, on every ACE chess match (placed boards too) unless a line says "temporary board":
-    ///
-    ///   Resign once (0056): a second Quit from the same side is dropped, and a Quit no longer waits behind walking pieces
-    ///   or the computer's move (ACE queues it until they finish, so a click seemed to do nothing and was clicked again).
-    ///   Draw offers (0058): retail's Stalemate button only ever drew when both sides pressed it, and against the computer
-    ///   never (ACE's StalemateDelayed sends nothing to the AI). Now it is an offer: a player gets a Yes/No; the computer
-    ///   takes it only when it is losing or neither side can mate (ChessLobbyRule.AiTakesDraw). A draw is recorded.
-    ///   The end (0057), temporary boards: the pieces leave with an effect and the board too when it is put away.
-    ///   Rematch (temporary boards): colours swapped; the computer at once, a player by Yes/No; the board is reused.
-    ///   Clock (player games on temporary boards): picked in the challenge (none, 10 min, 3 min); out of time loses.
-    ///   Watching: a player near a running game uses its board (or Watch in the lobby) and sees it read-only.
-    ///   News: a win in a counted player game and a chess title earned get one line in General, rate-limited.
-    ///
-    /// Our client hears the game on the mod channel ("chessgame", JSON): names, the moves so far, the clock, the result,
-    /// whether a rematch can be asked, a draw offer waiting. Watchers draw the board from it.
-    /// </summary>
+    /// <summary>The chess lobby, in the game.</summary>
     public static partial class ChessLobby
     {
-        /// <summary>The pieces' and the board's exit (F7 261125-0057). Staff can try others with "/chess fx 0x..".</summary>
+        /// <summary>The pieces' and the board's exit.</summary>
         static PlayScript s_FadeFx = PlayScript.Destroy;
         const double FADE_S = 1.5;
 
@@ -78,7 +61,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ the game, to our clients
 
-        /// <summary>The game as one recipient sees it. <paramref name="res"/> non-null: it is over.</summary>
+        /// <summary>The game as one recipient sees it.</summary>
         static string GameJson(ChessMatch m, Temp t, uint to, string res, bool rematch)
         {
             var w = m.Sides[0]; var b = m.Sides[1];
@@ -122,7 +105,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Running games within reach of <paramref name="me"/> that it is not playing, for the lobby's Watch.</summary>
+        /// <summary>Running games within reach of me that it is not playing, for the lobby's Watch.</summary>
         static List<object> GamesNear(Player me)
         {
             var list = new List<object>();
@@ -143,7 +126,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ seating (new games and rematches)
 
-        /// <summary>Seat a temporary board's sides after <paramref name="delay"/> s: White 0 is the computer moving first.</summary>
+        /// <summary>Seat a temporary board's sides after delay s: White 0 is the computer moving first.</summary>
         static void Seat(Temp t, double delay)
         {
             var chain = new ActionChain();
@@ -306,7 +289,7 @@ namespace RevivalGuard
             FlushNews(now);
         }
 
-        // ------------------------------------------------------------------ resign once (F7 261125-0056)
+        // ------------------------------------------------------------------ resign once
 
         [HarmonyPatch(typeof(ChessMatch), nameof(ChessMatch.QuitEnqueue))]
         static class QuitPatch
@@ -327,8 +310,7 @@ namespace RevivalGuard
                         { PkCommon.Say(player, R.ALREADY_RESIGNED); return false; }
                         if (m.State == ChessState.InProgress) s_Why[board] = "resign";
                     }
-                    // ACE queues a Quit for the board's next heartbeat (seconds), after walking pieces and the computer's
-                    // move: the click seemed to do nothing and was clicked again. End it now, on the board's thread.
+                    // ACE queues a Quit for the board's next heartbeat, after walking pieces and the computer's move
                     var chain = new ActionChain();
                     chain.AddAction(m.ChessBoard, () => { try { m.QuitDelayed(color); } catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] ChessLobby: quit: {e.Message}"); } });
                     chain.EnqueueChain();
@@ -339,7 +321,7 @@ namespace RevivalGuard
             }
         }
 
-        // ------------------------------------------------------------------ draw offers (F7 261125-0058)
+        // ------------------------------------------------------------------ draw offers
 
         [HarmonyPatch(typeof(ChessMatch), nameof(ChessMatch.StalemateEnqueue))]
         static class OfferPatch

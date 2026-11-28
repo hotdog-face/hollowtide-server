@@ -9,26 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A HELM OVER A ROBE'S HOOD (ticket 261120-0019, the owner: a Hearty Reedshark Robe reduced to the chest under a
-    /// Crown of Anointed Blood, "the two hems overlap ... likely an issue with all robes").
-    ///
-    /// Some robes draw a hood: their ClothingTable puts a hooded head model on the head, part 16 (Hearty Reedshark Robe
-    /// 0x100004D6, Marksman's Robe, Enscorcelled Robe, Faran Robe with Hood, Elemental Master Robe, the Jumpsuits...).
-    /// The server's ObjDesc is last-wins per part, and our client and retail's both draw it that way, so:
-    ///   * a helm on part 16 drew under the hood when ACE's order put the robe last (with ArmorLayering's retail order
-    ///     the helm comes after the body pieces and wins);
-    ///   * a crown, circlet, coronet or Rynthid mask is not on part 16 at all (part 22 or 21), so the robe's hood stayed
-    ///     on the head and the crown sat in it: two head pieces at once, whatever the order.
-    /// The hooded robes without a head slot (Reedshark, Marksman's: ValidLocations 0x7F00) met a helm in retail too; the
-    /// ones with it (0x7F01) only once SuitReduction lets them be reduced to the chest. Retail's 2014/2017 captures show
-    /// no crown worn with a hood (none to copy); a part-16 helm over a robe draws the helm.
-    ///
-    /// So here a DRAWN helm wins the head: after ACE's clothing pass, a hooded piece's head model and head textures leave
-    /// the desc, and the head is the helm's, or the wearer's own (ACE's base head, already in the desc). A hidden helm
-    /// (Show Helm off) or one with nothing to draw on this body keeps the hood.
-    ///   @modifybool helm_over_hood false   ACE's desc unchanged
-    /// </summary>
+    /// <summary>A helm over a robe's hood.</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.CalculateObjDesc))]
     static class HelmOverHood
     {

@@ -8,16 +8,7 @@ using ACE.Server.Network.GameMessages.Messages;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// @questlog: the player's own quest registry as machine-readable lines, for the client's quest
-    /// journal (AcJournalHud; docs/PLAYER-FEATURES-2026-09-24.md section 3). Ours.
-    ///
-    /// ACE's /myquests prints the same registry as free text and is off on this shard
-    /// (quest_info_enabled). This is read-only, answers only about the caller, and is open to every
-    /// player: it reveals nothing a player's own client did not already cause. Each line is
-    ///     \u0007QL|flag|solves|lastSolvedUnix|maxSolves|minDeltaSeconds|message
-    /// and the list ends with \u0007QL|END. The client hides every \u0007QL line from chat.
-    /// </summary>
+    /// <summary>@questlog: the player's own quest registry as machine-readable lines, for the client's quest journal.</summary>
     public static class QuestLog
     {
         const string TAG = "\u0007QL|";
@@ -32,8 +23,7 @@ namespace RevivalGuard
         {
             var p = session?.Player;
             if (p == null) return;
-            // OVER THE MOD CHANNEL when this connection reads it (ModChannel): one message, a JSON
-            // array of [flag, solves, lastSolvedUnix, maxSolves, minDeltaSeconds, message].
+            // Over the mod channel when this connection reads it
             if (ModChannel.Capable(session))
             {
                 var sb = new System.Text.StringBuilder("[");

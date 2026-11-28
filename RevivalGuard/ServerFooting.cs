@@ -4,13 +4,7 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// Is the player's SERVER body standing on walkable ground? ACE's MotionInterp.contact_allows_move refuses every
-    /// substate motion (Drink, Eat, Ready, RunForward...) for a creature that is not in Contact and OnWalkable: it only
-    /// sets the interpreted state, queues no animation, so no motion-done ever comes. The fast chug (Drink then Ready)
-    /// and the walk of a use (MoveToManager's RunForward) both wait on exactly that, and nothing times them out.
-    /// docs/findings/use-stuck-2026-10-23.md has the measurement (ACE's own physics driven offline on the box).
-    /// </summary>
+    /// <summary>Is the player's SERVER body standing on walkable ground?</summary>
     static class ServerFooting
     {
         const TransientStateFlags FOOTED = TransientStateFlags.Contact | TransientStateFlags.OnWalkable;
@@ -42,14 +36,10 @@ namespace RevivalGuard
                 var q = po.PartArray?.MotionTableManager?.PendingAnimations;
                 pose = $"{(ACE.Entity.Enum.MotionCommand)(mi?.InterpretedState.ForwardCommand ?? 0)}, queue {q?.Count ?? 0}"
                      + (q != null && q.Count > 0 ? $" ({string.Join(",", q.Select(a => ((ACE.Entity.Enum.MotionCommand)a.Motion).ToString()).Take(4))})" : "")
-                     // the table's substate and the head's link count: Falling on the ground and a swing of 5 links is the
-                     // backlog shape (MotionQueueRule.Backlog, 261117)
+                     // the table's substate and the head's link count: Falling on the ground and a swing of 5 links is the backlog shape
                      + (q != null && q.Count > 0 ? $", table {(ACE.Entity.Enum.MotionCommand)(po.PartArray?.MotionTableManager?.State?.Substate ?? 0)}, head links {q.First.Value.NumAnims}" : "");
             }
             catch { }
-            // THE TICK GATES (261024-0003): a body whose queue never drains on walkable ground is not being advanced at all.
-            // Player.UpdateObjectPhysics -> update_object (CurCell, Parent, Frozen, UpdateTime) -> UpdateObjectInternal
-            // (Active) -> UpdatePositionInternal (Hidden) -> PartArray.Update. Offline every input tried drains it.
             string gate = "";
             try
             {

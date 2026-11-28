@@ -21,24 +21,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// FORGOT PASSWORD (docs/PASSWORD-RECOVERY.md, owner yes 2026-11-07: Olivia thought she had lost her account, and the
-    /// shard holds no player emails). The login screen sends a request with the account name, a note only the owner
-    /// would know, and a random claim code it keeps; staff look at the evidence and approve or decline from the admin
-    /// panel; the device holding the claim code then collects a temporary password. No login is needed for either.
-    ///
-    /// Wire, on the login port like <see cref="AccountQuery"/> (an AC header with Sequence = magic, Id 0xFFFF, Flags 0;
-    /// the browser's datagrams arrive through the gateway and are judged by the player's own address):
-    ///   'HTRQ' claim(16) n(1) name(n) note(rest, UTF-8)  ->  'HTRA' 1     (always: a typo, a limit, an unknown name
-    ///                                                                      and a real request look the same)
-    ///   'HTRP' claim(16)                                  ->  'HTRB' status [password]
-    ///                                                        status 0 unknown, 1 waiting, 2 approved, 3 declined
-    /// Limits per address (none for the shard's own network, StaffLoginGate.IsLocal): REQ_PER_DAY requests a day (and GLOBAL_PER_MINUTE stored outside requests a minute in all, MAX_OPEN open), one
-    /// poll per POLL_GAP. Staff: @pwreq next | approve | decline | list (Admin), the admin panel's buttons; approve and
-    /// decline act on the request that staff session last saw with next, so nobody types an id or a password.
-    /// The claim code is stored only as its SHA-256; the temporary password stays until TEMP_KEEP after approval.
-    /// Changing the password ends every "stay logged in" token on the account by itself (LoginTokens fingerprint).
-    /// </summary>
+    /// <summary>Forgot password.</summary>
     [HarmonyPatch]
     static class PasswordRecovery
     {
@@ -46,15 +29,32 @@ namespace RevivalGuard
         internal const uint POLL_Q = 0x50525448, POLL_A = 0x42525448;   // "HTRP" / "HTRB"
         internal const string REPLY = "[PwReq] ";
         const int CLAIM = 16, MAX_NAME = 50, MAX_NOTE = 300, REQ_PER_DAY = 3;
-        // BOUNDS FOR THE UNAUTHENTICATED PATH (security review 2026-11-14, SEC-003). Outside requests that would be stored
-        // share GLOBAL_PER_MINUTE (spent only on a request actually added, so one address cannot use it up); at most
-        // MAX_OPEN wait for staff at once. The per-address tables gain entries only for stored requests and real
-        // claimants and are pruned hourly; the file is written off the packet thread; drop warnings are throttled.
+        // Bounds for the unauthenticated path.
         const int GLOBAL_PER_MINUTE = 10, MAX_OPEN = 200;
         static DateTime s_BudgetStart, s_LastPrune, s_LastDropWarn;
         static int s_BudgetUsed, s_Dropped;
         static readonly TimeSpan POLL_GAP = TimeSpan.FromSeconds(5), TEMP_KEEP = TimeSpan.FromHours(48), OPEN_KEEP = TimeSpan.FromDays(14);
-        const string TEMP_CHARS = "abcdefghjkmnpqrstuvwxyz23456789";   // no 0/o, 1/l/i
+        // A temporary password is one of these words and TEMP_DIGITS digits ("pine4827"): easy to read aloud and type.
+        // No word has an l or an o and no digit is 0 or 1, so nothing in it has a look-alike. 301 words x 8^4 = 1.2 million.
+        const string TEMP_DIGIT_CHARS = "23456789";
+        const int TEMP_DIGITS = 4, NEW_MIN = 6;
+        const string EXAMPLE = "MyNewPassword55";   // the hint's example: refused as a real password
+        static readonly string[] TEMP_WORDS = (
+            "amber arch badge badger bake baker banana band bank banner barber barge barn basin basket bath batter bead beak beam bean beef bench bike birch bird "
+          + "braid brass brave breeze brick bridge brush bucket bunk bunny burger butter cabin cactus cake camera camp camper canary candy canvas cape card carp "
+          + "carpet cart cave cavern cedar chain chair charm chart chase cheese chef cherry chess chest chime chip cider cinder cinema circus crab crane crate "
+          + "cream creek crumb crust cube dairy daisy dance dancer dart dawn deck denim desert desk diary diner dinner dipper dish drawer dress drift drum duck "
+          + "dune dusk earth ember engine fabric fairy farm farmer faucet fawn feast fence fern ferry finch finger fish frame fresh fridge fruit fudge gadget "
+          + "gander garden garnet gate gear giant gift ginger grain grape grass grater gravy green guitar hammer hamper hanger harp hatch hawk heart heater hedge "
+          + "herd hermit hike hinge hive hunter insect jacket jaguar jasper jeans jeep jigsaw judge juice jump kayak kick king kite kitten magnet mantis march "
+          + "marker market marsh mask mesa mint mist mitten muffin music napkin nectar nest nutmeg paint panda pantry paper parade park pasta pastry patch path "
+          + "peach peanut pepper picnic pine pink pirate pizza prize puffin pump puppy quartz rabbit radish raft rafter raisin rake ranch ranger raven reef rink "
+          + "river ruby sand scarf seed shark shed sheep ship shirt shrimp shrub skate sketch snack snake spark spice spider spring spur square squid stag stage "
+          + "stamp star statue steam stem stick straw stream street sugar summer sunny sunset swan swim swing tank tavern teacup team tent thread thumb ticket "
+          + "tiger timber track train tray tree trek truck trunk tuna tundra turkey turnip tusk twig twin vest vine wand wasp water wave wheat wick wing winter "
+          + "wish wizard yard yarn zebra zigzag zipper").Split(' ');
+        const string STRONG_CHARS = "abcdefghjkmnpqrstuvwxyz23456789";
+        static Timer s_ExpireTimer;
 
         internal sealed class Req
         {
@@ -64,8 +64,8 @@ namespace RevivalGuard
             public string Address { get; set; } = "";
             public DateTime At { get; set; }
             public string ClaimHash { get; set; } = "";
-            public string Status { get; set; } = "open";    // open, approved, declined
-            public string TempPw { get; set; }              // approved: until collected window ends
+            public string Status { get; set; } = "open";
+            public string TempPw { get; set; }
             public string DecidedBy { get; set; }
             public DateTime? DecidedAt { get; set; }
             public DateTime? Collected { get; set; }
@@ -82,7 +82,23 @@ namespace RevivalGuard
         {
             CommandManager.TryAddCommand(Staff, "pwreq", AccessLevel.Admin, CommandHandlerFlag.None,
                 "Forgot-password requests: next shows the oldest open one; approve / decline act on the one shown.", "next|approve|decline|list");
+            RegisterPasswd();
             lock (s_Lock) Load();
+            // Requests are otherwise only looked at when a packet or a staff command comes in.
+            s_ExpireTimer = new Timer(_ => { try { lock (s_Lock) Load(); } catch (Exception e) { Mod.Log.Warn("[RevivalGuard] PasswordRecovery expire: " + e.Message); } },
+                null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(15));
+        }
+
+        /// <summary>ACE's own passwd, plus the short form for an account still on its temporary password.</summary>
+        static void RegisterPasswd() =>
+            CommandManager.TryAddCommand(Passwd, "passwd", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
+                "Change your account password.", "oldpassword newpassword");
+
+        // At a server start the mods load first and ACE then lists its own commands over ours.
+        [HarmonyPatch(typeof(CommandManager), nameof(CommandManager.Initialize))]
+        static class AfterAceCommands
+        {
+            static void Postfix() { try { RegisterPasswd(); } catch (Exception e) { Mod.Log.Warn("[RevivalGuard] PasswordRecovery passwd: " + e.Message); } }
         }
 
         static System.Reflection.MethodBase TargetMethod() =>
@@ -171,8 +187,7 @@ namespace RevivalGuard
                 PruneHourly(now);
                 Load();
                 var r = s_Reqs.FirstOrDefault(x => x.ClaimHash == claimHash);
-                // A claim that matches no request gets the "unknown" answer without touching the per-address table, so
-                // spoofed polls cannot grow it (SEC-003). Only real claimants are rate-limited.
+                // A claim that matches no request gets the "unknown" answer without touching the per-address table, so spoofed polls cannot grow it (SEC-003).
                 if (r != null && !local)
                 {
                     if (s_PollBy.TryGetValue(key, out var last) && now - last < POLL_GAP) return null;
@@ -182,6 +197,7 @@ namespace RevivalGuard
                 {
                     if (r.Status == "open") status = 1;
                     else if (r.Status == "declined") status = 3;
+                    else if (r.Status == "changed") status = 4;
                     else if (r.Status == "approved" && r.TempPw != null) { status = 2; pw = r.TempPw; if (r.Collected == null) { r.Collected = now; Save(); } }
                 }
             }
@@ -193,7 +209,6 @@ namespace RevivalGuard
             return reply;
         }
 
-        /// <summary>Drop per-address entries that no longer limit anyone, at most once an hour (SEC-003). Under s_Lock.</summary>
         static void PruneHourly(DateTime now)
         {
             if (now - s_LastPrune < TimeSpan.FromHours(1)) return;
@@ -202,7 +217,7 @@ namespace RevivalGuard
             foreach (var k in s_PollBy.Where(kv => now - kv.Value >= POLL_GAP).Select(kv => kv.Key).ToList()) s_PollBy.Remove(k);
         }
 
-        /// <summary>A dropped request, logged at most once a minute with the count since, so a flood cannot fill the log. Under s_Lock.</summary>
+        /// <summary>A dropped request, logged at most once a minute with the count since, so a flood cannot fill the log.</summary>
         static void Dropped(DateTime now, string why)
         {
             s_Dropped++;
@@ -264,9 +279,13 @@ namespace RevivalGuard
                     }
                     string temp = TempPassword();
                     account.SetPassword(temp);
+                    account.SetSaltForBCrypt();
                     DatabaseManager.Authentication.UpdateAccount(account);
                     NetworkManager.Find(account.AccountName)?.Terminate(SessionTerminationReason.AccountBooted,
                         new GameMessageBootAccount(" because its password was reset"));
+                    // an earlier approval's password stopped working just now: its device is told to ask again
+                    foreach (var old in s_Reqs.Where(x => x != req && x.TempPw != null && string.Equals(x.Account, req.Account, StringComparison.OrdinalIgnoreCase)))
+                        old.TempPw = null;
                     Decide(req, "approved", who, temp);
                     AuditTrail.Record("pwreq", who, "console", $"approved request {req.Id}: temporary password set on account {account.AccountName}");
                     Mod.Log.Info($"[RevivalGuard] PasswordRecovery: {who} approved request {req.Id} for account '{account.AccountName}'");
@@ -287,7 +306,7 @@ namespace RevivalGuard
             var account = DatabaseManager.Authentication.GetAccountByName(r.Account);
             if (account == null) { Say(session, "No such account. Decline it."); return; }
             if (account.AccessLevel > 0) Say(session, "This is a STAFF account: it cannot be reset here.");
-            var chars = PlayerManager.GetAccountPlayers(account.AccountId).Values
+            var chars = (PlayerManager.GetAccountPlayers(account.AccountId)?.Values ?? Enumerable.Empty<ACE.Server.Entity.IPlayer>())
                 .Select(c => $"{c.Name} {c.Level ?? 0}").OrderBy(s => s).ToList();
             Say(session, $"Characters: {(chars.Count == 0 ? "none" : string.Join(", ", chars))}");
             string lastIp = account.LastLoginIP != null && account.LastLoginIP.Length == 4 ? new IPAddress(account.LastLoginIP).ToString() : "?";
@@ -305,10 +324,109 @@ namespace RevivalGuard
             Save();
         }
 
-        static string TempPassword()
+        internal static string TempPassword()
         {
-            var b = RandomNumberGenerator.GetBytes(10);
-            return new string(b.Select(x => TEMP_CHARS[x % TEMP_CHARS.Length]).ToArray());
+            var sb = new StringBuilder(TEMP_WORDS[RandomNumberGenerator.GetInt32(TEMP_WORDS.Length)]);
+            for (int i = 0; i < TEMP_DIGITS; i++) sb.Append(TEMP_DIGIT_CHARS[RandomNumberGenerator.GetInt32(TEMP_DIGIT_CHARS.Length)]);
+            return sb.ToString();
+        }
+
+        static string StrongPassword()
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < 24; i++) sb.Append(STRONG_CHARS[RandomNumberGenerator.GetInt32(STRONG_CHARS.Length)]);
+            return sb.ToString();
+        }
+
+        /// <summary>The temporary password the account is still waiting to replace, or null.</summary>
+        static string TempFor(string accountName)
+        {
+            lock (s_Lock)
+            {
+                Load();
+                return s_Reqs.Where(r => r.Status == "approved" && r.TempPw != null
+                    && string.Equals(r.Account, accountName, StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(r => r.DecidedAt).FirstOrDefault()?.TempPw;
+            }
+        }
+
+        // ---- the player's side in game ----------------------------------------------------------------
+
+        static void Tell(Session s, string text) => s?.Network?.EnqueueSend(new GameMessageSystemChat(text, ChatMessageType.Broadcast));
+
+        /// <summary>passwd old new, as ACE's; and passwd new alone while the account is still on its temporary password.</summary>
+        static void Passwd(Session session, params string[] p)
+        {
+            if (session == null) { Console.WriteLine("This command is run from ingame client only"); return; }
+            try
+            {
+                var now = DateTime.UtcNow;
+                if (now - session.LastPassTime < TimeSpan.FromSeconds(5)) { Tell(session, "Please wait a few seconds, then try /passwd again."); return; }
+                session.LastPassTime = now;
+                var account = DatabaseManager.Authentication.GetAccountById(session.AccountId);
+                if (account == null) { Tell(session, "Your account was not found. Please tell staff."); return; }
+                string temp = TempFor(account.AccountName);
+                const string LONG = "To change your password type /passwd, your current password, then your new password.";
+                const string SHORT = "To choose your own password type /passwd, a space, then the new password you want.";
+                if (p == null || p.Length == 0) { Tell(session, temp != null ? SHORT : LONG); return; }
+                bool shortForm = p.Length == 1;
+                if (shortForm && temp == null) { Tell(session, LONG); return; }
+                string old = shortForm ? temp : p[0], neu = shortForm ? p[0] : p[1];
+                if (temp != null && (neu.Length < NEW_MIN || string.Equals(neu, temp, StringComparison.OrdinalIgnoreCase)
+                                     || string.Equals(neu, EXAMPLE, StringComparison.OrdinalIgnoreCase)))
+                {
+                    Tell(session, $"Choose a new password of your own, {NEW_MIN} characters or more, different from the temporary one.");
+                    return;
+                }
+                if (!account.PasswordMatches(old))
+                {
+                    Tell(session, shortForm ? LONG : "Unable to change password: the first password does not match this account's current password.");
+                    return;
+                }
+                account.SetPassword(neu);
+                account.SetSaltForBCrypt();
+                DatabaseManager.Authentication.UpdateAccount(account);
+                if (temp != null)
+                {
+                    lock (s_Lock)
+                    {
+                        foreach (var r in s_Reqs.Where(r => r.TempPw != null && string.Equals(r.Account, account.AccountName, StringComparison.OrdinalIgnoreCase)))
+                        { r.TempPw = null; r.Status = "changed"; }
+                        Save();
+                    }
+                    AuditTrail.Record("pwreq", account.AccountName, "player", "replaced the temporary password with their own");
+                    Mod.Log.Info($"[RevivalGuard] PasswordRecovery: account '{account.AccountName}' replaced its temporary password");
+                }
+                Tell(session, "Account password successfully changed. Use your new password the next time you log in.");
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Error("[RevivalGuard] PasswordRecovery passwd: " + e.Message);
+                Tell(session, "The password could not be changed. Please try again, or tell staff.");
+            }
+        }
+
+        /// <summary>Entering the world on a temporary password: say how to replace it.</summary>
+        [HarmonyPatch(typeof(ACE.Server.WorldObjects.Player), nameof(ACE.Server.WorldObjects.Player.PlayerEnterWorld))]
+        static class OnEnter
+        {
+            static void Postfix(ACE.Server.WorldObjects.Player __instance)
+            {
+                try
+                {
+                    var p = __instance; var session = p?.Session;
+                    if (session == null || TempFor(session.Account) == null) return;
+                    var chain = new ACE.Server.Entity.Actions.ActionChain();
+                    chain.AddDelaySeconds(12);
+                    chain.AddAction(p, () =>
+                    {
+                        if (p.Session != session || TempFor(session.Account) == null) return;
+                        Tell(session, "You logged in with a temporary password. Choose your own now: type /passwd, a space, then the new password you want. Example: /passwd " + EXAMPLE + " (pick your own, not this one).");
+                    });
+                    chain.EnqueueChain();
+                }
+                catch (Exception e) { Mod.Log.Warn("[RevivalGuard] PasswordRecovery hint: " + e.Message); }
+            }
         }
 
         static string Ago(DateTime t)
@@ -322,8 +440,6 @@ namespace RevivalGuard
             if (s == null) Console.WriteLine(REPLY + text);
             else s.Network?.EnqueueSend(new GameMessageSystemChat(REPLY + text, ChatMessageType.Broadcast));
         }
-
-        // ---- storage: ~/ace/reports/password-requests.json, owner-only ----------------------------
 
         static void Load()
         {
@@ -341,25 +457,43 @@ namespace RevivalGuard
             Expire();
         }
 
-        /// <summary>Temporary passwords leave the file TEMP_KEEP after approval; open requests close after OPEN_KEEP.</summary>
         static void Expire()
         {
             var now = DateTime.UtcNow;
             bool changed = false;
             foreach (var r in s_Reqs)
             {
-                if (r.TempPw != null && r.DecidedAt.HasValue && now - r.DecidedAt.Value > TEMP_KEEP) { r.TempPw = null; changed = true; }
+                if (r.TempPw != null && r.DecidedAt.HasValue && now - r.DecidedAt.Value > TEMP_KEEP)
+                {
+                    if (r.Status == "approved") RetireUnused(r);
+                    r.TempPw = null; changed = true;
+                }
                 if (r.Status == "open" && now - r.At > OPEN_KEEP) { r.Status = "expired"; changed = true; }
             }
             if (changed) Save();
         }
 
+        /// <summary>A temporary password nobody logged in with stops working when it stops being shown; one in use stays until the player replaces it.</summary>
+        static void RetireUnused(Req r)
+        {
+            try
+            {
+                var account = DatabaseManager.Authentication.GetAccountByName(r.Account);
+                if (account == null || (account.LastLoginTime.HasValue && account.LastLoginTime.Value >= r.DecidedAt.Value)) return;
+                if (!account.PasswordMatches(r.TempPw)) return;
+                account.SetPassword(StrongPassword());
+                account.SetSaltForBCrypt();
+                DatabaseManager.Authentication.UpdateAccount(account);
+                AuditTrail.Record("pwreq", "the server", "timer", $"request {r.Id}: the unused temporary password on account {account.AccountName} expired");
+                Mod.Log.Info($"[RevivalGuard] PasswordRecovery: the unused temporary password on account '{account.AccountName}' expired (request {r.Id})");
+            }
+            catch (Exception e) { Mod.Log.Error("[RevivalGuard] PasswordRecovery retire: " + e.Message); }
+        }
+
         static readonly object s_WriteLock = new object();
         static int s_SaveQueued;
 
-        /// <summary>Write the requests file OFF THE CALLER'S THREAD (SEC-003: it was rewritten on ACE's packet thread for every
-        /// request). Changes made while a write is queued ride along with it; writes run one at a time, each from a fresh
-        /// snapshot, so an older snapshot never lands after a newer one. Called under s_Lock.</summary>
+        /// <summary>Write the requests file off the caller's thread.</summary>
         static void Save()
         {
             if (s_File == null || Interlocked.Exchange(ref s_SaveQueued, 1) == 1) return;

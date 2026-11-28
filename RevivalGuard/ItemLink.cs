@@ -14,23 +14,7 @@ using Spell = ACE.Server.Entity.Spell;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ITEM LINKS IN CHAT (docs/CHAT-IMPROVEMENTS-01.md piece 7, ours). AC chat carries only text, and nobody can
-    /// appraise an item in someone else's pack, so a link is a snapshot the server keeps:
-    ///
-    ///   @itemlink make 0xGUID   (the client's /link, or an item dropped on the chat box) takes the stats of an item
-    ///                           you carry NOW, keeps them under a number, and answers "ITEMLINK n Name", a data line
-    ///                           the client turns into "[Name]" in your chat entry (clients up to 0.1.117 wrote
-    ///                           "[Name #n]", which put the number in everyone's chat, retail's too).
-    ///   @itemlink view n        (a click on a link whose number the client knows) and
-    ///   @itemlink find age Speaker|Name   (a click on "[Name]" in Speaker's line, said `age` seconds ago) answer with
-    ///                           the snapshot as an examine response (IdentifyObjectResponse) for guid
-    ///                           0xFE000000 | n, so the clicker's appraisal window opens with the item as it was.
-    ///   @itemlink show n        (clients up to 0.1.117) sends that snapshot's lines to the asker as text.
-    ///
-    /// The snapshot is taken at link time, so a link stays right after the item is sold, changed or gone. The newest
-    /// 5,000 are kept in memory; a restart forgets them ("That item link has expired.").
-    /// </summary>
+    /// <summary>Item links in chat (docs/CHAT-IMPROVEMENTS-01.md piece 7, ours).</summary>
     public static class ItemLink
     {
         const int KEEP = 5000;
@@ -46,9 +30,6 @@ namespace RevivalGuard
         static readonly Dictionary<int, Snap> s_Snaps = new Dictionary<int, Snap>();
         static readonly Queue<int> s_Order = new Queue<int>();
         static readonly object s_Lock = new object();
-        // RANDOM IDS, NOT A COUNTER (security audit 2026-10-20): a counter let anyone walk every link ever made. Seven
-        // digits because every released client's tag reads at most seven (ChatHud.ITEM_TAG); clients from 0.1.74 read
-        // ten, so a later server can widen ID_MAX once the older clients are gone.
         const int ID_MIN = 1_000_000, ID_MAX = 9_999_999;
 
         public static void Register()
@@ -112,9 +93,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The snapshot a "[Name]" in `by`'s line points at: theirs of that name made at or before the line was
-        /// said (plus a little clock slack), newest first; else their newest of that name; else anyone's newest of that
-        /// name (a link pasted on by someone else). Under s_Lock. 0 = none.</summary>
+        /// <summary>The snapshot a "[Name]" in `by`'s line points at</summary>
         static int FindSnap(string by, string name, DateTime saidAt)
         {
             DateTime cut = saidAt.AddSeconds(10);
@@ -131,8 +110,7 @@ namespace RevivalGuard
             return best != 0 ? best : newest != 0 ? newest : anyone;
         }
 
-        /// <summary>The item's examine response body as its owner would get it now (ACE's AppraiseInfo, written once).
-        /// null if ACE cannot build it (the click then falls back to the text lines).</summary>
+        /// <summary>The item's examine response body as its owner would get it now. null if ACE cannot build it.</summary>
         static byte[] AppraisalOf(WorldObject item, Player me)
         {
             try

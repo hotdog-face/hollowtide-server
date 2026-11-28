@@ -9,15 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// SMALL HITBOX (owner 2026-10-19: Azimar's hitbox "still very large"; he chose a body-sized wall, still solid).
-    /// NOT RETAIL: retail blocks with the setup's spheres x ObjScale; the Zefir's two r 0.5 spheres at scale 1.8 stopped
-    /// a walker 1.3 m from his centre, well outside his drawn body. For listed weenies his PhysicsObj gets its own copy
-    /// of its Setup with every collision sphere and cylinder radius times k (centres kept; the cached Setup other Zefirs
-    /// share is untouched). Applied where ACE copies physics into Location (as HoverDrop), so after placement.
-    /// Our client applies the same k (AcSolidWorld.ShrinkCollision), told by the mod channel "collide" after hello.
-    ///   @modifybool azimar_small_hitbox false   retail spheres again (his next sync or spawn; clients at next login)
-    /// </summary>
+    /// <summary>Small hitbox.</summary>
     [HarmonyPatch]
     static class SmallHitbox
     {
@@ -26,7 +18,7 @@ namespace RevivalGuard
         // weenie class id -> collision radius scale
         static readonly Dictionary<uint, float> s_Scale = new()
         {
-            { 901631, 0.2f },   // Azimar the Gleaming: spheres r 0.5 x 1.8 = 0.9 -> 0.18 m (his torso; physcheck: a walker stops 0.76 m out, was 1.49)
+            { 901631, 0.2f },   // Azimar the Gleaming: spheres r 0.5 x 1.8 = 0.9 -> 0.18 m
             // his Hotel Swank review copies, one per festival look (AzimarThemeRule.Fixed)
             { 901633, 0.2f }, { 901634, 0.2f }, { 901635, 0.2f }, { 901636, 0.2f }, { 901637, 0.2f },
         };

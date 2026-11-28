@@ -13,28 +13,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// VOID MAGIC PARITY WITH WAR MAGIC (owner 2026-11-27; the why and the numbers: VoidParityRule.cs and
-    /// docs/findings/void-parity-2026-11-27.md). Ours, not retail. Every part OFF by default.
-    ///
-    ///   rg_void_curse_vuln (bool, off)        while a player's void damage curse (Corrosion, Corruption, Destructive
-    ///                                          Curse) is on a monster, nether damage players deal it (bolts and curse
-    ///                                          ticks) x the curse level's factor; players as targets never.
-    ///   rg_void_curse_vuln_levels (string)    "level:mult,...", default VoidParityRule.DEFAULT_LEVELS.
-    ///   rg_void_bench (bool, off)             test shards only: the @voidparity bench and setup below.
-    ///
-    /// The multiplier sits on ACE's Creature.GetResistanceMod(DamageType, ...), the one both a spell projectile's
-    /// CalculateDamage (through the ResistanceType overload; attacker = the projectile) and a DoT's ApplyDamageTick
-    /// (attacker = the caster, weapon null) read, so it stacks the way a life vulnerability does (protection x vuln).
-    ///
-    ///   @voidparity                                 switches, the level table
-    ///   @voidparity setup &lt;skill&gt;                   War, Void and Life Magic specialised at that base (bench on)
-    ///   @voidparity bench war|void &lt;level&gt; &lt;seconds&gt; [full|bolts] [fire|bludgeon] [cycle s]
-    ///       on the last appraised creature: casts through ACE's own TryCastSpell (real projectiles, resist rolls, crits,
-    ///       DoT ticks, vulns) every cast cycle (the spell's windup + cast gestures from the motion table, or the given
-    ///       cycle), then reports damage, casts, DPS, damage per mana and time to kill. "full" = war lands its
-    ///       vulnerability first / void keeps its three curses up; "bolts" = bolts only.
-    /// </summary>
+    /// <summary>Void magic parity with war magic.</summary>
     [HarmonyPatch]
     static class VoidParity
     {
@@ -61,10 +40,13 @@ namespace RevivalGuard
 
         internal static int StrongestCurse(Creature c)
         {
-            var ids = new List<int>(4);
+            if (c?.EnchantmentManager == null) return 0;
+            int best = 0;
             foreach (var cat in CurseCats)
-                foreach (var e in c.EnchantmentManager.GetEnchantments(cat)) ids.Add(e.SpellId);
-            return VoidParityRule.StrongestCurse(ids);
+                foreach (var e in c.EnchantmentManager.GetEnchantments(cat))
+                    if (e != null && e.SpellId > 0 && VoidParityRule.CurseLevel.TryGetValue((uint)e.SpellId, out var level) && level > best)
+                        best = level;
+            return best;
         }
 
         static MethodBase TargetMethod()
@@ -129,8 +111,7 @@ namespace RevivalGuard
 
         static readonly ConcurrentDictionary<uint, Bench> s_Bench = new();   // by player guid
 
-        /// <summary>Damage the bench player does to the bench target (direct and over time): DamageHistory records what
-        /// the vital lost, so a kill counts only the health that was there.</summary>
+        /// <summary>Damage the bench player does to the bench target</summary>
         [HarmonyPatch(typeof(DamageHistory), nameof(DamageHistory.Add))]
         static class Meter
         {
@@ -210,7 +191,6 @@ namespace RevivalGuard
             if (target == null || target is Player || !target.IsAlive) { Say(session, "[VoidParity] bench: appraise a living monster first."); return; }
             var dist = p.GetDistance(target);
             if (dist > 20f) { Say(session, $"[VoidParity] bench: {target.Name} is {dist:0.0} m away; stand within 20 m (curse projectiles fall short past ~25 m, Destructive Curse needs 10)."); return; }
-            // a bench target never fights back (the Pyreal Target Drudge's own Tolerance), so the caster stands and casts
             if (!target.Tolerance.HasFlag(Tolerance.NoAttack)) target.Tolerance |= Tolerance.NoAttack;
             if (s_Bench.TryGetValue(p.Guid.Full, out var old) && !old.Done) Finish(old, "replaced");
             var b = new Bench
@@ -223,8 +203,7 @@ namespace RevivalGuard
             Step(b);
         }
 
-        /// <summary>The spell's cast time from the player's motion table: windup gestures and the cast gesture, at ACE's
-        /// player CastSpeed (Player_Magic: retail pcaps' animation speed for the windup and the first half of the cast).</summary>
+        /// <summary>The spell's cast time from the player's motion table: windup gestures and the cast gesture, at ACE's player CastSpeed.</summary>
         static double CastTime(Player p, Spell s)
         {
             try

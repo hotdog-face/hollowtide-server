@@ -10,16 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE REVIVED SYSTEMS' RULES (owner 2026-10-28, docs/REVIVAL-PLAN-2026-10-28.md). The rest is world data
-    /// (tools/gpubox-ace/gen_revival.py: the tattoo artist, the Lightbringer week, the doll set at Azimar).
-    ///   * Weapon tattoos: the artist starts a counter per weapon (TattooTrial&lt;W&gt;, value 1). Each creature of level
-    ///     100+ that dies with a player in its damage history wielding that weapon type counts one for that player,
-    ///     until 151 (150 kills); the artist hands the tattoo in at 151. A line every 25 kills says where it stands.
-    ///   * Lightbringer: A Shadow of Black Ferah carries KillQuest LightbringerShadowKill. ACE counts a kill task only
-    ///     for a damager whose record already holds it, so during the Lightbringer week every damager (and their
-    ///     fellows in range) gets it started first: the whole group that fought earns the Chosen's reward.
-    /// </summary>
+    /// <summary>The revived systems' rules.</summary>
     static class Revival
     {
         internal const int TRIAL_KILLS = 150;

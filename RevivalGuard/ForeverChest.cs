@@ -6,32 +6,12 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE CHEST BESIDE FISPUR ANSEL THE GROCER IN HOLTBURG KEEPS WHAT PLAYERS LEAVE IN IT, FOREVER (owner 2026-11-21: "the chest in the
-    /// building near holt. i want that to hold anything players put in it indefinitely").
-    ///
-    /// The owner pinned it the same day: "chest i meant is next to fespur ansel the grocer in holt" (Chest 0x7A9B401D,
-    /// weenie 143, cell 0xA9B4016A, 3 m from Fispur Ansel 0x7A9B4024). ACE empties it two ways: `Chest.Open` arms `Reset` 120 s after the
-    /// first open, and `Reset` runs `Container.ClearUnmanagedInventory`, which destroys every item the chest did not
-    /// generate; and `Landblock.Unload` destroys a static object that was never saved to the shard, contents and all.
-    ///
-    /// SO this one chest becomes a saved static, the way ACE keeps a house's Storage chest: its biota is written to the
-    /// shard the first time it is opened (`IsStaticThatShouldPersistToShard` says yes, so every landblock save keeps
-    /// it), the landblock then reloads it from the shard with its inventory (Container(Biota) reads the rows whose
-    /// Container is the chest), it never resets (`ChestResetInterval` is infinite, so no timer and no close-on-viewer),
-    /// and `ClearUnmanagedInventory` leaves it alone. Every put saves the chest and the item at once, so a crash loses
-    /// nothing. ChestReturnsItems skips it (nothing to hand back: it keeps everything).
-    ///
-    /// LIMITS: the chest's own 255 item slots (weenie 143's ItemsCapacity -1, read as a byte); when full ACE refuses the
-    /// put. No packs: ACE refuses any container put into a non-Player, non-Storage container (Player_Inventory.cs, the
-    /// quest-stamp bypass guard; tested 11-21, the pack bounces back with no message).
-    /// Every other chest keeps ACE's rule (and ChestReturnsItems).
-    /// </summary>
+    /// <summary>The chest beside fispur ansel the grocer in holtburg keeps what players leave in it, FOREVER.</summary>
     public static class ForeverChest
     {
         internal const string P_ON = "rg_forever_chest";
 
-        /// <summary>Static guids of the chests that keep their contents. The chest beside Fispur Ansel the Grocer, Holtburg.</summary>
+        /// <summary>Static guids of the chests that keep their contents.</summary>
         internal static readonly HashSet<uint> Guids = new HashSet<uint> { 0x7A9B401D };
 
         static bool s_Failed;
@@ -50,7 +30,6 @@ namespace RevivalGuard
             if (!s_Failed) { s_Failed = true; Mod.Log.Error($"[RevivalGuard] ForeverChest {where}: {e}"); }
         }
 
-        /// <summary>Writes the chest to the shard if it never was. Idempotent.</summary>
         static void Adopt(Chest c)
         {
             bool first = !c.BiotaOriginatedFromOrHasBeenSavedToDatabase();
@@ -89,7 +68,6 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Whatever resets it (ChestStuckOpen, a Close with regen, Container.Reset) never clears it.</summary>
         [HarmonyPatch(typeof(Container), nameof(Container.ClearUnmanagedInventory))]
         static class NoClear
         {

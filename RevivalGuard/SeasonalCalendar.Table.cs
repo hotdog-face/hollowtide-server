@@ -4,27 +4,12 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE FESTIVAL TABLE AND ITS RULES, PURE (no ACE types): SeasonalCalendar.cs runs them on the world loop, tools/nettest
-    /// compiles this file by path and steps it through whole years (the yearly buffer swap, owner 2026-10-25), and
-    /// tools/seasons/export_calendar.py, tools/seasons/preview.py and tools/journal/seasons.py parse the table's literals.
-    /// Every window is a month and day, never a year: the table repeats every year by itself.
-    /// </summary>
+    /// <summary>The festival table and its rules, PURE</summary>
     public static partial class SeasonalCalendar
     {
-        /// <summary>
-        /// Retail's windows are stored as 05:01 and 04:59 UTC, which is 00:01 and 23:59 at UTC-5,
-        /// in October as well as in December. That is US Eastern with daylight saving ignored, which
-        /// is what a hand-built live-ops table looks like. Evaluating the calendar at a fixed -5
-        /// reproduces the stored windows exactly instead of drifting an hour twice a year.
-        /// (The two New Year rows, 80222 and 80224, were authored in plain UTC by someone else. The
-        /// one-minute margins at each end are dropped here; a festival that starts at midnight
-        /// rather than 00:01 is not a fidelity question anyone can observe.)
-        /// </summary>
+        /// <summary>Retail's windows are stored as 05:01 and 04:59 UTC, which is 00:01 and 23:59 at UTC-5</summary>
         internal const int RETAIL_UTC_OFFSET_HOURS = -5;
 
-        /// <summary>A row of the table. tools/seasons/export_calendar.py parses these literals into
-        /// Assets/StreamingAssets/seasons.json for the client's calendar: keep each field a plain literal.</summary>
         internal sealed class Festival
         {
             public string Key;              // what @festival takes
@@ -33,31 +18,15 @@ namespace RevivalGuard
             public string[] On = Array.Empty<string>();          // ace_world.event rows to start
             public string[] Off = Array.Empty<string>();         // rows to stop for the duration
             public string Announce;         // the world broadcast when it opens (seasons.json "about")
-            public string Hint = "";        // where to find it, on the login line (FestivalNotices); placements checked on OVH 2026-10-21
+            public string Hint = "";
             public string Evidence;         // the weenie this was read off, shown by @festival list
-            public string Dressing;         // the town dressing it puts up (autumn, winter, spring): two never show at once
-            // Waiting for the owner's yes (a revived retired event): off, silent and out of seasons.json until every On row
-            // exists in ace_world, so applying its datafix is the switch (SeasonalCalendar.Installed).
+            public string Dressing;
             public bool Pending;
 
             public string Window => $"{StartMonth:00}-{StartDay:00} to {EndMonth:00}-{EndDay:00}";
         }
 
-        /// <summary>
-        /// THE CALENDAR. Every window and every bundle below is transcribed from a retail stopgap
-        /// weenie; the id in Evidence is the `...stopgapgen` that carries the dates, and its
-        /// `...stopgap!` child carries the StartEvent/StopEvent list. Nothing here was invented.
-        ///
-        /// Two rows are worth pausing on:
-        ///  - Festival Season is the only festival that turns something OFF. `normaltowncrier` gates
-        ///    `aljalimasign` (weenie 4658) in the three Al-Jalima landblocks, and Al-Jalima is where
-        ///    the zombie incursion happens, so retail takes the ordinary town furniture down for the
-        ///    month and puts a festival crier up in its place. It must go back On afterwards, which
-        ///    is why Off lists are restored rather than merely stopped.
-        ///  - Fireworks appears twice, from two different stopgaps (69999 for the anniversary week,
-        ///    80223 under the New Year's Day gen). That is why desired state is computed as a union
-        ///    over active festivals rather than per festival: two windows can want the same row.
-        /// </summary>
+        /// <summary>The calendar.</summary>
         internal static readonly Festival[] Calendar =
         {
             new Festival
@@ -65,8 +34,7 @@ namespace RevivalGuard
                 Key = "festivalseason", Name = "Festival Season",
                 StartMonth = 10, StartDay = 1, EndMonth = 11, EndDay = 1,
                 On  = new[] { "EventFallFestival" },
-                // AzimarYearRound (ours, azimar-seasons.sql, owner 2026-10-25): Azimar stands in the Pumpkin Buffers'
-                // spots the rest of the year; the pumpkins have them for the month
+                // AzimarYearRound: Azimar stands in the Pumpkin Buffers' spots the rest of the year; the pumpkins have them for the month
                 Off = new[] { "normaltowncrier", "AzimarYearRound" },
                 Announce = "The harvest has turned. Pumpkin Lords and Harvest Reapers walk the "
                          + "landscape, the dead are stirring in Al-Jalima, and the Majestic Pumpkin "
@@ -76,11 +44,7 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // OURS, not a retail stopgap (owner 2026-10-28, docs/REVIVAL-PLAN-2026-10-28.md section 4): retail's own
-                // Dec 2000 "Bael'Zharon's Defeat" data (the first-act Chosen of Asheron 8764, the artifacts, the
-                // Sepulcher of the Hopeslayer), run once a year. LightbringerEvent gates the Chosen's and the
-                // Herald creatures' generators (datafix 2026-10-28-lightbringer.sql). Moved from Dec 1-7 to Jan 22-31
-                // (owner 2026-11-26: "Yess move light bringer"), after Shard of the Herald, so it no longer overlaps Frostfell.
+                // Ours, not a retail stopgap: retail's own Dec 2000 "Bael'Zharon's Defeat" data, run once a year.
                 Key = "lightbringer", Name = "the Lightbringer's Week",
                 StartMonth = 1, StartDay = 22, EndMonth = 1, EndDay = 31,
                 On  = new[] { "LightbringerEvent" },
@@ -113,11 +77,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // Not a stopgap bundle: the April 2003 Raining Mad Cows Gen (23631, placed 22 times)
-                // carried its own RealTime window, 2026-04-01 00:01 to 23:59 at UTC-5, and no event row.
-                // Moved onto the calendar 2026-09-28 (owner-approved) on AprilFoolsMadCows, a row this
-                // project added: tools/gpubox-ace/stones-madcow-calendar.sql. Inside the Spring Festival's
-                // window, which is fine: desired state is a union over active festivals.
                 Key = "aprilfools", Name = "April Fools' Day",
                 StartMonth = 4, StartDay = 1, EndMonth = 4, EndDay = 1,
                 On  = new[] { "AprilFoolsMadCows" },
@@ -137,10 +96,7 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // AnniversaryFestivalStones is a row this project added (2026-09-28, owner-approved): the
-                // twenty Festival Stones (5376-5395, "Rejoice! The Hopeslayer has been defeated") carried
-                // their own RealTime window, 2026-11-02 to 11-05 at UTC-5, the same four days as this
-                // stopgap, and would never have come back. tools/gpubox-ace/stones-madcow-calendar.sql.
+                // AnniversaryFestivalStones is a row this project added: the twenty Festival Stones (5376-5395, "Rejoice!
                 Key = "anniversary", Name = "the Anniversary",
                 StartMonth = 11, StartDay = 2, EndMonth = 11, EndDay = 5,
                 On  = new[] { "Fireworks", "AnniversaryFestivalStones" },
@@ -151,12 +107,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // Not a stopgap bundle: the Night Club Attendant Generator (69997, placed at 0x33D9,
-                // 0x8090, 0xBC9F and 0xE74E) carried its OWN RealTime window, 1793595660-1796187540, and
-                // no event row, so it would have opened in November 2026 and never again. Moved onto
-                // this calendar 2026-09-28 (owner-approved): tools/gpubox-ace/nightclub-calendar.sql makes
-                // it an Event generator gated on AnniversaryNightClub, a row this project added. The
-                // window is its own, Nov 2 00:01 to Dec 1 23:59 at UTC-5, the Night Club's retail month.
                 Key = "nightclub", Name = "the Anniversary Night Club",
                 StartMonth = 11, StartDay = 2, EndMonth = 12, EndDay = 1,
                 On  = new[] { "AnniversaryNightClub" },
@@ -170,12 +120,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // NOT A RETAIL STOPGAP: T'thuun's Marauders was a staff-run live event (Nov 5, 2008 to Feb 2009; the town
-                // pyramids went live Nov 16, 2008), retired into the permanent Patriarch's Valley quest. Revived 2026-11-01
-                // (owner: every retired live event on a yearly calendar; docs/EVENTS-RETIRED.md, docs/EVENT-TESTS/
-                // tthuun-marauders.md). TthuunMarauders is a row this project added (2026-11-16-tthuun-1-raids.sql): the
-                // Royal Scouts and the Falatacot pyramids at the twelve sites. The raids themselves are Event Director
-                // entries (tthuun-*), one site at a time, while this festival is on.
                 Key = "tthuun", Name = "T'thuun's Marauders",
                 StartMonth = 11, StartDay = 16, EndMonth = 11, EndDay = 29,
                 On  = new[] { "TthuunMarauders" },
@@ -187,12 +131,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // Not a stopgap bundle: retail's Fowl Play (Nov 12 2013) made Don't Feed the Fowl seasonal, with its own
-                // dialog and the title Cold Turkey; the Spring 2014 Update made the quest permanent and dropped both. The
-                // window is ours (owner 2026-11-01: retired events on a yearly calendar; US Thanksgiving week). FowlPlay
-                // and FowlPlayColdTurkey are rows this project added (2026-11-20-fowlplay-1-aroyd-gobbles.sql): Ar'Oyd's
-                // 2013 lines, Cold Turkey 855 on the feather, Gobbles (Nov 2005 live event) and Jive Turkey 856. No town
-                // dressing, so it never displaces the Night Club or Frostfell.
                 Key = "fowlplay", Name = "Fowl Play",
                 StartMonth = 11, StartDay = 20, EndMonth = 11, EndDay = 30,
                 On  = new[] { "FowlPlay", "FowlPlayColdTurkey" },
@@ -219,14 +157,9 @@ namespace RevivalGuard
                 Hint = "Look up for fireworks over the towns.",
                 Evidence = "ace80224-newyearsdayeventsstopgapgen, Jan 1 only",
             },
-            // RETIRED LIVE EVENTS, revived on the yearly calendar (owner 2026-11-01; docs/EVENTS-RETIRED.md, its "Year
-            // calendar" windows). Not retail stopgaps: retail ran these once, by hand. Their rows and content come from
-            // tools/gpubox-ace/gen_retired_feb2.py; Pending until the owner's yes. The two share Feb 2 to 8 without a clash:
-            // Frore (0x0138) and the Portal to Bur (0xA5D3) are far apart, and neither puts up town dressing.
+            // Retired live events, revived on the yearly calendar.
             new Festival
             {
-                // The Great Work Crystal, Dec 16 1999 (Sudden Season): wiki "The Great Work Crystal" rev 471967. Its bosses
-                // (4991-4993, 5867, 5891) were in ace_world but placed nowhere. The Announce is retail's town crier rumors.
                 Key = "greatwork", Name = "the Great Work Crystal",
                 StartMonth = 2, StartDay = 12, EndMonth = 2, EndDay = 21,
                 On  = new[] { "GreatWorkCrystal" },
@@ -237,9 +170,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // Bur Portal Summoning Ritual, Jan 22 to Feb 2 2007 (Bridging the Vast Divide): wiki rev 443270. The
-                // Announce is retail's town crier proclamation, shortened to one chat line (300 characters with the
-                // Discord lead); the Falatacot assault is the director's "bur-ritual".
                 Key = "burritual", Name = "the Bur Portal Summoning Ritual",
                 StartMonth = 3, StartDay = 5, EndMonth = 3, EndDay = 14,
                 On  = new[] { "BurPortalRitual" },
@@ -250,11 +180,7 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // Children of the Prodigal Lord (Dec 2007 / Jan 2008): two live events in one window, wiki "Prodigal Human
-                // Investigation" rev 479445 and "Aerbax's Prodigal Children" rev 475683. The investigation is a quest window
-                // (Tailen the Tracker at Rithwic and at the Hidden Laboratory, row ProdigalInvestigation); the three waves near
-                // Yaraq are the director's "prodigal-children". Retail's announcements are not recorded: the Announce is ours.
-                // Shares Feb 9 to 14 with the Great Work Crystal: Rithwic, Stonehold and Yaraq are far from Frore, no dressing.
+                // Children of the Prodigal Lord
                 Key = "prodigal", Name = "the Children of the Prodigal Lord",
                 StartMonth = 5, StartDay = 14, EndMonth = 5, EndDay = 23,
                 On  = new[] { "ProdigalInvestigation" },
@@ -265,10 +191,7 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // The Gauntlet (Feb 2000, Shadows of the Past): wiki rev 461903. A quest window on the Singularity Caul (row
-                // GauntletTrial): A Presence at the arrival hands a 30-minute Shadow Key; retail's prize chest (6423) waits
-                // locked on the island's eastern hilltop past retail's Shadows. The Announce is retail's town crier rumor
-                // in spirit (its words are not recorded). No dressing.
+                // The Gauntlet: wiki rev 461903. A quest window on the Singularity Caul
                 Key = "gauntlet", Name = "the Gauntlet",
                 StartMonth = 6, StartDay = 4, EndMonth = 6, EndDay = 13,
                 On  = new[] { "GauntletTrial" },
@@ -279,9 +202,7 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // Carlo di Cenza's Journal (Feb 2005, Infiltration): wiki rev 479111. A quest window: Carlo di Cenza in Rithwic
-                // and Antius Blackmoor in Yaraq stand for it (row CarloJournal); the pages, the binding and the recipes are in
-                // the world all year. Retail's announcement is not recorded: the Announce is ours. No dressing.
+                // Carlo di Cenza's Journal: wiki rev 479111. A quest window
                 Key = "carlo", Name = "Carlo di Cenza's Journal",
                 StartMonth = 5, StartDay = 14, EndMonth = 6, EndDay = 13,
                 On  = new[] { "CarloJournal" },
@@ -292,9 +213,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // The House Mhoire Risings (Feb 25-26 2012, "All Servers: Undead Attacks"): wiki "2012 Live Events" rev 443457.
-                // Two director raids, "mhoire-tairla" near Dryreach and "mhoire-pyreoak" near Ayan Baqur; MhoireRisings is
-                // only the Pending switch (nothing hangs on it). The Announce is ours (retail's broadcasts are not recorded).
                 Key = "mhoire", Name = "the House Mhoire Risings",
                 StartMonth = 9, StartDay = 17, EndMonth = 9, EndDay = 26,
                 On  = new[] { "MhoireRisings" },
@@ -305,9 +223,7 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // Dranith Menacet in the Convergent Median (Persuasion / Repercussions, 2002): wiki revs 443229, 451160. A quest
-                // window (row DranithMedian): retail's own small Dranith 15272 stands in the Median, with his retail death
-                // broadcast. Retail's announcement is not recorded: the Announce is ours. No dressing.
+                // Dranith Menacet in the Convergent Median
                 Key = "dranith", Name = "Dranith Menacet in the Convergent Median",
                 StartMonth = 7, StartDay = 3, EndMonth = 7, EndDay = 4,
                 On  = new[] { "DranithMedian" },
@@ -318,9 +234,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // The 2009 Hero Token raids (Mar 16 and Apr 1 2009): wiki "2009 Live Events" rev 443669. Two director raids at
-                // Hebian-To ("hero-knath-hebian", "hero-apostate-hebian"); HeroRaids is only the Pending switch. The Announce
-                // is ours (retail's broadcasts are not recorded). No dressing.
                 Key = "heroraids", Name = "the Hero Token Raids",
                 StartMonth = 3, StartDay = 19, EndMonth = 3, EndDay = 28,
                 On  = new[] { "HeroRaids" },
@@ -331,10 +244,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // The Bronze Statues Attack (Betrayal / Hidden Vein, Apr 1 to May 16 2002): wiki revs 446171, 455238. A quest
-                // window (row BronzeStatuesAttack): retail's living statues come off the pedestals of 33 towns every 3.5 hours
-                // and drop the player bronze set. Retail's announcement is not recorded: the Announce is ours. No dressing
-                // (the Nullified Statues stay as they are all year).
                 Key = "bronzestatues", Name = "the Bronze Statues Attack",
                 StartMonth = 4, StartDay = 23, EndMonth = 5, EndDay = 2,
                 On  = new[] { "BronzeStatuesAttack" },
@@ -345,8 +254,7 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // Captain Burnja Attacks the Windmill (Strange Sightings, Apr 2007): wiki rev 443260. One director raid,
-                // "burnja-windmill"; BurnjaRaids is only the Pending switch. The Announce is ours. No dressing.
+                // Captain Burnja Attacks the Windmill: wiki rev 443260. One director raid, "burnja-windmill"; BurnjaRaids is only the Pending switch.
                 Key = "burnja", Name = "Captain Burnja's Windmill Raids",
                 StartMonth = 4, StartDay = 9, EndMonth = 4, EndDay = 11,
                 On  = new[] { "BurnjaRaids" },
@@ -356,9 +264,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // The Summoning Ritual of T'thuun, the first ritual (Sins of the Fathers, Dec 12 2008): wiki rev 475388. One day
-                // (row TthuunRitualAsheron): Asheron at the live Summoning T'thuun quest's site gives retail's first-ritual
-                // rewards to those Captain Tulmada has just paid. The Announce is ours. No dressing.
                 Key = "tthuunritual", Name = "the Summoning Ritual of T'thuun",
                 StartMonth = 8, StartDay = 15, EndMonth = 8, EndDay = 15,
                 On  = new[] { "TthuunRitualAsheron" },
@@ -369,8 +274,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // The Burun Raids (Mired Hearts, May 12 to Jun 2 2004): wiki rev 447715. Five director raids ("burun-<town>")
-                // on retail's own Event<Town>Vagrants rows; BurunRaids is only the Pending switch. The Announce is ours.
                 Key = "burunraids", Name = "the Burun Raids",
                 StartMonth = 8, StartDay = 27, EndMonth = 9, EndDay = 5,
                 On  = new[] { "BurunRaids" },
@@ -380,9 +283,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // The Viridian incursion at Baishi (Harvestgain, Apr 24 2015): wiki rev 473904. One director raid,
-                // "viridian-baishi"; ViridianIncursion is only the Pending switch. Shares Jun 1 to 14 with the Burun Raids (other
-                // towns). The Announce is ours. No dressing.
                 Key = "viridianbaishi", Name = "the Viridian Incursion at Baishi",
                 StartMonth = 10, StartDay = 15, EndMonth = 10, EndDay = 24,
                 On  = new[] { "ViridianIncursion" },
@@ -392,10 +292,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // Virindi Invade Ayan Baqur (Spring's Sorrows, Mar 31 to about Jun 14 2001): wiki rev 470495. A town takeover:
-                // On VirindiAyanBaqur (retail's Virindi townsfolk on the humans' spots, Adirred in the Panopticon), Off
-                // AyanBaqurTownsfolk (the twelve humans, put on that row by the datafix; restored when the window ends).
-                // The Announce is ours. No dressing.
                 Key = "virindiayan", Name = "the Virindi of Ayan Baqur",
                 StartMonth = 7, StartDay = 16, EndMonth = 7, EndDay = 25,
                 On  = new[] { "VirindiAyanBaqur" },
@@ -407,9 +303,7 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // Martine Attacks (Hidden Vein, May to Jun 2002): wiki rev 443396. Martine and the Virindi Renegades stalking
-                // him, at one of two spots a few times a day (two director entries); the Renegade is a renamed copy of retail's
-                // L69 Virindi Master (owner 2026-11-09). The Announce is ours. No dressing.
+                // Martine Attacks: wiki rev 443396. Martine and the Virindi Renegades stalking him, at one of two spots a few times a day
                 Key = "martineattacks", Name = "Martine Attacks",
                 StartMonth = 6, StartDay = 25, EndMonth = 7, EndDay = 4,
                 On  = new[] { "MartineAttacks" },
@@ -419,8 +313,7 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // The Scavenger Hunt (beta, 1999-06-14): wiki rev 475541. A switch row only: ScavengerHunt.cs runs the six
-                // hours (18:00 to midnight) and the heralds' row ScavengerHunt itself. The Announce is ours. No dressing.
+                // The Scavenger Hunt: wiki rev 475541. A switch row only: ScavengerHunt.cs runs the six hours and the heralds' row ScavengerHunt itself.
                 Key = "scavengerhunt", Name = "the Scavenger Hunt",
                 StartMonth = 7, StartDay = 31, EndMonth = 7, EndDay = 31,
                 On  = new[] { "ScavengerHuntSeason" },
@@ -430,10 +323,7 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // Viamontian Invaders of the Meeting Halls (Ashes and Dust, Nov 2005): wiki rev 476535 (Glenden Wood Invaders,
-                // Trivia). A quest window (row MeetingHallInvaders): Viamontian strike forces and their leaders in the Rithwic,
-                // Cragstone, Zaikhal and Arwic Meeting Halls, a captain in each, Tomo Genza pays and Londigul mends the helms.
-                // Shares November with the Night Club (no dressing on either). The Announce is ours.
+                // Viamontian Invaders of the Meeting Halls (Ashes and Dust, Nov 2005): wiki rev 476535 (Glenden Wood Invaders, Trivia).
                 Key = "meetinghalls", Name = "the Viamontian Invaders of the Meeting Halls",
                 StartMonth = 11, StartDay = 5, EndMonth = 11, EndDay = 14,
                 On  = new[] { "MeetingHallInvaders" },
@@ -444,10 +334,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // The Shard of the Herald (Should the Stars Fall, Nov 14 2000): wiki rev 460139. A quest window (row
-                // ShardOfTheHerald): the Dericost camp outside Ithaenc Cathedral, Lady Aerfalle among the kneeling undead, the
-                // Shadows and the Governess on Savao, the Silver Key, Kelderam's Tomb and the Shard in the catacombs; Ketnan's
-                // robes. The act before the Lightbringer's Week. Shares November with the Night Club. The Announce is ours.
                 Key = "shardherald", Name = "the Shard of the Herald",
                 StartMonth = 11, StartDay = 18, EndMonth = 11, EndDay = 30,
                 On  = new[] { "ShardOfTheHerald" },
@@ -458,9 +344,6 @@ namespace RevivalGuard
             },
             new Festival
             {
-                // Bael'Zharon's Rampage (The Child of Daralet, Dec 2000): wiki rev 443389 and Turbine's video of his client. Sixteen
-                // director visits ("bz-<town>", BaelRampage.cs); BaelZharonRampage is only the Pending switch, and rg_bz_rampage
-                // (off) must be on too (SeasonalCalendar.Switched). Leads into the Lightbringer's Week. The Announce is ours.
                 Key = "bzrampage", Name = "Bael'Zharon's Rampage",
                 StartMonth = 11, StartDay = 24, EndMonth = 11, EndDay = 30,
                 On  = new[] { "BaelZharonRampage" },
@@ -470,11 +353,7 @@ namespace RevivalGuard
             },
         };
 
-        /// <summary>
-        /// Is this (month, day) inside the festival's window? Both ends are inclusive days, and the
-        /// comparison is on MMDD so that Frostfell, which starts in December and ends in January,
-        /// works without knowing which year either end is in.
-        /// </summary>
+        /// <summary>Is this (month, day) inside the festival's window?</summary>
         internal static bool InWindow(Festival f, DateTime local)
         {
             int cur = local.Month * 100 + local.Day;
@@ -483,11 +362,7 @@ namespace RevivalGuard
             return start <= end ? (cur >= start && cur <= end) : (cur >= start || cur <= end);
         }
 
-        /// <summary>
-        /// What every event row the table names should be, given which festivals are active: ON beats OFF; a row some
-        /// festival SUPPRESSES (its Off list) is part of the world's ordinary state, so outside that festival it belongs
-        /// On (normaltowncrier, AzimarYearRound). Nothing ends up in both sets. Apply moves the rows that differ.
-        /// </summary>
+        /// <summary>What every event row the table names should be, given which festivals are active</summary>
         internal static (HashSet<string> on, HashSet<string> off) Desired(ICollection<Festival> active)
         {
             var wantOn = new HashSet<string>(active.SelectMany(f => f.On), StringComparer.OrdinalIgnoreCase);
@@ -504,21 +379,13 @@ namespace RevivalGuard
             return (wantOn, wantOff);
         }
 
-        /// <summary>A forced festival hands itself back to the calendar this many hours after it was set (owner
-        /// 2026-10-25: nothing may leave the yearly buffer swap stuck; the Sep 22 override ran Festival Season for weeks).</summary>
+        /// <summary>A forced festival hands itself back to the calendar this many hours after it was set.</summary>
         internal const int OVERRIDE_HOURS = 72;
 
-        /// <summary>Has an override set at <paramref name="at"/> (UTC; null = unknown) run out? "keep" ones never do.</summary>
+        /// <summary>Has an override set at at (UTC; null = unknown) run out?</summary>
         internal static bool OverrideExpired(DateTime? at, bool keep, DateTime nowUtc) =>
             !keep && (at == null || nowUtc >= at.Value.AddHours(OVERRIDE_HOURS));
 
-        /// <summary>
-        /// TWO SEASONS NEVER MIX (owner's box ticket 261030-0001: "halloween event things are still in holtberg the two
-        /// should never mix"). A festival on only by its calendar window stays off while a festival with a different town
-        /// dressing is forced on: Frostfell forced in October takes Festival Season's pumpkins, buffers and costumer down
-        /// (and Azimar wears Frostfell's look). The calendar windows never overlap, so this matters only for a GM's @festival.
-        /// Two forced on are both on: that is the GM's choice.
-        /// </summary>
         internal static bool Displaced(Festival f, bool forced, IEnumerable<Festival> forcedOn) =>
             !forced && f.Dressing != null
             && forcedOn.Any(o => o != f && o.Dressing != null && !o.Dressing.Equals(f.Dressing, StringComparison.OrdinalIgnoreCase));

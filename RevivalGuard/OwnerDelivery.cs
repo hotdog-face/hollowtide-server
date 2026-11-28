@@ -13,20 +13,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ITEMS DELIVERED TO THE OWNER'S PACK AT LOGIN (owner 2026-11-03: "i wont remember to run the commands to make the
-    /// items for the suits. ill need you to make those appear in my inventory for me").
-    ///
-    /// A delivery is a package weenie in ace_world whose class name starts "rgdelivery-": its Name (PropertyString 1)
-    /// says what it is ("O-Yoroi suit"), and its create list (weenie_properties_create_list, in row order) is what to
-    /// give, with the row's palette and shade when set. A datafix adds a package; nothing else is needed. The packages
-    /// themselves are never created in the world.
-    ///
-    /// When a character named in rg_owner_delivery_to (comma list, default "an admin character") enters the world, each item
-    /// of each package not yet given to that character is made and put in the pack, and stamped as a quest on the
-    /// character ("rgdelivery-<package wcid>-<row>"), so it never comes twice, whatever shard or restart. What does not
-    /// fit (slots or burden) waits for the next login, and he is told. He is told what arrived.
-    /// </summary>
     static class OwnerDelivery
     {
         internal const string P_TO = "rg_owner_delivery_to";

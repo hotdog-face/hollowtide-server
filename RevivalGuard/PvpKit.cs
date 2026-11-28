@@ -11,16 +11,7 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// `@pvpkit [again]` (Admin, ours, not retail; owner 2026-11-25, docs/plans/an admin account-pvp-build-2026-11-25.md section 6):
-    /// hands the caller the retail end-game kit PvpKitRule lists, Bonded and Attuned, with the 5 Dexterous + 4 Defenders
-    /// set tags and his sheet's gear ratings already on the pieces. Wear it, then "pk suit" (@pksuit) adds the legendary
-    /// cantrips, tinks and imbues. Behind rg_pvp_kit (default OFF). Staff only; every item is named in the Audit channel.
-    /// Two parts, each given once: the suit (skipped while the caller holds a kit helm) and the missile pack (F7
-    /// 261126-0017; skipped while he holds a kit launcher): one Pack with a bow and a crossbow (the best his BASE Missile
-    /// Weapons wields), already legendary-cantripped, ten-tinked and imbued, jewelry with cantrips and ratings, matching
-    /// ammo, Tumerok Salted Meat and Massive Mana Charges. "again" gives both regardless.
-    /// </summary>
+    /// <summary>`@pvpkit [again]`: hands the caller the retail end-game kit PvpKitRule lists, Bonded and Attuned</summary>
     public static class PvpKit
     {
         const AccessLevel LEVEL = AccessLevel.Admin;
@@ -90,7 +81,7 @@ namespace RevivalGuard
                        + $"vitality {R(PvpKitRule.GEAR_MAX_HEALTH)}, healing boost {R(PvpKitRule.GEAR_HEALING_BOOST)}. Wear it, then press pk suit for the armour.");
         }
 
-        /// <summary>Creates every entry (stacks split at the weenie's max). Null when a weenie is missing (all destroyed).</summary>
+        /// <summary>Creates every entry (stacks split at the weenie's max).</summary>
         static List<(PvpKitRule.Entry e, WorldObject wo)> Build(Session session, IEnumerable<PvpKitRule.Entry> entries, Dictionary<PvpKitRule.Entry, WorldObject> premade = null)
         {
             var made = new List<(PvpKitRule.Entry e, WorldObject wo)>();
@@ -189,8 +180,7 @@ namespace RevivalGuard
             wo.ItemCurMana = max;
         }
 
-        /// <summary>A launcher as @pksuit would leave it: the missile legendaries, an imbue and mahogany to ten tinks.
-        /// The crossbow takes Crippling Blow (his retail Gold Crossbow of the Fallen had it), the bow Armor Rending.</summary>
+        /// <summary>A launcher as @pksuit would leave it: the missile legendaries, an imbue and mahogany to ten tinks.</summary>
         static string SuitLauncher(WorldObject wo, bool crossbow)
         {
             int spells = AddSpells(wo, PkSuitRule.ItemSpells(PkSuitRule.Kind.Missile));

@@ -14,37 +14,7 @@ using Mode = RevivalGuard.PkArenaRules.Mode;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE ARENA QUEUE: RANKED FIGHTS ON DEMAND (owner 2026-11-21, move 4 of docs/findings/pk-server-plan-2026-11-21.md;
-    /// docs/PK-ARENA-QUEUE.md). Ours. Off until `pk_arena_enabled` is true (admin panel: arena on / arena off).
-    ///
-    /// A player killer queues for a ranked 1v1, 2v2 or free-for-all (@fight join 1v1, or the Arena view of the PK
-    /// Boards tab). When the queue finds a match (PkArenaRules: level band widening with the wait, no shared account
-    /// or connection, no Borg or mercenaries unless pk_arena_bots) everyone is told, and ten seconds later taken into
-    /// the retail PK Arena's pit (or the General Arena's when that one is busy). The last side standing wins.
-    ///
-    /// CONSENSUAL, BESIDE THE DARKTIDE RULES, NOT INSTEAD OF THEM (DESIGN-DECISIONS: no PK Lite). Only a fighter in a
-    /// running match, inside the match's arena, dies the arena's way: ACE's OnDeath runs as for any PK death (the
-    /// death lines, and HandlePKDeathBroadcast, so PkRenown scores the kill on the ladder under its usual honour
-    /// rules), but Player.Die is replaced: no corpse, no items dropped, no vitae, no PK respite, buffs kept,
-    /// debuffs lifted, and the fighter is taken back to where they stood when the match began, at full vitals.
-    /// The winners go back the same way a few seconds after the last fall. Leaving the arena any other way
-    /// (recall, logging off) forfeits; a fighter who logs back in inside the arena is sent home.
-    /// Stakes (item loss when both sides opt in) are not built: v1 is no-stakes only.
-    ///
-    /// The arena's own rating (Elo, per mode, per season of the renown ladder (PkRenown.Season)) is kept in PkLedger/arena.json; where each
-    /// fighter came from in PkLedger/arena-homes.json, so a restart mid-match still sends everyone home.
-    ///
-    ///     @fight                     your queue state (our client: the Arena view)
-    ///     @fight join 1v1|2v2|ffa    queue (several modes at once is fine)
-    ///     @fight leave [mode]        leave the queue, or back out of a match before it starts
-    ///     @fight top [mode]          the arena ratings this season
-    ///   admin:
-    ///     @fight on | off            the switch (pk_arena_enabled); off ends running matches with no result
-    ///     @fight bots on | off       let Borg and mercenaries queue (pk_arena_bots)
-    ///     @fight cancel              end every running match, no result, everyone home
-    ///     @fight matches             what is running
-    /// </summary>
+    /// <summary>The arena queue: ranked fights on demand.</summary>
     internal static class PkArena
     {
         internal const string P_ON = "pk_arena_enabled", P_BOTS = "pk_arena_bots", P_NEWS = "pk_arena_news";
@@ -63,9 +33,7 @@ namespace RevivalGuard
             public (uint cell, float x, float y, float z) Exit;
         }
 
-        // RETAIL'S PK ARENA AND GENERAL ARENA (dungeons 0x02E3 / 0x02E2, portals 7891 / 7894): the sunken pit (floor z 0,
-        // cells 0x0100-0x0103, ACE's walkable floor x 49.5-60.5, y -46 to -64, measured on shard5 2026-11-22). One corner
-        // per side; teammates stand 2 m apart toward the middle. The exit is the surface portal's room.
+        // Retail's PK arena and general arena (dungeons 0x02E3 / 0x02E2, portals 7891 / 7894): the sunken pit.
         static (uint, float, float, float)[] Pit(uint lb) => new[]
         {
             ((lb << 16) | 0x0100u, 49.5f, -47f, 0.005f), ((lb << 16) | 0x0103u, 60.5f, -63f, 0.005f),
@@ -282,7 +250,6 @@ namespace RevivalGuard
             var touched = new HashSet<uint>();
             lock (s_Lock)
             {
-                // drop waiters who logged off or can no longer queue
                 for (int i = 0; i < 3; i++)
                     s_Queue[i].RemoveAll(w =>
                     {
@@ -400,8 +367,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Why a queued character cannot be taken in right now, or null. Never pull someone out of a PK
-        /// fight: the queue is not an escape.</summary>
+        /// <summary>Why a queued character cannot be taken in right now, or null.</summary>
         static string NotNow(Player p)
         {
             if (p.PKTimerActive) return "you were in a PK fight moments ago";
@@ -427,8 +393,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The match is over: the side still standing wins (none, or time: a draw); ratings, news, and the
-        /// winners go home in a few seconds.</summary>
+        /// <summary>The match is over: the side still standing wins; ratings, news, and the winners go home in a few seconds.</summary>
         static void Finish(Match m, long now, HashSet<uint> touched)
         {
             var standing = m.F.Where(f => !f.Out).Select(f => f.Side).Distinct().ToList();
@@ -473,8 +438,7 @@ namespace RevivalGuard
             m.Phase = Phase.Ending; m.PhaseAt = now;
         }
 
-        /// <summary>Stop a match before it began: the one who could not come leaves the queue, the rest go back to it
-        /// with their place kept.</summary>
+        /// <summary>Stop a match before it began: the one who could not come leaves the queue, the rest go back to it with their place kept.</summary>
         static void Cancel(Match m, uint culprit, string why)
         {
             long now = PkCommon.Now();
@@ -516,8 +480,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ the arena death
 
-        /// <summary>Player.Die for a fighter in a running match, inside its arena: true when the arena took the death
-        /// (ACE's Die is skipped). OnDeath has already run: the death lines and the ladder's kill.</summary>
+        /// <summary>Player.Die for a fighter in a running match, inside its arena: true when the arena took the death.</summary>
         internal static bool ArenaDeath(Player p, DamageHistoryInfo topDamager)
         {
             if (p == null) return false;
@@ -567,8 +530,7 @@ namespace RevivalGuard
             }));
         }
 
-        /// <summary>Anyone in a running match's arena who is not one of its fighters (walked in, logged in there) is
-        /// shown out: home if the arena owes them one, else to the arena's surface portal room.</summary>
+        /// <summary>Anyone in a running match's arena who is not one of its fighters is shown out</summary>
         static void EvictOutsiders(Match m)
         {
             foreach (var p in PlayerManager.GetAllOnline())
@@ -817,8 +779,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>A fighter's death inside the arena: the arena's, not ACE's (no corpse, no vitae, home). First, so the
-    /// other Die prefixes see it skipped.</summary>
+    /// <summary>A fighter's death inside the arena: the arena's, not ACE's (no corpse, no vitae, home).</summary>
     [HarmonyPatch(typeof(Player), "Die", new[] { typeof(DamageHistoryInfo), typeof(DamageHistoryInfo) })]
     static class PkArenaDie
     {

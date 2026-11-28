@@ -5,10 +5,7 @@ using System.Text;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// NewcomerWelcome's rule, pure (no ACE types), so tools/nettest compiles and checks it by path: who counts as a
-    /// brand-new player, how arrivals are batched under the rate limit, and the words. No em dashes (player text).
-    /// </summary>
+    /// <summary>NewcomerWelcome's rule, pure, so tools/nettest compiles and checks it by path</summary>
     public static class NewcomerWelcomeRule
     {
         /// <summary>At most one welcome line per this many seconds; arrivals in between wait and share the next line.</summary>
@@ -19,12 +16,10 @@ namespace RevivalGuard
         public const double ACCOUNT_NEW_H = 24;
         /// <summary>Names in one line; more are counted ("and 3 others").</summary>
         public const int MAX_NAMES = 4;
-        /// <summary>The in-game sender of the line on General (and its name on Discord).</summary>
+        /// <summary>The in-game sender of the line on General.</summary>
         public const string SENDER = "Hollowtide";
 
-        /// <summary>Why this login is not a brand-new player's first, from what the login itself shows (no database),
-        /// or null when it may be one. Staff, the shard's own accounts (hcmerc*: Hollow Company and Borg), the dev and
-        /// test fleet's accounts and the owner's are never welcomed.</summary>
+        /// <summary>Why this login is not a brand-new player's first, from what the login itself shows, or null when it may be one.</summary>
         public static string NotNew(string accountName, uint accessLevel, string characterName, int totalLogins, bool firstEnterWorldDone)
         {
             string acct = (accountName ?? "").Trim();
@@ -39,11 +34,7 @@ namespace RevivalGuard
             return null;
         }
 
-        /// <summary>Why this is not a new player, from the account's history (the database), or null when it is one.
-        /// <paramref name="otherCharacters"/>: the account's other characters, deleted ones included (a second character,
-        /// or a remake, is an existing player). <paramref name="knownFromAddress"/>: other accounts from the same address
-        /// that already have a character in the world (another browser tab's guest, a lost-browser guest, a player's
-        /// second account); -1 when the address cannot tell (local, a shared relay, unknown).</summary>
+        /// <summary>Why this is not a new player, from the account's history (the database), or null when it is one.</summary>
         public static string NotNewAccount(double accountAgeHours, int otherCharacters, int knownFromAddress)
         {
             if (accountAgeHours > ACCOUNT_NEW_H) return "account not new";
@@ -52,11 +43,11 @@ namespace RevivalGuard
             return null;
         }
 
-        /// <summary>The rate limit: when the next line may be said, given the last one (NaN or 0 = never said).</summary>
+        /// <summary>The rate limit: when the next line may be said, given the last one.</summary>
         public static double NextAt(double lastPostAt, double now) =>
             double.IsNaN(lastPostAt) || lastPostAt <= 0 ? now : Math.Max(now, lastPostAt + GAP_S);
 
-        /// <summary>"Bob", "Bob and Alice", "Bob, Alice and Cara", "Bob, Alice, Cara, Dee and 2 others". Repeats dropped.</summary>
+        /// <summary>"Bob", "Bob and Alice", "Bob, Alice and Cara", "Bob, Alice, Cara, Dee and 2 others".</summary>
         public static string Names(IEnumerable<string> names)
         {
             var list = (names ?? Enumerable.Empty<string>()).Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n.Trim())
@@ -70,8 +61,7 @@ namespace RevivalGuard
 
         public const int STYLES = 3;
 
-        /// <summary>The line said on General, in wording <paramref name="style"/> (1-3, rg_newcomer_welcome_style; anything
-        /// else is 1). Null when there is nobody to welcome.</summary>
+        /// <summary>The line said on General, in wording style (1-3, rg_newcomer_welcome_style; anything else is 1).</summary>
         public static string Line(IEnumerable<string> names, long style)
         {
             var list = (names ?? Enumerable.Empty<string>()).ToList();
@@ -88,9 +78,6 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The Discord post for the line (the bridge's own "**Name**: text" form). Markdown is escaped and "@"
-        /// is dropped, so a name can never format the post or look like a mention (the bridge also posts with
-        /// allowed_mentions none, so nothing ever pings).</summary>
         public static string Discord(string line) =>
             string.IsNullOrWhiteSpace(line) ? null : $"**{SENDER}**: {Escape(line.Replace("@", ""))}";
 

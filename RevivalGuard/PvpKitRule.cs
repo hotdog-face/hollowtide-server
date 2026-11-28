@@ -3,19 +3,7 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE STAFF PVP KIT (pure C#, nettest PvpKitCase; server side PvpKit.cs). Owner 2026-11-25: his retail end-game
-    /// an admin character kit (docs/plans/an admin account-pvp-build-2026-11-25.md sections 4 and 6) handed to an admin, Bonded and
-    /// Attuned, to wear and then press "pk suit" (@pksuit) for the legendary cantrips, tinks and imbues.
-    ///
-    /// Sets: the 5 Dexterous + 4 Defenders Haebrean pieces carry their EquipmentSetId (ACE counts worn pieces per set).
-    /// Ratings: his June 2016 sheet (AC Character Compendium.pdf p.2): Dmg/CritDmg Rating 54/34, Dmg/CritDmg Resist
-    /// 23/16, PK Dmg/Res Rating 6/6. Each item gets only the rating families retail loot put on its kind (ACE
-    /// LootGenerationFactory_Clothing.TryMutateGearRating): armour crit damage or crit damage resist, clothing and
-    /// cloaks damage or damage resist; PK ratings on the weapons (his crossbow had PK 1/1) and jewelry. The sizes are the
-    /// sheet's, not loot's (loot rolls 1-2 on armour, 1-3 on clothing): retail reached those totals with luminance
-    /// auras, Enlightenment and society, none of which this kit can give. Totals hold with ONE weapon wielded.
-    /// </summary>
+    /// <summary>The staff PVP kit (pure C#, nettest PvpKitCase; server side PvpKit.cs).</summary>
     public static class PvpKitRule
     {
         // ACE.Entity.Enum.Properties.PropertyInt values (PvpKit.cs checks them at load)
@@ -36,7 +24,7 @@ namespace RevivalGuard
         static Entry E(uint wcid, string name, Kind k, int count = 1, int set = 0) =>
             new Entry { Wcid = wcid, Name = name, Kind = k, Count = count, Set = set };
 
-        /// <summary>The kit, in the order it lands in the pack. Weenie ids and names as ace_world has them (box, 11-25).</summary>
+        /// <summary>The kit, in the order it lands in the pack.</summary>
         public static List<Entry> Kit() => new List<Entry>
         {
             // 5 Dexterous (offence: crit damage 34 = 7+7+7+7+6)
@@ -70,19 +58,14 @@ namespace RevivalGuard
             E(27328, "Major Mana Stone", Kind.Consumable, count: 5),
         };
 
-        // ================================================================ the missile pack (owner F7 261126-0017)
-        // "need massive mana stones, tumerok meats, arrows and quarrels, one fully tinkered and cantriped bonded bow and
-        // crossbow and the jewelry with all the cantrips and ratings i can get". One Pack (a side pack, 24 slots) holding
-        // a suited bow and crossbow, suited jewelry, ammo matched to each launcher's element, food and mana charges.
+        // the missile pack
         public const uint PACK_WCID = 136;          // "Pack"
         public const int PACK_SLOTS = 24;
         public static readonly int GEAR_HEALING_BOOST = 376, GEAR_MAX_HEALTH = 379;
-        /// <summary>Retail loot's best jewelry rating (ACE GearRatingChance.ClothingJewelryRating rolls 1/2/3), one family
-        /// per piece, healing boost or vitality (LootGenerationFactory_Clothing.TryMutateGearRating), wield level 180.</summary>
+        /// <summary>Retail loot's best jewelry rating, one family per piece, healing boost or vitality, wield level 180.</summary>
         public const int JEWELRY_RATING = 3, RATED_WIELD_LEVEL = 180;
 
-        /// <summary>Retail's best missile launchers, best first, and the BASE Missile Weapons they need (WieldRequirement
-        /// RawSkill). The kit gives the best pair the caller wields.</summary>
+        /// <summary>Retail's best missile launchers, best first, and the BASE Missile Weapons they need (WieldRequirement RawSkill).</summary>
         public sealed class LauncherTier { public uint Bow, Crossbow; public string BowName, CrossbowName; public int MinBase; }
         public static readonly LauncherTier[] LAUNCHERS =
         {
@@ -100,8 +83,7 @@ namespace RevivalGuard
             return LAUNCHERS[LAUNCHERS.Length - 1];
         }
 
-        /// <summary>Deadly ammo (retail's best without specialized Fletching) by ACE DamageType: a launcher's element
-        /// bonus only lands when the ammo's damage type matches (WorldObject.GetMissileElementalDamageBonus).</summary>
+        /// <summary>Deadly ammo by ACE DamageType: a launcher's element bonus only lands when the ammo's damage type matches.</summary>
         public static readonly Dictionary<int, (uint arrow, string arrowName, uint quarrel, string quarrelName)> AMMO =
             new Dictionary<int, (uint, string, uint, string)>
         {
@@ -115,8 +97,7 @@ namespace RevivalGuard
         };
         public const int AMMO_COUNT = 1000;
 
-        /// <summary>Jewelry: PK 1/1 each (the wielded weapon brings the sixth) plus the best loot rating: vitality on the
-        /// necklace and bracelets, healing boost on the rings.</summary>
+        /// <summary>Jewelry: PK 1/1 each plus the best loot rating: vitality on the necklace and bracelets, healing boost on the rings.</summary>
         public static List<Entry> MissilePackJewelry() => new List<Entry>
         {
             E(623, "Heavy Necklace", Kind.Jewelry).R(GEAR_PK_DAMAGE, 1).R(GEAR_PK_DAMAGE_RESIST, 1).R(GEAR_MAX_HEALTH, JEWELRY_RATING),
@@ -144,10 +125,7 @@ namespace RevivalGuard
             return l;
         }
 
-        /// <summary>Wearer cantrips for the jewelry, PkSuitRule.CAP per piece, best first for an archer-mage: the six
-        /// attributes, three defenses, three gains, an aptitude for each trained skill (missile, war, life, mana
-        /// conversion, healing first), then the protections. Spells in <paramref name="skip"/> (on both launchers
-        /// already) are left out. One list per piece, in MissilePackJewelry order.</summary>
+        /// <summary>Wearer cantrips for the jewelry, PkSuitRule.CAP per piece, best first for an archer-mage</summary>
         public static List<List<uint>> JewelrySpells(IEnumerable<int> trainedSkills, ISet<uint> skip, int pieces = 5)
         {
             var have = new HashSet<int>(trainedSkills ?? Enumerable.Empty<int>());
@@ -172,7 +150,7 @@ namespace RevivalGuard
         public static int Slots(IEnumerable<Entry> kit, System.Func<uint, int> maxStack) =>
             kit.Sum(e => { int m = System.Math.Max(1, maxStack(e.Wcid)); return (e.Count + m - 1) / m; });
 
-        /// <summary>Rating totals with everything worn and ONE weapon wielded (the sheet's numbers).</summary>
+        /// <summary>Rating totals with everything worn and one weapon wielded (the sheet's numbers).</summary>
         public static Dictionary<int, int> WornTotals(IEnumerable<Entry> kit)
         {
             var d = new Dictionary<int, int>();

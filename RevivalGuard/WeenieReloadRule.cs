@@ -4,24 +4,14 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of @reloadweenie (WeenieReload.cs; no ACE types, tools/nettest compiles it by path,
-    /// WeenieReloadCase): for one live object made from the reloaded wcid, whether it is respawned through its
-    /// generator or left as it is, and why. The adapter reads the facts off the WorldObject; this decides.
-    ///
-    /// Every live object owns its own biota, a full copy of the weenie's properties taken when it was made. Evicting
-    /// the weenie from ACE's cache changes nothing that already exists: it changes what the NEXT object made from the
-    /// wcid gets (generator spawns, loot, vendor purchases, crafting, @create). So "refresh" can only mean destroy and
-    /// make again, and that is only safe for an object nobody holds and nothing is fighting: a generator spawn standing
-    /// idle in the world. Everything else is left and named.
-    /// </summary>
+    /// <summary>The pure part of @reloadweenie</summary>
     public static class WeenieReloadRule
     {
         public enum Action
         {
             Respawn,            // destroyed and made again at once by its own generator profile
             WouldRespawn,       // safe to respawn, but the verb was run without `respawn`
-            KeepPlayer,         // a player character (never touched)
+            KeepPlayer,         // a player character
             KeepPlayerOwned,    // in a player's pack or worn: the player's own biota, keeps its old values
             KeepContained,      // inside a chest, corpse, vendor or creature's pack
             KeepWielded,        // worn by a creature: refreshed when its wearer respawns
@@ -56,8 +46,7 @@ namespace RevivalGuard
         public static Action Decide(Facts f, bool respawn)
         {
             if (f == null) throw new ArgumentNullException(nameof(f));
-            // Order matters: ownership first (a player's item is never ours to touch, whatever else is true of it),
-            // then where it is, then what it is doing.
+            // Order matters: ownership first, then where it is, then what it is doing.
             if (f.IsPlayer) return Action.KeepPlayer;
             if (f.OwnedByPlayer) return Action.KeepPlayerOwned;
             if (f.IsPet) return Action.KeepPet;
@@ -110,8 +99,7 @@ namespace RevivalGuard
             return tail;
         }
 
-        /// <summary>wcids for the verb: decimal, 1..uint.MaxValue. Hex is refused: wcids are written in decimal
-        /// everywhere in this project (SQL, the wiki, @create).</summary>
+        /// <summary>wcids for the verb: decimal, 1..uint.MaxValue.</summary>
         public static bool TryParseWcid(string arg, out uint wcid)
         {
             wcid = 0;

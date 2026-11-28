@@ -9,16 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE MAIN PACK ON KEY 9 (owner, 2026-10-11: "start all players with the default of having the main pack in the
-    /// slot 9 of the quick actions bar"). A shortcut to your own character is the main pack (the client draws the
-    /// backpack and opens the inventory with it, InventoryHud.MainPackShortcut).
-    ///   * a new character is made with it in slot 9 (ACE index 8);
-    ///   * a character made before this went live gets it once, and only if its slot 9 is empty, so nobody's own
-    ///     arrangement is touched. The shortcuts went to the client with the login, so it shows from the next
-    ///     login. Who has had it: QuickbarPack/given.txt beside the mod (one character id a line), so a player who
-    ///     clears the slot does not find it back.
-    /// </summary>
+    /// <summary>The main pack on key 9.</summary>
     static class QuickbarPack
     {
         const uint SLOT = 8;   // the ninth key, 0-based as ACE's Shortcut.Index

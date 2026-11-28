@@ -11,23 +11,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A RETAIL CLIENT THAT LOST A MONSTER GETS IT BACK (Demonchild 2026-11-11, level 75 in the Olthoi dungeon 0x02FC on a
-    /// retail client: "getting smashed by invisible bugs ... nada on screen cant target nothing but im being hit", and the
-    /// day before). The retail client drops an object on its own: one it could not place in a cell is queued for
-    /// destruction and gone 25 s later (acclient_2013_decompiled.c ~90088-90106, CObjectMaint::AddObjectToBeDestroyed
-    /// 261338), and the server is not told. ACE still counts it as known, so it never sends it again while it stays in
-    /// sight, and its swings, moves and spells keep arriving for a guid the client no longer has. The client makes a
-    /// placeholder ("null object") for each such guid and every 20 s asks for it with 0xF6EA ForceObjdesc
-    /// (CObjectMaint::UseTime 261030-261082). Retail answered with the object; ACE's Player.HandleActionForceObjDescSend
-    /// sends only an ObjDescEvent (its appearance), which a client without the object cannot use, so the monster stays
-    /// invisible and untargetable while it hits. ACE's own /objsend says "rare cases of invisible object bugs".
-    /// Here a request for a world object the server already counts as known to this player is answered with the whole
-    /// object again (ACE's TrackObject: CreateObject, its wielded items, its current move). Hollowtide asks the same way
-    /// for an attacker it has no object for (ServerLink.TickLostAttacker, Demonchild 261112-0006). Anything else (an item in a
-    /// pack, a guid it never sent, a hidden object) keeps ACE's answer; one resend per guid per 10 s.
-    /// Switch: rg_lost_object_resend (on).
-    /// </summary>
+    /// <summary>A retail client that lost a monster GETS it back.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.HandleActionForceObjDescSend))]
     static class LostObjectResend
     {
@@ -48,10 +32,6 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>@lostobjtest [player]: what a retail client does on its own, on demand: a DeleteObject to this client
-        /// only for the nearest monster the server counts as known (still known), and the monster set on the player so its
-        /// moves and swings arrive for a guid the client no longer has. A name picks another online player (an admin
-        /// takes no damage, so a hit never reaches its client); from the console a name is needed.</summary>
         static void LostTest(Session session, params string[] parameters)
         {
             string who = parameters != null && parameters.Length > 0 ? string.Join(" ", parameters) : null;
@@ -84,9 +64,7 @@ namespace RevivalGuard
                 if (wo == null && now - s_LastUnknownLog > 30 && p.CurrentLandblock?.GetObject(itemGuid) is Creature hitter
                     && hitter.AttackTarget == p)
                 {
-                    // Hollowtide asks for its attacker when it has no object for it (ServerLink.TickLostAttacker). One the server
-                    // never counted as known to this player cannot be resent here: the two disagree about where the player is
-                    // (Demonchild's position mismatch). Logged so that case can be found.
+                    // Hollowtide asks for its attacker when it has no object for it (ServerLink.TickLostAttacker).
                     s_LastUnknownLog = now;
                     Mod.Log.Info($"[RevivalGuard] lost object: {p.Name} (0x{p.Guid.Full:X8}) asked for {hitter.Name} (0x{itemGuid:X8}) attacking it, " +
                         $"which the server never counted as known to it; {p.Location?.DistanceTo(hitter.Location) ?? -1:0.0} m away at {hitter.Location?.ToLOCString()}, player at {p.Location?.ToLOCString()}");
@@ -114,9 +92,6 @@ namespace RevivalGuard
     {
         public const double MIN_GAP = 10.0;
 
-        /// <param name="known">the server counts the guid as known to this player (it was sent once)</param>
-        /// <param name="inWorld">it stands in the world (not in a pack or wielded)</param>
-        /// <param name="serverOnly">ACE's Visibility: never shown to clients</param>
         public static bool Resend(bool known, bool inWorld, bool serverOnly, double now, double lastResend) =>
             known && inWorld && !serverOnly && now - lastResend >= MIN_GAP;
     }

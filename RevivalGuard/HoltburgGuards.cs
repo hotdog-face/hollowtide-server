@@ -18,30 +18,7 @@ using static RevivalGuard.HoltburgGuardsRule;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// HOLTBURG'S ROYAL GUARDS KEEP THE TOWN (owner 2026-11-12: "they do what guards do. talk like guards. patrol like guards.
-    /// ... if it sees some it should fight them"). Ours, not retail (docs/DIVERGENCES.md; findings
-    /// docs/findings/holtburg-guards-2026-11-12.md). Only the three Royal Guards (37518) placed in Holtburg (A9B4); the same
-    /// weenie in other towns, Tirenia and every other NPC are untouched.
-    ///
-    ///   TALK    an ambient line now and then (HoltburgGuardLines.cs, picked by HoltburgGuardsRule) instead of retail's
-    ///           heartbeat line; an answer to a Use (after retail's own reply) or to a greeting in local chat
-    ///           (heard on Player.OnTalk, where ACE offers local chat to nearby creatures).
-    ///   PATROL  a walking round of waypoints along Holtburg's roads, every leg checked offline against the retail physics
-    ///           port's 1 m walk grid (findings doc), with pauses at posts; ACE's MoveTo(Position) walks it server-side.
-    ///   DUTY    a hostile monster in town: the nearest one or two guards run to it (ACE's MoveTo), draw and swing with
-    ///           ACE's own MeleeAttack (animation, timing); the blow is rolled here (FightStep/Strike: ACE's damage needs a
-    ///           body-part table an NPC lacks) and lands through ACE's TakeDamage. A monster that turns on the guard swings
-    ///           back the same way (Struck). The kill's experience and loot stay with the players who fought it (the guard's
-    ///           damage is never recorded); a guard never dies and falls back to its post below 30 % health. ACE's own
-    ///           monster tick is not used for a guard: it reads targets from physics lists that never hold an NPC, and
-    ///           its visibility and foe checks are inlined (no hook can reach them).
-    ///
-    /// Switch (registered, read every think, so it turns off live):
-    ///   @modifybool rg_holtburg_guards false    guards walk home, then stand and say retail's line as before
-    ///   @modifylong rg_holtburg_guards_trace 1  log each guard's state and position every 2 s (tests)
-    /// Everything that runs on the landblock thread is caught and reported through TickGuard.
-    /// </summary>
+    /// <summary>Holtburg's royal guards keep the town.</summary>
     static class HoltburgGuards
     {
         internal const string P_ON = "rg_holtburg_guards", P_TRACE = "rg_holtburg_guards_trace";
@@ -55,9 +32,7 @@ namespace RevivalGuard
         const uint HUMAN_CMT = 0x30000000;         // the human combat maneuver table 2,512 human weenies use
         const float CENTRE_X = 96, CENTRE_Y = 92;  // posts face away from here
 
-        // ---- the routes (A9B4-local metres; index 0 is the station, set from the guard's own spawn) ----
-        // Made by A* on the outdoor layer's 1 m grid (tools/atlas/outdoor over the DATs) preferring road, then every straight
-        // leg re-checked: each 0.25 m sample clear of anything not walkable by 1 m, rise under 0.5 m per metre.
+        // the routes (A9B4-local metres; index 0 is the station, set from the guard's own spawn)
         sealed class Route { public string Name; public (float x, float y, float z)[] P; public bool[] Post; }
 
         static readonly Dictionary<uint, Route> ROUTES = new Dictionary<uint, Route>
@@ -140,8 +115,7 @@ namespace RevivalGuard
         static bool IsExtra(uint guid) { var a = s_ExtraIds; for (int i = 0; i < a.Length; i++) if (a[i] == guid) return true; return false; }
         static Route RouteOf(uint guid) { if (ROUTES.TryGetValue(guid, out var r)) return r; lock (s_Lock) return s_Extra.TryGetValue(guid, out r) ? r : null; }
 
-        /// <summary>A Royal Guard spawned for a raid (TownRaid) fights as these guards do (never dies, takes no credit), walks
-        /// <paramref name="path"/> to its stand and holds it; its station is where it came in.</summary>
+        /// <summary>A Royal Guard spawned for a raid fights as these guards do, walks path to its stand and holds it</summary>
         internal static void AddReserve(Creature c, string name, List<Position> path)
         {
             lock (s_Lock)
@@ -157,7 +131,7 @@ namespace RevivalGuard
             SetMuster(g, path, false);
         }
 
-        /// <summary>A reserve walks <paramref name="path"/> out (back to where it came in); TownRaid removes it there.</summary>
+        /// <summary>A reserve walks path out (back to where it came in); TownRaid removes it there.</summary>
         internal static void SendOff(Creature c, List<Position> path)
         {
             var g = GuardBy(c.Guid.Full);
@@ -174,8 +148,7 @@ namespace RevivalGuard
             SetDutyList();
         }
 
-        /// <summary>The placed guard on the named route walks <paramref name="path"/> to stand there through a raid
-        /// (null: back the same way to its own round). False when no such guard is loaded.</summary>
+        /// <summary>The placed guard on the named route walks path to stand there through a raid (null: back the same way to its own round).</summary>
         internal static bool Muster(string route, List<Position> path)
         {
             Guard g = null;
@@ -204,8 +177,7 @@ namespace RevivalGuard
             if (g.MusterPath == null && leaving) EndMuster(g, Timers.RunningTime);
         }
 
-        /// <summary>A guard on a muster path (not fighting): leg by leg with ACE's MoveTo at a run, then holds the last
-        /// point facing out. A leg it cannot finish in 20 s is skipped (no teleport while players look).</summary>
+        /// <summary>A guard on a muster path (not fighting): leg by leg with ACE's MoveTo at a run, then holds the last point facing out.</summary>
         static bool MusterThink(Guard g, double now)
         {
             if (g.MusterPath == null) return false;
@@ -303,8 +275,7 @@ namespace RevivalGuard
             return false;
         }
 
-        // ---- the think, once a second per guard, from its own Monster_Tick (landblock thread); in a fight the guard's
-        // ---- swings and steps every tick (0.2 s). True: the guard is fighting, and ACE's own monster tick is skipped.
+        // the think, once a second per guard, from its own Monster_Tick (landblock thread); in a fight the guard's
         internal static bool Tick(Creature c)
         {
             if (!Owns(c) || c.PhysicsObj == null || c.Location == null || c.IsDead) return false;
@@ -439,10 +410,7 @@ namespace RevivalGuard
             catch { return 2f; }
         }
 
-        /// <summary>
-        /// One gesture, as ACE's own emote Motion step plays it: the action broadcast to everyone in range (ExecuteMotion),
-        /// then back to Ready when its animation ends. The guard is busy (no move order, no other gesture) until then.
-        /// </summary>
+        /// <summary>One gesture, as ACE's own emote Motion step plays it</summary>
         static void Play(Guard g, Gesture gs, double delay, string why)
         {
             var c = g.Obj; var cmd = Cmd(gs);
@@ -615,8 +583,7 @@ namespace RevivalGuard
             };
         }
 
-        /// <summary>Every 1.5 s (whichever guard thinks first): monsters in town on the guards' landblock and its
-        /// neighbours (one landblock group, one thread), each given its nearest free guards.</summary>
+        /// <summary>Every 1.5 s: monsters in town on the guards' landblock and its neighbours, each given its nearest free guards.</summary>
         static void Scan(Guard first, double now)
         {
             var lb = first.Obj.CurrentLandblock;
@@ -635,8 +602,6 @@ namespace RevivalGuard
 
         static void ScanBlock(Landblock lb, List<Guard> free, double now)
         {
-            // a copy, not GetWorldObjectsForPhysicsHandling: that one runs the landblock's pending adds and removes, which
-            // must not happen inside its own creature tick loop (this runs from a guard's Monster_Tick)
             foreach (var wo in lb.GetAllWorldObjectsForDiagnostics())
             {
                 if (free.Count == 0) return;
@@ -680,8 +645,7 @@ namespace RevivalGuard
             return null;
         }
 
-        /// <summary>HoltburgGuardsRule.Decide for one monster: who has fought it lately (its damage log, its target), and
-        /// whether it has swung at a player, a pet or a guard within the window.</summary>
+        /// <summary>HoltburgGuardsRule.Decide for one monster</summary>
         static Call Whose(Creature m, out string why)
         {
             double window = Window;
@@ -708,8 +672,7 @@ namespace RevivalGuard
             }
             else
             {
-                // ACE drops and re-picks a monster's target now and then (FindNextTarget every few seconds): "was its target
-                // within the window" is remembered here, so a newcomer's fight is not lost in that gap
+                // ACE drops and re-picks a monster's target now and then
                 (Engager e, double t) seen;
                 bool had;
                 lock (s_Lock) had = s_Targeted.TryGetValue(m.Guid.Full, out seen);
@@ -731,7 +694,7 @@ namespace RevivalGuard
             if (g.Kitted) return;
             g.Kitted = true;
             if (c.CombatTableDID == null) c.CombatTableDID = HUMAN_CMT;
-            if (c.CombatTable == null) c.GetCombatTable();   // ACE loads it in GetNextAttackType, which a guard never calls
+            if (c.CombatTable == null) c.GetCombatTable();
             // A level 40 Royal Guard, as a fighter: weapon and defense about 200, health about 300.
             var w = c.GetCreatureSkill(Skill.HeavyWeapons);
             if (w.AdvancementClass < SkillAdvancementClass.Trained) { w.AdvancementClass = SkillAdvancementClass.Trained; w.InitLevel = 120; }
@@ -763,9 +726,8 @@ namespace RevivalGuard
             g.Target = m;
             g.DutySince = now;
             c.AttackTarget = m;
-            c.MonsterState = Creature.State.Awake;   // not Idle: a monster's swing then never "wakes" the guard (AlertFriendly)
-            // ACE lands creature-on-creature melee only for pets, factions or foe types (Monster_Melee): a faction value,
-            // even None, opens that gate both ways for the fight (the monster's swing reads the guard's, the guard's its own)
+            c.MonsterState = Creature.State.Awake;
+            // ACE lands creature-on-creature melee only for pets, factions or foe types
             c.Faction1Bits = FactionBits.None;
             g.NextChase = 0; g.NextSwing = now;
             SetDutyList();
@@ -800,7 +762,7 @@ namespace RevivalGuard
                     why = "hurt"; pool = "duty.fallback"; g.FellBack = true;
                     lock (s_Lock) s_GivenUp[m.Guid.Full] = now;   // too strong for the guards: left alone for a while
                 }
-                else if (c.AttackTarget != m) c.AttackTarget = m;   // keep it on its own monster (never anyone else)
+                else if (c.AttackTarget != m) c.AttackTarget = m;   // keep it on its own monster
             }
             if (why == null) return;
             Disengage(g, now);
@@ -826,13 +788,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>
-        /// One fight tick (0.2 s): close on the monster at a run (ACE's MoveTo, the same server walk as the patrol), then in
-        /// reach draw (combat stance), face it and swing with ACE's own MeleeAttack (its animation, hit roll, damage,
-        /// splatter). ACE's monster tick is not used for the guard: it reads targets from physics lists that never hold an
-        /// NPC. A monster that has turned on the guard (ACE's MonsterOnAttackMonster wakes it onto its attacker) swings
-        /// back the same way when in reach; one fighting a player is left to fight the player.
-        /// </summary>
+        /// <summary>One fight tick: close on the monster at a run, then in reach draw, face it and swing with ACE's own MeleeAttack.</summary>
         static void FightStep(Guard g, double now)
         {
             var c = g.Obj; var m = g.Target;
@@ -840,8 +796,6 @@ namespace RevivalGuard
             c.AttackTarget = m;
             if (!c.IsMeleeRange())
             {
-                // a new run order only when the last one ended or the monster has moved off from where it was sent:
-                // each MoveTo starts with a turn, so ordering it every tick never gets the guard going
                 g.Step = "chase";
                 var at = Local(m.Location);
                 bool moving = c.PhysicsObj.IsMovingTo();
@@ -864,8 +818,7 @@ namespace RevivalGuard
             if (!c.IsFacing(m)) { g.Step = "turn"; g.NextSwing = Math.Max(g.NextSwing, now + c.Rotate(m)); return; }
             if (now >= g.NextSwing && Timers.RunningTime >= c.NextAttackTime)
             {
-                // ACE's swing: animation, timing, the monster turned onto the guard. Its damage needs a body-part table
-                // (DamageEvent.GetBaseDamage), which an NPC weenie has none of, so the blow itself is the guard's strike.
+                // ACE's swing: animation, timing, the monster turned onto the guard.
                 float t = c.MeleeAttack();
                 g.Swings++; g.Step = $"swing {t:0.0}";
                 g.NextSwing = now + Math.Max(1.0, t);
@@ -883,11 +836,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>
-        /// The guard's blow, landed mid-swing: hit or miss by ACE's own skill contest (SkillCheck, attack ~200 against the
-        /// monster's Melee Defense), STRIKE_MIN..STRIKE_MAX slashing (a Long Sword in a strong level 40 hand), one in ten a
-        /// critical for half again, through ACE's Creature.TakeDamage (health, death, corpse) with ACE's splatter.
-        /// </summary>
+        /// <summary>The guard's blow, landed mid-swing</summary>
         const int STRIKE_MIN = 8, STRIKE_MAX = 16;
 
         static void Strike(Creature c, Creature m, float delay)
@@ -916,12 +865,7 @@ namespace RevivalGuard
             chain.EnqueueChain();
         }
 
-        /// <summary>
-        /// A monster's blow on a guard. ACE rolls every hit on a creature against its body-part table and the guard's
-        /// weenie has none, so every blow would read as evaded: the blow is rolled here instead. Hit: the monster's best
-        /// melee skill against the guard's Melee Defense (SkillCheck); damage: level/4 to level/2, plus 2, slashing;
-        /// through ACE's Creature.TakeDamage (the guard's own hook holds it above 0).
-        /// </summary>
+        /// <summary>A monster's blow on a guard.</summary>
         static readonly Skill[] MELEE = { Skill.HeavyWeapons, Skill.LightWeapons, Skill.FinesseWeapons, Skill.TwoHandedCombat, Skill.UnarmedCombat };
 
         static void Struck(Creature m, Creature c, float delay)
@@ -1069,9 +1013,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>The Royal Guard weenie has no body-part table: ACE's lookup would log an ERROR the first time a monster's
-    /// swing reaches a guard. Answered here, silently, with ACE's own "no table" (null: the swing reads as evaded; the
-    /// real blow is rolled by HoltburgGuards.Struck).</summary>
+    /// <summary>The Royal Guard weenie has no body-part table</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.GetBodyParts))]
     static class HoltburgGuardsNoBodyTable
     {
@@ -1098,8 +1040,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>A guard's damage is not written into the monster's damage history: experience (shared by damage), the
-    /// kill message and the corpse's owner go to the players who fought it, in full.</summary>
+    /// <summary>A guard's damage is not written into the monster's damage history</summary>
     [HarmonyPatch(typeof(DamageHistory), nameof(DamageHistory.Add))]
     static class HoltburgGuardsCredit
     {
@@ -1123,7 +1064,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>A guard never dies: a blow is held to leave it one point, and a death that gets past that is undone.</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.TakeDamage), new[] { typeof(WorldObject), typeof(DamageType), typeof(float), typeof(bool) })]
     static class HoltburgGuardsHurt
     {
@@ -1160,8 +1100,6 @@ namespace RevivalGuard
     }
 
     /// <summary>Retail's heartbeat line ("All's quiet on this front!") is in the guards' own pool while the switch is on.</summary>
-    /// (EmoteManager.HeartBeat is AggressiveInlining, so a patch there never runs: the heartbeat set is refused where it is
-    /// looked up.)
     [HarmonyPatch(typeof(EmoteManager), nameof(EmoteManager.GetEmoteSet), new[] { typeof(EmoteCategory), typeof(string), typeof(VendorType?), typeof(uint?), typeof(bool) })]
     static class HoltburgGuardsQuiet
     {
@@ -1189,8 +1127,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Local chat: ACE hands it to nearby creatures through EmoteManager.OnHearChat, a one-line method the JIT
-    /// inlines (a patch there never ran on the box), so the hook is on the speaker's own Player.OnTalk.</summary>
+    /// <summary>Local chat: ACE hands it to nearby creatures through EmoteManager.OnHearChat, a one-line method the JIT inlines</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.OnTalk), new[] { typeof(string) })]
     static class HoltburgGuardsHear
     {

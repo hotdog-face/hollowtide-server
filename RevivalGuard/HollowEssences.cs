@@ -19,17 +19,7 @@ using WeenieClassName = ACE.Server.Factories.Enum.WeenieClassName;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// HOLLOWTIDE ESSENCES IN THE NORMAL ESSENCE LOOT (owner 2026-11-24, docs/proposals/summoning-plan.md; the pure rule
-    /// is HollowEssenceRule.cs). A postfix on ACE's PetDeviceWcids.Roll(TreasureDeath), the one place loot picks an
-    /// essence: with rg_hollow_essences on, about 1 in 10 rolls at a level we cover (every retail level, 50 to 200) becomes
-    /// one of our families' essences of that same level (Marionette, Drudge, Olthoi ...; HollowEssenceRule.Essences),
-    /// picked evenly, so any creature of the right tier can drop one, like retail's. The level comes from
-    /// ACE's own tables (petDevices, petLevelIndexes), read once. Ours are also added to the set behind
-    /// PetDeviceWcids.Contains, so LootGenerationFactory.MutateItem (@lootgen) rolls their ratings like retail's; the main
-    /// loot path already does (TreasureRoll.ItemType is PetDevice). Off: ACE as is.
-    ///   @hollowessences [tier] [rolls]   switch, counters; with a tier, rolls that many essences through ACE's RollWcid
-    /// </summary>
+    /// <summary>Hollowtide essences in the normal essence loot.</summary>
     [HarmonyPatch]
     static class HollowEssences
     {
@@ -79,8 +69,7 @@ namespace RevivalGuard
             return d;
         }
 
-        /// <summary>PetDeviceWcids.Contains reads one private static HashSet; ours go in it (a set, not a patch on a
-        /// one-line method the JIT may inline).</summary>
+        /// <summary>PetDeviceWcids.Contains reads one private static HashSet; ours go in it.</summary>
         static int AddToContains()
         {
             try
@@ -106,7 +95,7 @@ namespace RevivalGuard
                 __result = (WeenieClassName)ours;
                 Interlocked.Increment(ref s_Swaps);
             }
-            catch { }   // never cost a drop: ACE's pick stands
+            catch { }
         }
 
         static void Say(Session s, string text)

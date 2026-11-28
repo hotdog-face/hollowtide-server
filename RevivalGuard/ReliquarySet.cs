@@ -9,20 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE RELIQUARY SET (round 2, The Drowned Reliquary; docs/content-review/round2/set-bonus.md). The switch
-    /// reliquary_set_bonus defaults ON since the dungeon's go-live (owner 2026-11-14, content batch 1); @modifybool turns it off.
-    ///
-    /// The set is EquipmentSetId 924 (weenies 924300-924305), which client_portal.dat's SpellTable.SpellSet does not
-    /// have, so ACE's own set code finds no spells and the set does nothing. These postfixes answer for set 924 the way
-    /// the DAT answers for a retail set, the same way ViridianArms answers for set 900. The numbers live in
-    /// ReliquarySetRule (pure, tested in tools/nettest): pieces counted by slot (weapon, shield, amulet, ring; 4 at
-    /// most), 2 pieces Minor Focus, full set (4) Minor Focus and Major Frost Ward.
-    ///
-    /// Each target is looked up on WorldObject, the type that declares it, with its exact parameter list; a missing
-    /// target is logged and that patch skipped, never thrown (a throw in PatchAll would turn every guard off).
-    /// Registers itself from Prepare(), so Mod.cs needs no line.
-    /// </summary>
+    /// <summary>The reliquary set (round 2, The Drowned Reliquary; docs/content-review/round2/set-bonus.md).</summary>
     static class ReliquarySet
     {
         const string P_SET = "reliquary_set_bonus";
@@ -86,10 +73,7 @@ namespace RevivalGuard
             }
         }
 
-        // ------------------------------------------------------------------ the held shield (reliquary_shield_part)
-        // The Reliquary Ward (924303) draws its own GfxObj 0x01FF6303 in the hand, the WardenforgedPlate way: no anim_part
-        // row on the weenie (ApplyOwnAnimParts would copy a part-0 row onto the wearer), part 0 swapped here on the shield's
-        // OWN ObjDesc only. Off, it is held as the Covenant Shield it clones. Keep it off where a retail acclient.exe plays.
+        // the held shield (reliquary_shield_part)
         const string P_SHIELD = "reliquary_shield_part";
         const uint SHIELD_WCID = 924303, SHIELD_GFX = 0x01FF6303;
         static bool ShieldOn => PropertyManager.GetBool(P_SHIELD, false).Item;

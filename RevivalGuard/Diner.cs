@@ -40,34 +40,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// THE PANCAKE HOUSE DINER (owner 2026-11-17: the Tanada House of Pancakes "into a real diner, all four parts"). Ours, not
-    /// retail (docs/DIVERGENCES.md "Pancake House diner"; findings docs/findings/pancake-house-diner-2026-11-17.md). The
-    /// weenies, decor and door are the datafix 2026-11-17-pancake-house-diner.sql (tools/gpubox-ace/gen_diner.py); this runs
-    /// what a datafix cannot:
-    ///
-    ///   STAFF      Gladys (retail) walks rounds of the tables from her post and back, busier at the breakfast rush; Daichi
-    ///              the fry cook works the griddle (gestures, a sizzle, rings the bell: "Order up!", and Gladys goes to the
-    ///              counter); Hana the hostess greets arrivals; Bo Lin at the counter names the special. Unprompted lines go
-    ///              through the diner's own speech budget (TownLifeRule.Budget: one line a minute per player at most).
-    ///   HOURS      by Dereth's hour: three regulars in their booths at the rush, two at midday, one (Old Tsuyoshi, whose eggs
-    ///              are always cold) in the evening, none at night, when the counter stools go up on the counter.
-    ///   WELL FED   a meal from the menu eaten at a booth or the counter: Regeneration Self I and Rejuvenation Self I for half
-    ///              an hour (retail spells; the same two again only refresh them). The special of the day eaten there also
-    ///              brings a free coffee once a day.
-    ///   COFFEE     Diner Coffee clears a hangover and sobers you, as Ulgrim's cure does (Drinking.cs, DrinkingRule.IsCure).
-    ///   CONTEST    eat the Pancake Challenge in the diner: one minute to eat as many contest pancakes as you can; your best
-    ///              is the quest counter rg_diner_pancakes (/top pancakes), the day's best (Pacific days) earns the retail
-    ///              title Hungry Hungry Hippo.
-    ///   TIPS       pyreals handed to Gladys are taken whole (retail would take one); 100 or more brings a free refill.
-    ///   DOWNSTAIRS Gladys's retail Use (pay her, go down into the Shou-jen hideout) runs only for an IHOPflag player while
-    ///              IHOPopen runs (the Spring Festival): what the retail portal's flag and season gated.
-    ///
-    /// Switches (live): rg_diner (all of it but the gate), rg_diner_life (walking, gestures, regulars, stools), rg_diner_speech,
-    /// rg_diner_buff, rg_diner_contest, rg_diner_tips, rg_diner_coffee (Drinking reads it), rg_diner_sizzle, rg_diner_gate
-    /// (Gladys's way downstairs; on even with rg_diner off), rg_diner_trace (long, 1 = log every step).
-    /// Developer: @diner [status | hours rush|midday|evening|night|auto | contest | reset].
-    /// </summary>
+    /// <summary>The pancake house diner.</summary>
     static class Diner
     {
         internal const string P_ON = "rg_diner", P_LIFE = "rg_diner_life", P_SPEECH = "rg_diner_speech", P_BUFF = "rg_diner_buff",
@@ -323,7 +296,6 @@ namespace RevivalGuard
         static int PickRound(Staff s)
         {
             var rounds = DinerPlaces.Rounds;
-            // the regulars' booths when they are in, the counter, any other table: never the same twice running
             var fit = new List<int>();
             for (int i = 0; i < rounds.Length; i++)
             {
@@ -552,8 +524,6 @@ namespace RevivalGuard
         // ---------------------------------------------------------------- the director: regulars by the hour, the stools
         static ACE.Server.Entity.Landblock s_SweptLb;
 
-        /// <summary>Ours alone, never saved: the regulars and stools come and go with the hour (ACE would otherwise keep a
-        /// dynamic object in the shard database and bring it back at the next start, beside the ones seated then).</summary>
         internal static bool Transient(WorldObject wo) =>
             wo != null && (wo.WeenieClassId == DinerPlaces.STOOL || Array.IndexOf(DinerPlaces.REGULARS, wo.WeenieClassId) >= 0);
 
@@ -568,8 +538,7 @@ namespace RevivalGuard
                 lock (s_Lock) { s_Regulars.Clear(); s_Stools.Clear(); }
                 s_StoolsUp = null;
             }
-            // anything of ours in the block we did not seat (saved by a build before Transient, which ACE loads a little
-            // after the block's statics, or left from an earlier load) goes
+            // anything of ours in the block we did not seat goes
             HashSet<uint> mine;
             lock (s_Lock) mine = new HashSet<uint>(s_Regulars.Values.Where(r => r != null).Select(r => r.Guid.Full).Concat(s_Stools.Where(o => o != null).Select(o => o.Guid.Full)));
             int gone = 0;
@@ -604,8 +573,7 @@ namespace RevivalGuard
             if (!(WorldObjectFactory.CreateNewWorldObject(wcid) is Creature c)) { Mod.Log.Warn($"[RevivalGuard] Diner: regular {wcid} is not in the world database (datafix not applied?)"); return; }
             c.Location = seat.Pos();
             if (!c.EnterWorld()) { Mod.Log.Warn($"[RevivalGuard] Diner: {c.Name} could not sit at {seat.X:0.0},{seat.Y:0.0}"); return; }
-            // feet at the bench's front edge: ACE's placement slides them clear of the bench (a static; ethereal does not
-            // help) and they sit on air, so put them back on the seat and force the position to the clients
+            // feet at the bench's front edge
             float dx = c.Location.PositionX - seat.X, dy = c.Location.PositionY - seat.Y;
             if (dx * dx + dy * dy > 0.0025f && c.PhysicsObj != null)
             {
@@ -653,7 +621,7 @@ namespace RevivalGuard
 
         static readonly Dictionary<uint, int> s_SpecialDay = new Dictionary<uint, int>();    // player -> the day they had the free coffee
 
-        /// <summary>Food.ApplyConsumable has eaten it (it was in the pack).</summary>
+        /// <summary>Food.ApplyConsumable has eaten it.</summary>
         internal static void Ate(Player p, uint wcid)
         {
             if (p == null || p.IsDead || !On) return;
@@ -683,7 +651,7 @@ namespace RevivalGuard
             else wo.Destroy();
         }
 
-        /// <summary>A self spell held for <paramref name="secs"/> (Drinking's Hold): the same spell again only refreshes it.</summary>
+        /// <summary>A self spell held for secs (Drinking's Hold): the same spell again only refreshes it.</summary>
         static bool Hold(Player p, uint id, double secs)
         {
             try
@@ -835,7 +803,7 @@ namespace RevivalGuard
         // ---------------------------------------------------------------- tips
         static readonly Dictionary<uint, double> s_Refill = new Dictionary<uint, double>();
 
-        /// <summary>Player.GiveObjectToNPC, before: pyreals given to Gladys are a tip, taken whole. False = handled here.</summary>
+        /// <summary>Player.GiveObjectToNPC, before: pyreals given to Gladys are a tip, taken whole.</summary>
         internal static bool Give(Player p, WorldObject target, WorldObject item, int amount)
         {
             if (!On || !B(P_TIPS) || target?.WeenieClassId != R.GLADYS || item?.WeenieClassId != R.PYREAL || target.Location?.Landblock != DinerPlaces.LB) return true;
@@ -909,7 +877,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>The regulars and stools the diner seats by the hour are never saved to the shard database.</summary>
     [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.IsDynamicThatShouldPersistToShard))]
     static class DinerNoSave
     {
@@ -919,7 +886,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>A diner meal went down (it was still in the pack when the motion ended).</summary>
+    /// <summary>A diner meal went down.</summary>
     [HarmonyPatch(typeof(Food), nameof(Food.ApplyConsumable))]
     static class DinerAte
     {

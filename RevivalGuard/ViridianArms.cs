@@ -10,26 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE VIRIDIAN ARMS (weenies 900850-900862; docs/VIRIDIAN-RISE-UPGRADE.md). Made, not added: both
-    /// switches default OFF, and no emote hands the weapons out yet.
-    ///
-    /// expansion_weapon_parts. A weapon of ours names its own GfxObj in a weenie_properties_anim_part row
-    /// (index 0 -> 0x01FF08xx). ACE never sends an item's own anim parts: WorldObject.CalculateObjDesc
-    /// returns right after AddBaseModelData for anything without a ClothingBase, which is every weapon.
-    /// This postfix appends them for weapons and casters in the 900000+ block only, so the client's
-    /// AcWielded (which already applies an item's AnimPartChanges to its held parts) draws ours in the
-    /// hand. Off, the weapon is held as its base setup's retail model. It stays off on any shard a
-    /// retail acclient.exe plays on: that client has no 0x01FF.... GfxObj to draw.
-    ///
-    /// viridian_set_bonus. The Viridian Grove Set is EquipmentSetId 900, which client_portal.dat's
-    /// SpellTable.SpellSet does not have, so ACE's own set code finds no spells and the set does nothing.
-    /// These postfixes answer for set 900 exactly the way the DAT answers for a retail set (a tier per
-    /// piece count, the highest tier the full list), using the DAT's own item-set spells:
-    ///   2 pieces: Crude Piercing Resistance, Apprentice Survivor's Health
-    ///   3 pieces: Effective Piercing Resistance, Journeyman Survivor's Health, Journeyman Tracker's Stamina
-    /// Pieces are any Viridian weapon (two when dual wielding) and the Heartseed of the Deru trinket.
-    /// </summary>
+    /// <summary>The viridian arms.</summary>
     static class ViridianArms
     {
         internal const int SET_ID = 900;

@@ -8,32 +8,12 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// DOES THIS ACCOUNT EXIST, ASKED BEFORE LOGGING IN (docs/ACCOUNT-SIGNUP.md, owner's "option B",
-    /// 2026-10-01). ACE's AllowAutoAccountCreation makes a new, empty account out of any name it does
-    /// not know, so a typo in the account field used to land a player in a fresh account with no
-    /// characters. The login screen now asks first and, when the answer is "no", asks the player
-    /// "This account doesn't exist yet. Create it?" before it sends the password.
-    ///
-    /// Same shape as <see cref="PopulationQuery"/>, on the login port that is already forwarded: a
-    /// 20-byte AC header with Sequence 'HTAQ', Flags 0, Id 0xFFFF, Size 4+n, then 'HTAQ' and the n
-    /// bytes of the name (1..50, ACE's own cap in HandleLoginRequest). The answer is 5 bytes,
-    /// 'HTAA' and one byte: 1 exists, 0 does not, 3 does not and this address has made its new
-    /// accounts for today (AccountCreationCap), 2 asked too often. Nothing else: no access level,
-    /// no ban state, no characters. The reply is smaller than the question, so it cannot amplify.
-    ///
-    /// RATE LIMIT, per address: one answer a second, and at most PER_WINDOW questions in WINDOW;
-    /// past that the answer is 2 until the window rolls. That is enough for a person retyping a
-    /// name and slow for anyone walking a list of names. Loopback, LAN and Tailscale addresses are
-    /// not limited at all (StaffLoginGate.IsLocal).
-    ///
-    /// REVIVAL_ACCOUNT_QUERY=0 turns it off (the packet then falls through to ACE, which drops it).
-    /// </summary>
+    /// <summary>Does this account exist, asked before logging in.</summary>
     [HarmonyPatch]
     static class AccountQuery
     {
         internal const uint MAGIC_Q = 0x51415448;   // "HTAQ" little-endian
-        internal const uint MAGIC_A = 0x41415448;   // "HTAA"
+        internal const uint MAGIC_A = 0x41415448;   // "htaa"
         const ushort SESSION_ID = 0xFFFF;
         const int MAX_NAME = 50;
         const int PER_WINDOW = 20;
@@ -46,10 +26,7 @@ namespace RevivalGuard
         static readonly ConcurrentDictionary<string, Seen> s_Seen = new ConcurrentDictionary<string, Seen>();
         static DateTime s_PruneAt;
 
-        // The per-address limit alone is no limit: a UDP source address can be made up, and each new one cost an
-        // auth-database read on the packet listener thread plus a table entry (audit 2026-11-09). So: a budget for all
-        // outside questions together, and a cap on the table. Over either, the question is dropped unanswered (a login
-        // screen asks again as the name is typed).
+        // The per-address limit alone is no limit
         const int GLOBAL_PER_SECOND = 20;
         const int MAX_SEEN = 5000;
         static readonly object s_BudgetLock = new object();
@@ -91,7 +68,6 @@ namespace RevivalGuard
                 d.Position = pos;
                 if (got != buf.Length || BitConverter.ToUInt32(buf, 0) != MAGIC_Q) return true;
 
-                // Ours from here on: never hand it to ACE, answered or not.
                 ours = true;
                 var now = DateTime.UtcNow;
                 var real = Gateway.RealAddressForLimits(endPoint);   // a browser player's own address, not the gateway's loopback
@@ -100,8 +76,7 @@ namespace RevivalGuard
                 if (!local && (!WithinBudget(now) || (s_Seen.Count >= MAX_SEEN && !s_Seen.ContainsKey(key)))) return false;
                 var seen = s_Seen.GetOrAdd(key, _ => new Seen());
                 byte answer = 255;
-                // The shard's own network is not limited (the owner was told "slow down" on his
-                // first login after a test from the same Mac, 2026-10-01): StaffLoginGate.IsLocal.
+                // The shard's own network is not limited: StaffLoginGate.IsLocal.
                 if (!local)
                 lock (seen)
                 {

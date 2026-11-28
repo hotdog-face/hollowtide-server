@@ -3,16 +3,7 @@ using ACE.Server.Managers;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// UNDER-USED DUNGEONS, the live side (owner 2026-11-27, balance review "unused dungeons"; rules and table in
-    /// HuntGroundsRule). Behind rg_hunt_grounds (default OFF):
-    ///   * champions (MonsterFun): base chance x rg_champion_busy_ground_mult (0.25) on the busy Tusker and Stomper
-    ///     grounds, x rg_champion_quiet_ground_mult (2) in the table's quiet dungeons;
-    ///   * the Event Director's champion hunt (entry "hunt"): an hour in one quiet dungeon of a level band, bands in turn,
-    ///     where a generator spawn is a champion at rg_champion_hunt_chance (0.05) at least; it runs with the rotation off
-    ///     too (it alternates with a festival's own events). Existing monsters only; one champion per landblock and the
-    ///     busy rule stay.
-    /// </summary>
+    /// <summary>Under-used dungeons, the live side.</summary>
     internal static class HuntGrounds
     {
         internal const string P_ON = "rg_hunt_grounds", P_BUSY = "rg_champion_busy_ground_mult", P_QUIET = "rg_champion_quiet_ground_mult",

@@ -4,13 +4,7 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of the allegiance finder (Recruiting.Finder.cs; no ACE types, tools/nettest compiles it by path,
-    /// AllegianceFinderCase.cs): what a listing may say, when it goes stale, how the list is sorted for the reader, the
-    /// join request's states and timers, the asker's limits, and the one newcomer hint. Ours, not retail: swearing,
-    /// passup and ranks stay ACE's; this only adds a way to find an allegiance and ask it (docs/DIVERGENCES.md
-    /// "Finding an allegiance"). Player text: plain, no em dashes, never the Borg.
-    /// </summary>
+    /// <summary>The pure part of the allegiance finder</summary>
     public static class AllegianceFinderRule
     {
         public const int LEVEL_MIN = 1, LEVEL_MAX = 275;
@@ -20,8 +14,7 @@ namespace RevivalGuard
         public const int STALE_DAYS = 14;
         /// <summary>"Active this week": logged in within this many days.</summary>
         public const int ACTIVE_DAYS = 7;
-        /// <summary>A request nobody answered ends after PENDING_HOURS; an accepted one nobody swore on in person after
-        /// ACCEPTED_HOURS (owner 2026-11-25: meet and swear in person, "Accepted, meet X to swear" for about an hour).</summary>
+        /// <summary>A request nobody answered ends after PENDING_HOURS; an accepted one nobody swore on in person after ACCEPTED_HOURS.</summary>
         public const int PENDING_HOURS = 24, ACCEPTED_HOURS = 1;
         /// <summary>The asker's limits: a gap between asks, a day's cap, and a day before asking an allegiance that said no.</summary>
         public const int ASK_GAP_S = 60, ASKS_PER_DAY = 10, DECLINED_WAIT_HOURS = 24;
@@ -35,7 +28,7 @@ namespace RevivalGuard
 
         public enum Problem { None, Pitch, Levels, Style, Join, Rank, Hours }
 
-        /// <summary>What a recruiter set. Pitch and Hours are already through RecruitRule.Clean (null = empty).</summary>
+        /// <summary>What a recruiter set.</summary>
         public sealed class Settings
         {
             public string Pitch, Hours, Style = PVE, Join = ASK;
@@ -82,8 +75,7 @@ namespace RevivalGuard
             return null;
         }
 
-        /// <summary>Who may change a listing: RecruitRule.CanToggle, with the officer rank the monarch allows (1 Speaker,
-        /// 2 Seneschal, 3 Castellan; 4 = the monarch alone). Default Seneschal, as before.</summary>
+        /// <summary>Who may change a listing: RecruitRule.CanToggle, with the officer rank the monarch allows.</summary>
         public static RecruitRule.Toggle CanManage(bool hasAllegiance, bool isMonarch, int? officerRank, int level, bool botOrStaff, int officerMin)
         {
             var t = RecruitRule.CanToggle(hasAllegiance, isMonarch, officerRank, level, botOrStaff);
@@ -94,7 +86,7 @@ namespace RevivalGuard
             return t;
         }
 
-        /// <summary>The monarch has not logged in for STALE_DAYS (an online monarch is never stale; no record at all is).</summary>
+        /// <summary>The monarch has not logged in for STALE_DAYS.</summary>
         public static bool Stale(DateTime? monarchLastLogin, bool monarchOnline, DateTime now) =>
             !monarchOnline && (monarchLastLogin == null || (now - monarchLastLogin.Value).TotalDays > STALE_DAYS);
 
@@ -155,8 +147,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The state after the clock: pending past PENDING_HOURS from the ask, accepted past ACCEPTED_HOURS from
-        /// the yes, become Expired.</summary>
+        /// <summary>The state after the clock</summary>
         public static State Aged(State s, DateTime askedAt, DateTime? answeredAt, DateTime now)
         {
             if (s == State.Pending && (now - askedAt).TotalHours >= PENDING_HOURS) return Next(s, Event.Timeout);
@@ -166,8 +157,7 @@ namespace RevivalGuard
 
         public enum AskRefusal { None, AlreadyOpen, TooSoon, DailyCap, DeclinedRecently, Sworn, NotPlayer }
 
-        /// <summary>May this player ask now? <paramref name="asksLastDay"/> counts asks in the last 24 hours;
-        /// <paramref name="declinedByThisAt"/> is when this allegiance last said no to them.</summary>
+        /// <summary>May this player ask now?</summary>
         public static AskRefusal CanAsk(bool hasPatron, bool botOrStaff, bool hasOpen, DateTime? lastAsk, int asksLastDay,
                                         DateTime? declinedByThisAt, DateTime now)
         {
@@ -225,9 +215,6 @@ namespace RevivalGuard
             $"Request sent to {allegiance}: {told} {(told == 1 ? "recruiter is" : "recruiters are")} on and will answer.";
         public static string SentLater(string allegiance) =>
             $"Nobody from {allegiance} who can accept you is on. Your request waits {PENDING_HOURS} hours; they will be asked when they log in.";
-        // Owner 2026-11-25: "players have to get together and do the swearing into the allegiance in person so the kneeling
-        // animation plays". A Yes only matches the two players; the swear is retail's, side by side (ACE's walk-to and
-        // distance), never at a distance. <where> is DeathLog's place words ("at 42.1N, 33.6E near Holtburg", "in a dungeon").
         const string HOW = "Stand next to them, select them and press Swear on the Allegiance panel.";
 
         public static string AcceptedLine(string patron, string where) =>

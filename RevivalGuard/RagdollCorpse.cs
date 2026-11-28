@@ -15,31 +15,7 @@ using AcePosition = ACE.Entity.Position;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE CORPSE LIES WHERE THE RAGDOLL LANDED (owner, 2026-09-27: "ragdolls look great, but the corpse
-    /// pops back to where it was hit"; approved). Client-only ragdolls threw the body metres away while
-    /// ACE left the corpse at the death spot, so it popped back. Server-authoritative fix: for a kill
-    /// chosen by an OPTED-IN client (the killing player, or a player's own death), the corpse is placed a
-    /// few metres along killer -> victim on safe ground, and the chooser's client is told the exact offset
-    /// so its ragdoll comes to rest there. Everyone else gets retail.
-    ///
-    /// Opt-in: the client sends `@ragdollcorpse 1|0` after this mod's "ragdoll" hello (sent from
-    /// ModChannel.Hello), and again when the player toggles ragdolls. Stored per player guid.
-    ///
-    /// The walk: 0.5 m steps up to D = clamp(5 * clamp((1.8/h)^0.4, 0.6, 1.2), 3, 6) metres, h the victim's
-    /// height; it stops at the first step that is indoors or in a building cell, in water, more than 1 m
-    /// up or down from the last good step, or not walkable. Under 1.5 m of good ground: no move. If ACE
-    /// then cannot place the corpse at the new spot, it goes back to the death spot and is placed again,
-    /// exactly as ACE would have. Outdoor deaths only.
-    ///
-    /// THE PLAN IS MADE AT DEATH (Creature.Die / Player.Die, both declare it and Player's does not call
-    /// base), not when the corpse appears 2+ s later: the chooser's client is told at once, before the
-    /// Dead motion, so its ragdoll is thrown at the right spot from the first frame. When the corpse
-    /// will NOT move (not opted in, indoors, no good ground, no recorded killer) the message says so
-    /// explicitly ({"x":0,"y":0}), so no client ever throws the body somewhere the corpse will not be.
-    /// Every opted-in mod client within 60 m hears it, not only the chooser, so a watcher's ragdoll
-    /// lands right too. Corpse.EnterWorld then applies the stored plan, with the same fallback.
-    /// </summary>
+    /// <summary>The corpse LIES where the ragdoll landed.</summary>
     static class RagdollCorpse
     {
         static readonly ConcurrentDictionary<uint, byte> s_OptedIn = new ConcurrentDictionary<uint, byte>();
@@ -65,6 +41,40 @@ namespace RevivalGuard
         sealed class Plan { public AcePosition From, To; public DateTime At; }
         static readonly ConcurrentDictionary<uint, Plan> s_Plans = new ConcurrentDictionary<uint, Plan>();
         const float HEAR_RANGE = 60f;
+
+        // A staff launch: the next death of this victim throws the body `dist` metres with `up` m/s of lift and `spin` times the usual tumble.
+        static readonly ConcurrentDictionary<uint, (float dist, float up, float spin, Vector3 heading)> s_Launch = new ConcurrentDictionary<uint, (float, float, float, Vector3)>();
+        internal static void Launch(uint victim, float dist, float up, float spin, Vector3 heading = default) => s_Launch[victim] = (dist, up, spin, heading);
+
+        static AcePosition Landing(AcePosition killerAt, AcePosition start, float dist, Vector3 heading = default)
+        {
+            var from = killerAt.ToGlobal();
+            var at = start.ToGlobal();
+            var away = new Vector2(at.X - from.X, at.Y - from.Y);
+            if (heading.X * heading.X + heading.Y * heading.Y > 0.0001f) away = new Vector2(heading.X, heading.Y);
+            away = away.LengthSquared() < 0.0001f ? new Vector2(0f, 1f) : Vector2.Normalize(away);
+            for (float s = dist; s >= 8f; s -= 6f)
+                foreach (float turn in new[] { 0f, 0.14f, -0.14f, 0.28f, -0.28f, 0.42f, -0.42f })
+                {
+                    var dir = Vector2.Transform(away, Matrix3x2.CreateRotation(turn));
+                    var p = start.FromGlobal(new Vector3(at.X + dir.X * s, at.Y + dir.Y * s, at.Z));
+                    if (p.Indoors || (p.Cell & 0xFFFF) >= 0x100) continue;
+                    p.PositionZ = p.GetTerrainZ();
+                    if (!p.IsWalkable()) continue;
+                    var cell = LScape.get_landcell(p.GetOutdoorCell());
+                    if (cell != null && cell.WaterType != LandDefs.WaterType.NotWater) continue;
+                    p.Rotation = start.Rotation;
+                    return p;
+                }
+            return null;
+        }
+
+        /// <summary>Would a launch from here find a landing (ExperimentalSpells asks before it kills)?</summary>
+        internal static bool CanLaunch(AcePosition killerAt, AcePosition start, float dist, Vector3 heading = default)
+        {
+            try { return killerAt != null && start != null && !start.Indoors && (start.Cell & 0xFFFF) < 0x100 && Landing(killerAt, start, dist, heading) != null; }
+            catch { return false; }
+        }
 
         [HarmonyPatch(typeof(Creature), "Die", new[] { typeof(DamageHistoryInfo), typeof(DamageHistoryInfo) })]
         static class CreatureDie
@@ -95,14 +105,18 @@ namespace RevivalGuard
 
                 AcePosition good = null;
                 var start = victim.Location;
-                if (chooser != null && s_OptedIn.ContainsKey(chooser.Guid.Full) && killer?.Location != null && killer != victim
+                bool launch = s_Launch.TryRemove(victimId, out var lz);
+                if (launch && killer?.Location != null && !start.Indoors && (start.Cell & 0xFFFF) < 0x100)
+                    good = Landing(killer.Location, start, lz.dist, lz.heading);
+                launch = launch && good != null;
+                if (!launch && chooser != null && s_OptedIn.ContainsKey(chooser.Guid.Full) && killer?.Location != null && killer != victim
                     && !start.Indoors && (start.Cell & 0xFFFF) < 0x100)
                 {
                     float h = victim.PhysicsObj != null ? victim.PhysicsObj.GetHeight() : 1.8f;
                     if (h <= 0.1f) h = 1.8f;
                     good = Walk(killer.Location, start, h);
                 }
-                if (s_Plans.Count > 256)                                 // corpses that never came (no-corpse creatures)
+                if (s_Plans.Count > 256)
                     foreach (var kv in s_Plans)
                         if ((DateTime.UtcNow - kv.Value.At).TotalSeconds > 120) s_Plans.TryRemove(kv.Key, out _);
                 s_Plans[victimId] = new Plan { From = new AcePosition(start), To = good, At = DateTime.UtcNow };
@@ -114,7 +128,8 @@ namespace RevivalGuard
                     dx = g.X - a.X; dy = g.Y - a.Y;
                 }
                 string msg = "{\"v\":" + victimId + ",\"x\":" + dx.ToString("0.###", CultureInfo.InvariantCulture)
-                           + ",\"y\":" + dy.ToString("0.###", CultureInfo.InvariantCulture) + "}";
+                           + ",\"y\":" + dy.ToString("0.###", CultureInfo.InvariantCulture)
+                           + (launch ? ",\"up\":" + lz.up.ToString("0.###", CultureInfo.InvariantCulture) + ",\"spin\":" + lz.spin.ToString("0.###", CultureInfo.InvariantCulture) : "") + "}";
                 foreach (var p in PlayerManager.GetAllOnline())
                 {
                     if (p?.Session == null || p.Location == null || !s_OptedIn.ContainsKey(p.Guid.Full)) continue;
@@ -125,7 +140,6 @@ namespace RevivalGuard
             }
             catch (Exception)
             {
-                // never let a placement nicety break a death
             }
         }
 
@@ -179,7 +193,6 @@ namespace RevivalGuard
                 }
                 catch (Exception)
                 {
-                    // never let a placement nicety break a death: ACE places the corpse as it would have
                     __state = null;
                 }
             }

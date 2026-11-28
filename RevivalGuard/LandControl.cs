@@ -21,39 +21,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// LAND CONTROL (retail, Ancient Powers 2008): society player killers take Northwatch Castle or
-    /// Freebooter Keep from the Creeping Blight by holding its three banners. docs/LAND-CONTROL.md.
-    ///
-    /// THE RULES ARE RETAIL'S AND ALREADY LIVE IN ace_world, NOT HERE. The banners, the keep soldiers,
-    /// Mitsuhara, the Buffing Array, the Black Market portals, the Crystal Array and the 68-hour hold
-    /// are weenies, event-linked generators and emotes (the 80310-80430 block and the 72 "Keep..."
-    /// rows of the event table). The hold timer is a countdown in the MyQuest registry of an invisible
-    /// "Stopgap!" creature on Hebian-To (landblock E74E, permaloaded in Config.js), 5 per 5-second
-    /// heartbeat from 244800 (68 hours), with the Crystal Array at 147600 (27 hours in) and the world
-    /// warnings at 1 h, 30, 15, 10 and 5 minutes.
-    ///
-    /// WHAT ACE LOSES, AND THIS FILE KEEPS. ACE holds event states and a creature's MyQuest registry in
-    /// memory only (EventManager.Initialize reloads the database's states, which say "Creeping
-    /// Blight"), so every restart, including the nightly one, handed both keeps back to the Blight and
-    /// restarted any hold. With `rg_land_control` on:
-    ///   * every 30 s the "Keep..." event states and each hold's end time are written to
-    ///     Mods/RevivalGuard/LandControl/state.json (beside the dll; a deploy leaves it alone);
-    ///   * on the first world tick after a start they are put back, and when a holder's Stopgap
-    ///     spawns again its Generation emote (the "has claimed" world line, the Mitsuhara reward
-    ///     window) is skipped and its countdown set to the time left on the wall clock. A reward
-    ///     window or Crystal Array milestone crossed while the shard was down is applied then.
-    ///   * a society banner that respawns while its "...Claimed" event is on (a restart, or the keep's
-    ///     landblock unloading when everyone left) settles at once instead of re-running the 5-minute
-    ///     contest it already won.
-    ///   * monsters leave the banners and Crystal Arrays to the players: ACE's faction-mob scan let
-    ///     the Creeping Blight kill claimed society banners (see Protected).
-    /// With the switch off none of that happens and the retail data runs exactly as ACE runs it.
-    ///
-    /// `@landcontrol` (admin, also `@lc`) reads the state and forces it for testing: capture, revert,
-    /// time left, settle, and clearing a player's banner/reward/array waits. Its replies are ours and
-    /// say so. Registered from a Harmony Prepare(), so Mod.cs needs no line.
-    /// </summary>
     public static class LandControl
     {
         public const string P_ON = "rg_land_control";
@@ -121,12 +88,7 @@ namespace RevivalGuard
             return h;
         }
 
-        /// <summary>A keep's banner, array or Banner Crystal, standing in its keep. ACE's faction-mob
-        /// scan (Monster_Awareness.FactionMob_CheckMonsters) sets every creature of another faction on
-        /// any creature without one, so the Creeping Blight (Faction1Bits 8) killed claimed society
-        /// banners on staging within minutes ("Blighted Ardent Moarsman has destroyed the Celestial
-        /// Hand Banner of the Courtyard!"). Retail's banner says who may: "You must be a Player Killer
-        /// to be able to destroy this banner."</summary>
+        /// <summary>A keep's banner, array or Banner Crystal, standing in its keep.</summary>
         internal static bool Protected(WorldObject wo)
         {
             if (wo == null || !s_Protected.Contains(wo.WeenieClassId) || !On) return false;
@@ -264,9 +226,6 @@ namespace RevivalGuard
                     s_PendingHold[k.Stopgap[si]] = end;
                     if (s.SupplyAt.TryGetValue(k.Key, out var sup)) s_PendingSupply[k.Stopgap[si]] = sup;
                 }
-                // A SUPPLY CRATE OUT AT THE RESTART IS NOT REFILLED: its generator would spawn a fresh
-                // crate (a second Mana Forge Key) on every start. The roll's 20-hour wait comes back
-                // with the hold, so a restart does not buy a new roll either.
                 var supplyEv = k.Ev(SOCS[si].Key + "Supply");
                 if (EventOn(supplyEv)) EventManager.StopEvent(supplyEv, null, null);
                 holds.Add($"{k.Name} held by the {SOCS[si].Name}, {Dur(end - now)} left");
@@ -277,7 +236,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ spawn hook
 
-        /// <summary>A Generation emote is about to run. Returns false to skip it.</summary>
+        /// <summary>A Generation emote is about to run.</summary>
         internal static bool OnGeneration(WorldObject wo)
         {
             if (wo == null || !On) return true;
@@ -297,8 +256,7 @@ namespace RevivalGuard
                         }
                         if (!pending)
                         {
-                            // a real capture: let it announce, and do what its "rallied the Creeping
-                            // Blight" line says to the other keep
+                            // a real capture: let it announce, and do what its "rallied the Creeping Blight" line says to the other keep
                             RetakeOtherKeep(k);
                             return true;
                         }
@@ -328,8 +286,6 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>Set a holder Stopgap's countdown, applying the reward window's end and the Crystal
-        /// Array's start if the new time skips past them (their checks are exact values).</summary>
         static void ApplyTimeLeft(Keep k, int si, Creature sg, int left, string why)
         {
             var soc = SOCS[si];
@@ -345,10 +301,7 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] LandControl: {k.Name} ({soc.Name}) hold {why}: {Dur(left)} left");
         }
 
-        /// <summary>A keep was just taken. The Stopgap's Generation emote then says, when the other keep
-        /// is the Blight's, "the forces loyal to T'thuun are retaking all of the Banner locations!" but
-        /// changes nothing there; this does it: any society banner standing at the other keep (contested
-        /// or claimed) goes back to the Creeping Blight.</summary>
+        /// <summary>A keep was just taken.</summary>
         static void RetakeOtherKeep(Keep taken)
         {
             var other = KEEPS.First(x => x != taken);
@@ -468,8 +421,7 @@ namespace RevivalGuard
                 var sg = FindStopgap(k, si);
                 if (sg != null)
                 {
-                    // the retail path: the countdown ends, the Stopgap kills itself, its Death emote
-                    // announces the loss and resets the keep to the Blight
+                    // the retail path: the countdown ends, the Stopgap kills itself, its Death emote announces the loss and resets the keep to the Blight
                     new ActionChain().AddAction(sg, () => sg.QuestManager.SetQuestCompletions(WAIT, 5)).EnqueueChain();
                     return $"[Land Control, ours] {k.Name}: the {SOCS[si].Name}'s hold ends on the Stopgap's next heartbeat (about 5 s), with retail's world line.";
                 }
@@ -590,8 +542,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>The world loop: save every 30 s, restore once after a start. Its Prepare registers the
-    /// feature, so Mod.cs needs no line for it.</summary>
+    /// <summary>The world loop: save every 30 s, restore once after a start.</summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     static class LandControlTick
     {
@@ -603,8 +554,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>A monster is being set on a creature (ACE's proximity and faction-mob scans). A keep's
-    /// banner or array never sets one on itself.</summary>
+    /// <summary>A monster is being set on a creature (ACE's proximity and faction-mob scans).</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.AlertMonster))]
     static class LandControlNoAlert
     {
@@ -616,7 +566,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>What a monster may attack: never a keep's banner or array.</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.GetAttackTargets))]
     static class LandControlNoTarget
     {
@@ -631,8 +580,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>A spawned object's Generation emote (EmoteManager declares OnGeneration; nothing
-    /// overrides it). Only the keep Stopgaps and society banners are looked at.</summary>
+    /// <summary>A spawned object's Generation emote (EmoteManager declares OnGeneration; nothing overrides it).</summary>
     [HarmonyPatch(typeof(EmoteManager), nameof(EmoteManager.OnGeneration))]
     static class LandControlGeneration
     {

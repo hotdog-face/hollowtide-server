@@ -4,18 +4,11 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE NUMBERS AND WORDS OF DRINKING (Drinking.cs), pure C# so nettest checks them (case "drinking"). Ours, not retail:
-    /// retail's brewed drinks only cast Intoxication I/II/III (-20/-30/-40 Coordination, 5 minutes) and nothing ever
-    /// showed or passed out (no such string or effect in acclient_2013-09-06.exe). docs/DIVERGENCES.md "Drinking".
-    ///
-    /// A character carries a "drinks" count: each alcoholic drink adds its weight, and it wears off at DECAY_PER_S (one
-    /// ordinary drink every 2.5 minutes). The client draws the effect from the count; at PASS the character passes out.
-    /// </summary>
+    /// <summary>The numbers and words of drinking (Drinking.cs), pure C# so nettest checks them (case "drinking").</summary>
     public static partial class DrinkingRule
     {
         public const double PASS = 9.0;            // drinks: out cold (about nine ales in a few minutes)
-        public const double CAP = 12.0;            // the count never climbs past this
+        public const double CAP = 12.0;
         public const double SPELL_AT = 3.0;        // a drink with no spell of its own casts Intoxication I from here
         public const double DECAY_PER_S = 1.0 / 150.0;
         public const double OUT_S = 9.0;           // seconds out cold
@@ -29,44 +22,28 @@ namespace RevivalGuard
         public const uint HANGOVER_COORD = 1385;   // Clumsiness Self I: Coordination -10
         public const uint HANGOVER_QUICK = 1409;   // Slowness Self I: Quickness -10
 
-        // ---- the picture: brief by design (owner 2026-11-17) ----------------------------------------------------------
+        // ---- the picture: brief by design ----------------------------------------------------------
 
-        // "the drunk effect is bugged where it doesnt stop. it should never hang and be on long term. its awful to look at
-        // so it needs to be brief and never lock a player into that effect ... i got locked into it because of the pk's
-        // nearby". The picture no longer follows the slow count (one drink per 150 s: 8.5 drinks stayed blurred for about
-        // 15 minutes, and a refused last drink held you there). It is sent as its own count: the real count at your last
-        // drink, falling to nothing PICTURE_S later. Every client extrapolates d - r * t by itself, so even 0.1.117 clears
-        // on time with no later message. The real count (stages, Intoxication, passing out) still wears off slowly.
         public const double PICTURE_S = 90.0;        // from your last drink to a clear screen, at most
-        /// <summary>A pass-out drink refused for danger (a fight, a monster, a red player, a stance): the count drops to a
-        /// mild stage and the picture to a faint sway gone in BLOCK_PICTURE_S. Never held at the edge of passing out.</summary>
+        /// <summary>A pass-out drink refused for danger</summary>
         public const double BLOCK_COUNT = 3.0, BLOCK_PICTURE = 2.0, BLOCK_PICTURE_S = 15.0;
 
-        /// <summary>The picture's count <paramref name="since"/> seconds after it was set to <paramref name="d0"/>, falling
-        /// at <paramref name="rate"/> per second (never negative).</summary>
+        /// <summary>The picture's count since seconds after it was set to d0, falling at rate per second.</summary>
         public static double Picture(double d0, double rate, double since) => Math.Max(0.0, d0 - Math.Max(0.0, since) * Math.Max(0.0, rate));
 
-        /// <summary>The rate that takes <paramref name="d0"/> to nothing in <paramref name="secs"/> seconds.</summary>
+        /// <summary>The rate that takes d0 to nothing in secs seconds.</summary>
         public static double PictureRate(double d0, double secs) => d0 <= 0.0 || secs <= 0.0 ? 0.0 : d0 / secs;
 
-        // ---- carried off: waking in a town tavern (owner 2026-11-17) ---------------------------------------------------
+        // ---- carried off: waking in a town tavern ---------------------------------------------------
 
-        // "make the drunk effect make you wake up later in a random place in a town. a tavern or something." A normal wake
-        // (not one woken early by danger) from an outdoor land block or a building on one: still out cold, the drinker is
-        // carried to a random town tavern (DrinkingTaverns.cs, tools/drinking/taverns.py: a clear floor spot by the
-        // barkeeper, a Portal to Town Network within a block) and wakes there. Never from a dungeon block. Nothing is taken.
-        public const double CARRY_EXTRA_S = 30.0;      // added to the out-cold time told to the client: its own fallback
-                                                       // wake must not fire while it is still in portal space
+        public const double CARRY_EXTRA_S = 30.0;
         public const double CARRY_TIMEOUT_S = 45.0;    // no arrival by then: wake wherever the body is
         public const double CARRY_WAKE_AFTER_S = 2.5;
-        /// <summary>0.1.117 and older draw a minute of hangover sway: the server ends their drawn hangover this long after
-        /// the wake (the server's hangover goes on).</summary>
         public const double OLD_CLIENT_HANGOVER_VIEW_S = 4.0;  // lying in the tavern a moment before waking
         public const int CARRY_LOCAL_BELOW = 20;       // under this level: only one of the three taverns nearest the fall
-        public const int CARRY_PK_BLOCKS = 1;          // a player killer is never left within this many blocks of another
+        public const int CARRY_PK_BLOCKS = 1;
 
-        /// <summary>Choose a tavern: the allowed ones (<paramref name="allowed"/>: no raid there, no red player near for a
-        /// player killer), for a low level only among the three nearest <paramref name="fromLb"/>; null when none.</summary>
+        /// <summary>Choose a tavern: the allowed ones, for a low level only among the three nearest fromLb; null when none.</summary>
         public static Tavern ChooseTavern(IList<Tavern> all, Func<Tavern, bool> allowed, int level, uint fromLb, int pick)
         {
             IEnumerable<Tavern> pool = all;
@@ -81,7 +58,7 @@ namespace RevivalGuard
         public static int BlockDistance(uint a, uint b) =>
             Math.Max(Math.Abs((int)((a >> 8) & 0xFF) - (int)((b >> 8) & 0xFF)), Math.Abs((int)(a & 0xFF) - (int)(b & 0xFF)));
 
-        /// <summary>The wake line in the tavern. {0} the town. Says the pack is untouched (it is: nothing is taken).</summary>
+        /// <summary>The wake line in the tavern. {0} the town.</summary>
         public static readonly string[] CARRY_LINES =
         {
             "You wake up on the floor of a tavern in {0}. Someone carried you here and tucked your pack under your head. Everything is still in it.",
@@ -93,31 +70,22 @@ namespace RevivalGuard
         public const string CARRY_GONE_OTHERS = "Two passing strangers haul {0} off by the boots.";
         public const string CARRY_ARRIVE_OTHERS = "Two strangers drop {0} on the floor and leave without a word.";
 
-        // ---- the stumble and the hangover (owner 2026-11-16) ---------------------------------------------------------
+        // ---- the stumble and the hangover ---------------------------------------------------------
 
-        /// <summary>Seconds of stumble before the black on a client that plays it (0.1.117+: Woah, a few lurching steps, the
-        /// fall, a beat on the floor; the client's AcDrunkRule.STUMBLE_S, nettest checks they agree). Out cold is counted
-        /// after it.</summary>
         public const double STUMBLE_S = 6.5;
         /// <summary>When the stumble's fall begins, for the onlookers' line.</summary>
         public const double FALL_AT_S = 4.4;
-        /// <summary>A retail client or one of ours from before 0.1.116: the server shows Woah, then this long after, the fall.</summary>
         public const double SERVER_WOAH_S = 2.1;
 
-        /// <summary>Waking takes about a third of your health ("so that they have to rest"), never below a quarter of it and
-        /// never below 1: a hangover never kills, and someone already lower loses nothing.</summary>
         public const double HEALTH_LOSS = 1.0 / 3.0;
         public const double HEALTH_FLOOR = 0.25;
 
-        /// <summary>The hangover lasts until you have RESTED this long in all (AC's own rest: sitting, crouching or lying
-        /// down out of combat, the postures ACE regenerates two to three times faster in), or HANGOVER_MAX_S passes, or
-        /// Ulgrim's cure. Self, Coordination and Quickness -10 while it lasts.</summary>
+        /// <summary>The hangover lasts until you have RESTED this long in all, or HANGOVER_MAX_S passes, or Ulgrim's cure.</summary>
         public const double REST_NEEDED_S = 60.0;
         public const double HANGOVER_MAX_S = 600.0;
         public const double HANGOVER_TICK_S = 5.0;
         public const double GROAN_GAP_S = 75.0;
 
-        /// <summary>Health after waking: a third off, floored at a quarter of the maximum (and at 1), never raised.</summary>
         public static int HealthAfterWaking(int current, int max)
         {
             if (current <= 0 || max <= 0) return current;
@@ -127,8 +95,7 @@ namespace RevivalGuard
             return Math.Max(floor, after);
         }
 
-        /// <summary>Resting, as ACE's regeneration counts it (Creature_Vitals GetRegenModifier): Crouch, Sitting or Sleeping
-        /// as the forward command, out of combat.</summary>
+        /// <summary>Resting, as ACE's regeneration counts it: Crouch, Sitting or Sleeping as the forward command, out of combat.</summary>
         public static bool Resting(uint forwardCommand, bool combatStance) =>
             !combatStance && (forwardCommand == 0x41000012u || forwardCommand == 0x41000013u || forwardCommand == 0x41000014u);
 
@@ -167,13 +134,11 @@ namespace RevivalGuard
         /// <summary>One line of a list for any pick (wraps; negatives too).</summary>
         public static string Pick(string[] lines, int pick) => lines[(pick % lines.Length + lines.Length) % lines.Length];
         public const uint HANGOVER_CURE = 23924;   // Ulgrim's Hangover Cure (retail): ours, it also clears ours
-        public const uint DINER_COFFEE = 909705;   // the Pancake House's Diner Coffee (ours, owner 2026-11-17): clears it the same way
+        public const uint DINER_COFFEE = 909705;   // the Pancake House's Diner Coffee: clears it the same way
         /// <summary>Ulgrim's cure or the diner's coffee: sobers you and lifts the hangover.</summary>
         public static bool IsCure(uint wcid) => wcid == HANGOVER_CURE || wcid == DINER_COFFEE;
 
-        /// <summary>Every drinkable alcohol on the world (ace_world, weenie type Food, surveyed 2026-11-16), by class id,
-        /// with its weight in drinks. The three with their own Intoxication spell weigh what the spell says. The client's
-        /// AcDrunkRule.ALCOHOL lists the same ids (nettest checks they agree): the Assistant never drinks one.</summary>
+        /// <summary>Every drinkable alcohol on the world, by class id, with its weight in drinks.</summary>
         public static readonly Dictionary<uint, double> WEIGHT = new Dictionary<uint, double>
         {
             [2469] = 0.5,   // Small Beer
@@ -221,7 +186,7 @@ namespace RevivalGuard
 
         public static double Weight(uint wcid) => WEIGHT.TryGetValue(wcid, out var w) ? w : 0.0;
 
-        /// <summary>The count now, from the count at <paramref name="at"/> (seconds).</summary>
+        /// <summary>The count now, from the count at at (seconds).</summary>
         public static double Now(double drinks, double at, double now) =>
             Math.Max(0.0, drinks - Math.Max(0.0, now - at) * DECAY_PER_S);
 
@@ -229,21 +194,15 @@ namespace RevivalGuard
 
         public static bool PassesOut(double after) => after >= PASS;
 
-        /// <summary>0 sober, 1 tipsy (the screen sways), 2 drunk (blur, double vision), 3 staggering. The client draws the
-        /// same bands from the count (AcDrunkRule.Effect).</summary>
+        /// <summary>0 sober, 1 tipsy (the screen sways), 2 drunk (blur, double vision), 3 staggering.</summary>
         public static int Stage(double d) => d >= 6.0 ? 3 : d >= 4.0 ? 2 : d >= 2.0 ? 1 : 0;
 
         public enum Block { None, Fighting, Hostile, PlayerKiller, Stance }
 
-        /// <summary>Is an ACE DamageHistory entry a hit by someone else? ACE logs damage NEGATIVE (DamageHistory.Add:
-        /// -amount, the attacker's guid) and every heal, natural regeneration included, POSITIVE with no attacker
-        /// (OnHeal: ObjectGuid.Invalid). 0.1.116's rule read it the other way round: any player regenerating health in
-        /// the last 30 s was refused "Your blood is still up from the fight", and a real hit never counted (box test
-        /// 2026-11-16, after waking a third down).</summary>
+        /// <summary>Is an ACE DamageHistory entry a hit by someone else?</summary>
         public static bool IsHit(int amount, bool attackerIsSelf, bool attackerInvalid) => amount < 0 && !attackerIsSelf && !attackerInvalid;
 
-        /// <summary>WHY A DRINK THAT WOULD PASS YOU OUT IS REFUSED. Never in combat, never with a monster near, never in
-        /// reach of a red player (owner 2026-11-16); a combat stance counts as combat (there is no lying down in one).</summary>
+        /// <summary>Why a drink that would pass you out is refused.</summary>
         public static Block PassOutBlock(bool combatStance, bool hitRecently, bool hostileNear, bool redPlayerNear)
         {
             if (hitRecently) return Block.Fighting;
@@ -265,7 +224,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The line when the count climbs into a new stage (never twice for one stage in a row).</summary>
+        /// <summary>The line when the count climbs into a new stage.</summary>
         public static string StageLine(int from, int to)
         {
             if (to <= from) return null;

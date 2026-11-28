@@ -10,15 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// JOKE SCROLLS AS FESTIVAL AND EVENT REWARDS (owner 2026-10-20 chose "Festival/event rewards" after removing Tumble;
-    /// docs/JOKE-SCROLLS-FESTIVALS.md). ON by default since 2026-11-14 (owner approved); off: @modifybool rg_joke_scroll_rewards false.
-    /// No NPC, no world object: the scrolls (gen_joke_spells.py, 901661-901673) arrive two retail-shaped ways.
-    ///   1. A creature a player kills while a SeasonalCalendar festival runs may carry its festival's scroll in its
-    ///      corpse (SeasonalDrops' shape: festival trophies off ordinary creatures). One roll per kill.
-    ///   2. An EventDirector event WON by the players hands each real player near it one scroll (EventDirector.End).
-    /// rg_joke_scroll_rate (default 1) multiplies every drop chance, for tests. Never the Egg Launcher (holiday only).
-    /// </summary>
+    /// <summary>Joke scrolls as festival and event rewards.</summary>
     [HarmonyPatch]
     static class JokeScrollRewards
     {
@@ -27,7 +19,7 @@ namespace RevivalGuard
         static readonly uint[] BOOM = SeasonalSourcesRule.BOOM;
         // the festival table (rates, pools, the Mad Cow rule) is SeasonalSourcesRule.JokeDrops, checked by tools/nettest
 
-        internal static bool On => PropertyManager.GetBool(P_ON, true).Item;   // owner 2026-11-14: on
+        internal static bool On => PropertyManager.GetBool(P_ON, true).Item;
         static double Rate => Math.Max(0.0, PropertyManager.GetDouble(P_RATE, 1.0).Item);
         static int s_Given;
 
@@ -77,8 +69,7 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] JokeScrollRewards: drop: {e.Message}"); }
         }
 
-        /// <summary>From EventDirector.End when the players won: one scroll each for the real players near it.
-        /// The Present Raids give a Present; every other win, a firework to celebrate it.</summary>
+        /// <summary>From EventDirector.End when the players won: one scroll each for the real players near it.</summary>
         internal static void EventWon(string key, IEnumerable<Player> near)
         {
             if (!On) return;

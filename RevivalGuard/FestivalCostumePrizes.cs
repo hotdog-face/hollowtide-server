@@ -7,15 +7,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// COSTUME CASTERS AS FESTIVAL-GOAL PRIZES (owner 2026-11-14: "the food casters and the Loaf Shooter become
-    /// festival-goal or Night Club rewards"). Whenever a festival goal's trophy flag is stamped (the Costumers', Hoshino
-    /// Kiri's and Rayeesh's emote payouts, and NightClubParty's balloons in the club all stamp "&lt;goal&gt;Trophy" once a
-    /// festival), one costume caster from that goal's pool goes in the pack beside the trophy: the first of the pool this
-    /// character never had, so a regular collects the set over the years (SeasonalSourcesRule.CostumePrizes). A full pack
-    /// keeps it owed (a quest flag) and it is handed over at the next login. rg_festival_costume_prizes (default on) turns
-    /// it off. The items are the approved costume clones 908022-908040 (gen_costume_prototypes.py, live since 11-04/11-08).
-    /// </summary>
+    /// <summary>Costume casters as festival-goal prizes.</summary>
     static class FestivalCostumePrizes
     {
         internal const string P_ON = "rg_festival_costume_prizes";

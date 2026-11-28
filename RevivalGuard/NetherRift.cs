@@ -16,45 +16,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// NETHER RIFT, a new void spell (docs/NEW-ANIMATIONS.md, part 3). Ours, not retail. MADE, NOT
-    /// ADDED, OWNER-APPROVED PERMANENT 2026-09-28: on by default (server property rg_nether_rift), and its world data
-    /// (tools/gpubox-ace/nether-rift.sql) is not applied. Off, every patch below returns at once.
-    ///
-    /// The spell: void magic, level VII, a STRIKE. The caster tears the air open beside the target and
-    /// a nether bolt lances out of the tear into it. War has strikes (ACE ProjectileSpellType.Strike:
-    /// the projectile is born at the target, Black Spear Strike, MeteorStrike); void never had one.
-    /// Every step is retail's pipeline and retail's objects, so a retail client sees a void cast (the
-    /// purple Platinum windup, the Birch talisman's MagicRecoilMissile) and a retail Nether Bolt
-    /// (weenie 43230) appearing at the target. Our client, opted in, sees the Nether Rend gesture in
-    /// place of MagicRecoilMissile ("xover") and the tear the bolt comes out of ("xfx").
-    ///
-    /// What the data cannot say, done here:
-    ///   the spell       ACE reads a spell's base from the DAT's SpellTable and we do not write DATs:
-    ///                   when the DATs load (switch on) a SpellBase cloned from Nether Bolt VII (5355) is put in
-    ///                   the loaded table under id 60001. ACE's spell row comes from the SQL.
-    ///   a strike        SpellProjectile.GetProjectileSpellType picks the shape from the category, and no
-    ///                   void category is a strike: a postfix answers Strike for 60001.
-    ///   never on a      A retail client looks every spell id it is sent up in its own SpellTable, so
-    ///   retail client   60001 must never reach one. It is NOT written to the spellbook: learning it
-    ///                   stamps quest flag RevivalNetherRift instead (a LearnSpellWithNetworking prefix),
-    ///                   SpellIsKnown answers from the stamp, the spell-bar favourite that would persist
-    ///                   it in PlayerDescription is refused, and only an opted-in session is sent the
-    ///                   MagicUpdateSpell that shows it in our client's spellbook.
-    ///   the overlay     DoCastGesture postfix: "xover" to opted-in clients near the caster; the
-    ///                   LaunchSpellProjectiles postfix: "xfx" with the projectile, target and caster.
-    ///
-    ///   @netherrift          status (admin)
-    ///   @netherrift inject   put the spell in the loaded table now, without a restart (admin)
-    ///   @netherrift teach    learn it yourself (admin; the test path)
-    ///
-    /// How a player learns it (owner 2026-09-28, "let players learn it from your recommended spot"):
-    /// Riftwatcher Ysanne (weenie 901420, tools/gpubox-ace/nether_rift_trainer.py) at the Encampment
-    /// near Rynthid Infested Plains. Using her runs TrainerUse: level 150+ with Void Magic trained
-    /// learns it through LearnSpellWithNetworking (so the flag, never the spellbook); otherwise she
-    /// says what is missing, or that it is already known. Her dialogue is here, not in emote data,
-    /// so it can say "not while the spell is off" instead of teaching nothing.
-    /// </summary>
+    /// <summary>Nether rift, a new void spell (docs/NEW-ANIMATIONS.md, part 3).</summary>
     static class NetherRift
     {
         internal const uint SPELL = 60001;
@@ -69,7 +31,7 @@ namespace RevivalGuard
         static readonly object s_Lock = new object();
         static bool s_Injected;
 
-        internal static bool On => PropertyManager.GetBool(P_ON, true).Item;   // owner-approved permanent 2026-09-28
+        internal static bool On => PropertyManager.GetBool(P_ON, true).Item;
         static bool Live => s_Injected && On;
 
         internal static void Register()
@@ -90,8 +52,6 @@ namespace RevivalGuard
                 msg = Inject() ? $"[NetherRift] spell {SPELL} is in the loaded spell table." : "[NetherRift] could not add the spell; see ACE_Log.txt.";
             else if (parameters.Length > 0 && parameters[0].Equals("teach", StringComparison.OrdinalIgnoreCase))
             {
-                // How a player comes by it is the owner's call (docs/NEW-ANIMATIONS.md); a scroll is
-                // out, since a retail client appraising one would be sent spell 60001. This is the test path.
                 var p = session?.Player;
                 if (p == null) msg = "[NetherRift] teach: in game only.";
                 else if (!Live) msg = $"[NetherRift] teach: {P_ON} is off or the spell is not loaded.";
@@ -115,8 +75,7 @@ namespace RevivalGuard
             else Mod.Log.Info(msg);
         }
 
-        /// <summary>The spell's base, as retail's table shape has it: school, level, mana, range,
-        /// components, target, flags. Cloned from Nether Bolt VII and then given its own identity.</summary>
+        /// <summary>The spell's base, as retail's table shape has it: school, level, mana, range, components, target, flags.</summary>
         static bool Inject()
         {
             lock (s_Lock)
@@ -136,8 +95,7 @@ namespace RevivalGuard
                     t.Property("Power").SetValue(310u);                 // between Nether Bolt VII (300) and the curses VII (325)
                     t.Property("BaseMana").SetValue(50u);               // Bolt VII 35, Streak VII 70
                     t.Property("DisplayOrder").SetValue(8057u);         // after Nether Streak VII (8055) in the void list
-                    // Platinum Scarab, Indigo Taper, Soulweed, Bottled Rage, Birch Talisman: "Traku Bor",
-                    // words no retail void spell uses; the Birch talisman is every void bolt's (MagicRecoilMissile).
+                    // Platinum Scarab, Indigo Taper, Soulweed, Bottled Rage, Birch Talisman
                     t.Property("Formula").SetValue(new List<uint> { 112, 70, 195, 197, 55 });
                     table[SPELL] = sb;
                     s_Injected = true;
@@ -148,9 +106,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>ACE loads the DATs after the mods (Program.cs: ModManager.Initialize, then
-        /// DatManager.Initialize), so the spell goes in once the table exists: a postfix on
-        /// DatManager.Initialize, still single-threaded startup, before any world thread reads it.</summary>
+        /// <summary>ACE loads the DATs after the mods, so the spell goes in once the table exists</summary>
         internal static void AfterDats() { if (On) Inject(); }
 
         /// <summary>From ExpansionMotions when a session opts in: show the spell in its spellbook.</summary>
@@ -184,11 +140,11 @@ namespace RevivalGuard
                 "{\"k\":\"nether_rift\",\"p\":" + sp.Guid.Full + ",\"t\":" + (target?.Guid.Full ?? 0) + ",\"c\":" + caster.Guid.Full + "}");
         }
 
-        /// <summary>Learning stamps a flag instead of writing the spellbook. False = ACE's own is skipped.</summary>
+        /// <summary>Learning stamps a flag instead of writing the spellbook.</summary>
         internal static bool LearnPrefix(Player p, uint spellId, bool uiOutput)
         {
             if (spellId != SPELL) return true;
-            if (!Live) return false;   // never let ACE's own write 60001 to a spellbook, switch or no switch
+            if (!Live) return false;
             if (p.QuestManager.HasQuest(STAMP))
             {
                 if (uiOutput) p.Session.Network.EnqueueSend(new GameMessageSystemChat("You already know that spell!", ChatMessageType.Broadcast));
@@ -209,15 +165,12 @@ namespace RevivalGuard
             if (!__result && spellId == SPELL && Live && p.QuestManager.HasQuest(STAMP)) __result = true;
         }
 
-        /// <summary>A favourite is saved on the character and sent in PlayerDescription to whatever
-        /// client logs in next. Never for 60001; our client keeps its own bar entry.</summary>
+        /// <summary>A favourite is saved on the character and sent in PlayerDescription to whatever client logs in next.</summary>
         internal static bool FavoritePrefix(uint spellId) => spellId != SPELL;
 
         // ------------------------------------------------------------------ the trainer
 
-        /// <summary>Creature.ActOnUse postfix (the NPC has no emote data, so EmoteManager.OnUse did
-        /// nothing before this). Turns to the player, then speaks as a retail NPC does: Tells, about
-        /// two seconds apart (the Professor of Void Magic's own spacing, weenie 53385).</summary>
+        /// <summary>Creature.ActOnUse postfix (the NPC has no emote data, so EmoteManager.OnUse did nothing before this).</summary>
         internal static void TrainerUse(Creature npc, WorldObject activator)
         {
             if (npc == null || npc.WeenieClassId != TRAINER || activator is not Player p || p.Session == null) return;
@@ -379,8 +332,7 @@ namespace RevivalGuard
     [HarmonyPatch]
     static class NetherRiftTrainer
     {
-        // Creature DECLARES its ActOnUse override (Creature.cs: "handled in base.OnActivate ->
-        // EmoteManager.OnUse()"), so it is the type to patch; the wcid filter is inside.
+        // Creature DECLARES its ActOnUse override, so it is the type to patch; the wcid filter is inside.
         static MethodBase TargetMethod()
         {
             var m = AccessTools.DeclaredMethod(typeof(Creature), nameof(Creature.ActOnUse), new[] { typeof(WorldObject) });

@@ -12,18 +12,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A trade closes for both sides when one of them leaves the world (log out, character switch, disconnect, crash).
-    /// ACE's LogOut_Inner closes the partner's side, but only once the session ends: a crash or a dropped link left the
-    /// partner's trade open for the whole session timeout (DefaultSessionTimeout 300 s on our shards; box 2026-10-29:
-    /// a kill -9 closed it at 5:01). And: a PK's delayed logoff (frozen for pk_timer, often a dropped
-    /// link) kept the trade open the whole time; a leave during an accepted trade's 0.5 s escrow hit
-    /// HandleActionCloseTradeNegotiations' TradeTransferInProgress early return, so the partner's window stayed open
-    /// against nobody for good; the leaver's own state was never cleared; and the partner was told only "cancelled".
-    /// Here the leave closes it at LogOut (first) and LogOut_Inner, waits out an escrow, and a 2 s sweep closes any
-    /// trade whose partner is gone or whose partner's client has sent nothing for 20 s (a crash closes in ~20 s). Items never leave a pack before the escrow, so closing moves nothing: each side
-    /// keeps what it offered. Rule: TradeLeaveRule.cs (tools/nettest checks it).
-    /// </summary>
+    /// <summary>A trade closes for both sides when one of them leaves the world (log out, character switch, disconnect, crash).</summary>
     static class TradeLeaveClose
     {
         static readonly MethodInfo s_SetTrading = AccessTools.PropertySetter(typeof(Player), nameof(Player.IsTrading));   // private set
@@ -75,8 +64,7 @@ namespace RevivalGuard
             chain.EnqueueChain();
         }
 
-        /// <summary>Ends <paramref name="p"/>'s side as HandleActionCloseTradeNegotiations does, minus its generic
-        /// TradeClosed error; <paramref name="leaverName"/> non-null sends the reason line.</summary>
+        /// <summary>Ends p's side as HandleActionCloseTradeNegotiations does, minus its generic TradeClosed error</summary>
         static void Close(Player p, ObjectGuid otherGuid, string leaverName)
         {
             if (p.TradeTransferInProgress) return;
@@ -97,8 +85,7 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] TradeLeaveClose send to {p.Name}: {e.Message}"); }
         }
 
-        /// <summary>Seconds since the last packet from this player's client: ACE pushes TimeoutTick to now +
-        /// DefaultSessionTimeout on every packet it processes (NetworkSession.ProcessPacket).</summary>
+        /// <summary>Seconds since the last packet from this player's client</summary>
         static double SilentSeconds(Player p)
         {
             var n = p.Session?.Network;
@@ -107,8 +94,6 @@ namespace RevivalGuard
             return Math.Max(0, (DateTime.UtcNow.Ticks - last) / (double)TimeSpan.TicksPerSecond);
         }
 
-        /// <summary>Catch-all for any path that skipped LogOut (ForceLogoff, a throw mid-logout): a trade whose partner
-        /// is offline, or online and no longer trading with this player, closes.</summary>
         internal static void Sweep()
         {
             if (DateTime.UtcNow < s_NextSweep) return;
@@ -121,8 +106,7 @@ namespace RevivalGuard
                 if (partner != null && partner.TradeTransferInProgress) continue;
                 if (partner != null && partner.IsTrading && partner.TradePartner == p.Guid)
                 {
-                    // a two-sided trade: the partner's link gone quiet (a crash or a pulled cable) counts as leaving,
-                    // rather than holding the trade open for ACE's session timeout (300 s on our shards)
+                    // a two-sided trade: the partner's link gone quiet counts as leaving, rather than holding the trade open for ACE's session timeout
                     var quiet = SilentSeconds(partner);
                     if (TradeLeaveRule.LinkLost(quiet))
                     {

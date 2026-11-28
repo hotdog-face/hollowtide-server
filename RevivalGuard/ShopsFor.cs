@@ -13,18 +13,7 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// WHICH SHOP SELLS WHAT THE ASSISTANT IS SHORT OF (Wolfgang Puck 261112-0012, 0.1.105: "assistant restock tried to go to
-    /// fletcher for stamina tinctures"). Ours. A supply run visited the vendors near its landing nearest first, knowing
-    /// nothing of their stock until a window opened, and only the ones its client could see: indoor vendors in other
-    /// buildings are not sent to a client outside them. In that town (0xA1A4) the Fletcher was nearer; the one vendor that
-    /// sells Stamina Tinctures is Danifa Gondmad the Healer, in another building.
-    /// Our client asks "@shopsfor name;name;..." (its Keep List) on landing and gets, on the mod channel "shopsfor", every
-    /// vendor within R of the player (this landblock and the ones around it), nearest first: guid, name, position, and which
-    /// of the asked names its shop list holds (exact name, or a name the asked one is the singular of). The shop list is
-    /// the vendor's create list (DestinationType Shop), read from the weenie cache: nothing is made, no vendor is loaded.
-    /// Our client only (ModChannel.Capable); one answer per player per 2 s.
-    /// </summary>
+    /// <summary>Which shop sells what the assistant is short of.</summary>
     static class ShopsFor
     {
         internal const string CHANNEL = "shopsfor";
@@ -99,7 +88,7 @@ namespace RevivalGuard
     /// <summary>ShopsFor's rule, pure (tools/modcheck).</summary>
     public static class ShopsForRule
     {
-        /// <summary>"a;b; c" -> distinct trimmed names, at most <paramref name="max"/>.</summary>
+        /// <summary>"a;b; c" -> distinct trimmed names, at most max.</summary>
         public static List<string> Names(string text, int max)
         {
             var r = new List<string>();
@@ -114,8 +103,7 @@ namespace RevivalGuard
             return r;
         }
 
-        /// <summary>A shop item answers an asked name: the same name, or the asked name is a plural whose singular the item's
-        /// name holds ("healing kits" -> "Crude Healing Kit").</summary>
+        /// <summary>A shop item answers an asked name: the same name, or the asked name is a plural whose singular the item's name holds.</summary>
         public static bool Matches(string item, string asked)
         {
             if (string.IsNullOrEmpty(item) || string.IsNullOrEmpty(asked)) return false;

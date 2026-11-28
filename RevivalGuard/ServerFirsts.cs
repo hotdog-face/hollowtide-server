@@ -14,19 +14,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// BRONZE STATUE SERVER-FIRSTS (owner-approved 2026-10-20, docs/HALF-FINISHED-CONTENT.md item 7). Retail's 2002
-    /// "Bronze Statues Attack" event: whoever destroyed a statue type's native cast got a Unique Bronze part, which Bhab,
-    /// Arcanum Tinker (19354, the Consortium near Xarabydun) turns into a Commemorative Bronze Statue if his
-    /// Event...Killer flag says it was you; one per server. ACE has the Tinker, the parts and the statues, but nothing sets
-    /// the flags or makes the parts.
-    ///
-    /// OURS: the FIRST player on this server to kill each Bronze Statue creature type (17 types, as the Tinker's data has
-    /// them) gets that type's flag and Unique part (WorldBossSchedule.Grant: a full pack keeps it owed), and the world
-    /// hears it. The claim is written to ServerFirsts.json beside the dll BEFORE anything is given, so a type is only
-    /// ever claimed once, across restarts and mod updates (the file is not part of a deploy). A kill with no online
-    /// player behind it claims nothing. Players: @serverfirsts lists who holds which.
-    /// </summary>
+    /// <summary>Bronze statue server-firsts.</summary>
     static class ServerFirsts
     {
         internal sealed class Spec { public string Key, Label, Flag; public uint Part; }
@@ -60,8 +48,7 @@ namespace RevivalGuard
         static readonly object s_Lock = new object();
         static Dictionary<string, Claim> s_Claims;
         static readonly HashSet<uint> s_Seen = new HashSet<uint>();
-        // one world message per player per 10 minutes (owner 2026-10-23, F7 261023-0024: one player's sweep of the
-        // statue field announced 11 firsts in 4 minutes); the rest reach the killer alone, @serverfirsts lists them all
+        // one world message per player per 10 minutes; the rest reach the killer alone, @serverfirsts lists them all
         const double ANNOUNCE_GAP_S = 600;
         static readonly Dictionary<uint, double> s_LastAnnounced = new Dictionary<uint, double>();
 
@@ -85,7 +72,7 @@ namespace RevivalGuard
                 Load();
                 if (s_Claims.ContainsKey(s.Key)) return;
                 s_Claims[s.Key] = new Claim { Name = killer.Name, Guid = killer.Guid.Full, At = ACE.Common.Time.GetUnixTime() };
-                if (!Save()) { s_Claims.Remove(s.Key); return; }   // never give what could be given twice
+                if (!Save()) { s_Claims.Remove(s.Key); return; }
             }
             killer.QuestManager.Stamp(s.Flag);
             WorldBossSchedule.Grant(killer.Guid.Full, s.Part, $"for being the first on this server to destroy {s.Label}");
@@ -144,7 +131,6 @@ namespace RevivalGuard
             }
             catch (Exception e)
             {
-                // An unreadable file must not reopen claimed types: refuse every claim until it is fixed by hand.
                 Mod.Log.Error($"[RevivalGuard] ServerFirsts: could not read {path}: {e.Message}; no new claims until it is fixed");
                 foreach (var s in Specs.Values) s_Claims[s.Key] = new Claim { Name = "(unreadable state)" };
             }
@@ -164,14 +150,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// The Tinker's statue never lost (owner 2026-10-20). ACE's Player.GiveFromEmote returns early with only "tries to give
-    /// you" when ItemsToReceive says the pack is full or too heavy, and TryCreateForGive drops the item on a failed add:
-    /// either way the part is already taken. For Bhab (19354) giving a Commemorative Bronze Statue (19738-19754) this
-    /// prefix does the give itself: ACE's own TryCreateForGive first (same pack rule and messages), and if that fails the
-    /// statue goes on the ground at the player's feet (ACE's drop path), never rotting, saved at once. Exactly one statue
-    /// per call; every other emote give runs ACE's code untouched.
-    /// </summary>
     [HarmonyPatch]
     static class ServerFirstsStatueDrop
     {
@@ -213,7 +191,7 @@ namespace RevivalGuard
 
         static void Drop(Player p, WorldObject emoter, WorldObject item)
         {
-            item.TimeToRot = -1;   // a one-per-server trophy must not rot away on the ground
+            item.TimeToRot = -1;
             bool placed = false;
             try
             {
@@ -245,7 +223,6 @@ namespace RevivalGuard
                     + $"placed on the ground at {item.Location?.ToLOCString()} (never rots)");
                 return;
             }
-            // No ground either: owe it through the world-boss mailbox (delivered when there is room), never lose it.
             Mod.Log.Error($"[RevivalGuard] ServerFirsts: {item.Name} for {p.Name} 0x{p.Guid.Full:X8} could not be placed at "
                 + $"{p.Location?.ToLOCString()}; owed instead");
             var wcid = item.WeenieClassId;

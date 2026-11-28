@@ -6,15 +6,6 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AERBAX'S PRODIGAL CHILDREN (retail live event, Jan 7-13 2008; revived Feb 9 - 15 yearly, docs/EVENT-TESTS/prodigal.md).
-    /// The waves are the EventDirector entry "prodigal-children"; this is only the reward. Retail handed every participant a
-    /// Modified Hero Token "at the completion of the Live Event" (wiki "Miniature Hollow Minion Chest"); here everyone near the
-    /// site when the last wave's Queen dies gets one, through the world-boss reward queue (into the pack, or owed until the
-    /// next login), once per character per window (quest ProdigalChildrenToken, about 11 days). Mercenaries get nothing.
-    /// The token goes to Vincadi in Old Yanshi for the Miniature Hollow Minion Chest and the title Unwitting Participant.
-    /// The weenie and quest row come from 2027-02-09-prodigal-1-children.sql; without them the entry never runs (Pending).
-    /// </summary>
     internal static class ProdigalChildren
     {
         internal const string KEY = "prodigal-children";

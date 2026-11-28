@@ -7,20 +7,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A STATIONARY BUFFER BUFFS WHO IS STANDING AT IT. Owner, 2026-09-23 (PUMPKIN-02): the Pumpkin
-    /// Buffer "keeps buffing after I walk away; walking away should cancel the buffing".
-    ///
-    /// The Pumpkin Buffer (wcid 32205) is a Stuck creature whose spellbook is sixty Incantation ...
-    /// Other buffs, cast through the ordinary monster AI. ACE's Creature.GetMaxRange returns
-    /// GetSpellMaxRange for a magic attack, and an Incantation's range reaches tens of metres, so the
-    /// pumpkin kept casting at a player long after they left it.
-    ///
-    /// So for a Stuck creature choosing a BENEFICIAL spell at a player, the attack range is capped at
-    /// BUFF_REACH. A Stuck creature cannot close the gap, so walking out of reach ends the buffing,
-    /// and walking back in resumes it. Harmful spells and mobile creatures are untouched.
-    /// Ours, not retail's: recorded in docs/DIVERGENCES.md.
-    /// </summary>
+    /// <summary>A stationary buffer buffs who is standing at it.</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.GetMaxRange))]
     public static class StationaryBufferReach
     {

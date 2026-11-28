@@ -13,42 +13,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// CHAT REPLAY: the retail servers' own chat, played back as if the world were full (docs/CHAT-REPLAY.md).
-    ///
-    /// The corpus is ~3,200 public lines from the January-2017 retail captures (General, Trade,
-    /// Allegiance, local /say and emotes; tells, fellowship and spell words dropped), built by
-    /// tools/chatreplay/extract.py. It is real people's words, so it is never in git: it lives at
-    /// ~/ace/chatreplay/corpus.jsonl on the shard host (RG_CHAT_REPLAY_CORPUS overrides).
-    ///
-    /// OFF FOR EVERYONE BY DEFAULT, AND ADMIN-ONLY WHEN ON. A session hears replayed chat only after
-    /// it opts in with @chatreplay (the admin panel's "chatter" button), and only while its account is
-    /// Admin: the access check is repeated on every send, not just at opt-in. A new login is a new
-    /// session and starts opted out. A normal player is never sent a replayed line.
-    ///
-    /// ON THE WIRE IT IS ORDINARY CHAT. Channel lines go out as ACE's own TurbineChat event
-    /// (GameMessageTurbineChat, the room ids ACE gives every client in SetTurbineChatChannels), local
-    /// lines as HearSpeech / EmoteText / SoulEmote, so our client and the retail client both print
-    /// them exactly as they print a real player. The recipient's own "hear General/Trade/..." options
-    /// are honoured, as ACE's TurbineChatHandler honours them.
-    ///
-    /// NAMES. Speakers keep their retail names unless a name belongs to a character on this shard
-    /// (online or not), in which case it is swapped for a generated one, so a /tell never reaches a
-    /// real player and a reply to a replayed name gets ACE's own "not available" answer. `@chatreplay
-    /// names generated` swaps every name (and mentions of those names in the text) for generated
-    /// AC-style names: the mode for any future public use.
-    ///
-    /// PACING. Channel lines play in their captured order and spacing from a random start, each gap
-    /// clamped to 1.5..120 s and divided by the pace (0.5x, 1x, 2x, 4x). The stream pauses while nobody
-    /// is opted in. Local lines keep the landblock they were heard in and play, on their own cursor, to
-    /// an opted-in admin standing within one landblock of it (most are Arwic's).
-    ///
-    ///   @chatreplay                  toggle for this session, then status (the panel button)
-    ///   @chatreplay on | off | status | skip | pace [0.5|1|2|4] | names real|generated
-    ///               | allegiance on|off | reload
-    ///
-    /// Registers itself on the first world tick rather than from Mod.Initialize.
-    /// </summary>
+    /// <summary>Chat replay: the retail servers' own chat, played back as if the world were full (docs/CHAT-REPLAY.md).</summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class ChatReplay
     {
@@ -170,8 +135,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>The captured gap to the next line, clamped, at the chosen pace. A jump to the next
-        /// capture (or a wrap) counts as a short pause, not the days between two evenings.</summary>
+        /// <summary>The captured gap to the next line, clamped, at the chosen pace.</summary>
         static double Gap(Line a, Line b, double lo, double hi)
         {
             double g = b.Src == a.Src && b.T >= a.T ? b.T - a.T : 10;
@@ -209,8 +173,7 @@ namespace RevivalGuard
             _ => ChatType.General,
         };
 
-        /// <summary>A guid no character here has: ACE allocates players upward from 0x50000001, and
-        /// the client only uses a TurbineChat speaker id to recognise its own echo.</summary>
+        /// <summary>A guid no character here has</summary>
         static uint FakeGuid(string name) => 0x5FFE0000u | (uint)(Hash(name) & 0xFFFF);
 
         static void SendChannel(Player p, Line l)
@@ -234,9 +197,7 @@ namespace RevivalGuard
 
         // ---------------------------------------------------------------- names
 
-        /// <summary>The name a replayed speaker goes by: its own, unless the generated mode is on or
-        /// a character on this shard already has it (then the generated one, so a /tell can never
-        /// reach a real player).</summary>
+        /// <summary>The name a replayed speaker goes by</summary>
         static string Name(string real)
         {
             if (!s_Generated && !s_Shard.Contains(real.TrimStart('+')) && PlayerManager.GetOnlinePlayer(real) == null) return real;

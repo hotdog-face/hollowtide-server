@@ -5,32 +5,22 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// PK NIGHT, THE PURE HALF (no ACE types; tools/nettest compiles this file by path, PkNightCase). The schedule
-    /// (every other Sunday 7 PM Pacific for ROUND_MINUTES, first run 2026-11-22), the spot rotation, the hold scoring, the tie
-    /// rule, which announcement is due when, and every line a player reads. PkNight.cs runs it on the world loop.
-    /// Design: docs/proposals/pk-night.md; the owner's decisions: docs/proposals/pk-night-decisions.md.
-    /// </summary>
+    /// <summary>PK night, the pure half (no ACE types; tools/nettest compiles this file by path, PkNightCase).</summary>
     public static partial class PkNight
     {
         // ---------------------------------------------------------------- the schedule
 
-        /// <summary>The first run (owner 2026-11-09): Sunday 2026-11-22. Nothing is announced or run before it.</summary>
         public static readonly DateTime FIRST_SUNDAY = new DateTime(2026, 11, 22, 0, 0, 0, DateTimeKind.Unspecified);
-        public const int START_HOUR = 19;          // 7 PM Pacific
-        /// <summary>The round's length (owner 2026-11-22 after PK Night #1, "too long, could be 30-45 mins"; v2 plan: 40).
-        /// One number to change: the player lines say it through RoundWords().</summary>
+        public const int START_HOUR = 14;          // 2 PM Pacific
+        /// <summary>The round's length.</summary>
         public const int ROUND_MINUTES = 40;
         public static string RoundWords(int minutes = ROUND_MINUTES) => minutes == 60 ? "the hour" : $"{minutes} minutes";
         /// <summary>The moving hill in a sentence (PkNightHillRules), for the notices, the login line and the board.</summary>
         public static string HillWords() => $"The hill moves every {HILL_MOVE_MINUTES} minutes and torches mark its edge.";
-        /// <summary>Every other Sunday (owner 2026-11-23: "Let's make pk night every other week. That was allot of work."):
-        /// rounds fall only on Sundays a multiple of INTERVAL_DAYS after FIRST_SUNDAY (Nov 22, Dec 6, Dec 20, ...).</summary>
         public const int INTERVAL_DAYS = 14;
-        public const string SCHEDULE_WORDS = "every other Sunday at 7 PM Pacific";
+        public const string SCHEDULE_WORDS = "every other Sunday at 2 PM Pacific";
 
-        /// <summary>US daylight saving (since 2007): from the second Sunday of March at 2:00 to the first Sunday of
-        /// November at 2:00, local time. Pacific is UTC-8 in winter and UTC-7 in summer.</summary>
+        /// <summary>US daylight saving: from the second Sunday of March at 2:00 to the first Sunday of November at 2:00, local time.</summary>
         public static int PacificOffsetHours(DateTime utc)
         {
             int y = utc.Year;
@@ -48,8 +38,7 @@ namespace RevivalGuard
 
         public static DateTime PacificLocal(DateTime utc) => DateTime.SpecifyKind(utc.AddHours(PacificOffsetHours(utc)), DateTimeKind.Unspecified);
 
-        /// <summary>7 PM Pacific on the given local date, as UTC. The offset is read at that moment, so the Sunday
-        /// of a clock change still starts at 7 PM on the wall.</summary>
+        /// <summary>2 PM Pacific on the given local date, as UTC.</summary>
         public static DateTime StartUtcOf(DateTime localDate)
         {
             var guess = DateTime.SpecifyKind(localDate.Date.AddHours(START_HOUR + 8), DateTimeKind.Utc);   // as if PST
@@ -59,7 +48,7 @@ namespace RevivalGuard
 
         public sealed class Scheduled
         {
-            public int Round;               // 0 = the first run (Nov 22), 1 = Dec 6, ...: one per held night, not per week
+            public int Round;
             public DateTime StartUtc, EndUtc;
             public Spot Spot;
             public bool Running(DateTime utc) => utc >= StartUtc && utc < EndUtc;
@@ -74,8 +63,7 @@ namespace RevivalGuard
             return localDate.DayOfWeek == DayOfWeek.Sunday && days >= 0 && days % INTERVAL_DAYS == 0;
         }
 
-        /// <summary>The round running now, or the next one: the first PK Night Sunday on or after today whose round
-        /// has not ended yet. The off Sundays between have nothing.</summary>
+        /// <summary>The round running now, or the next one: the first PK Night Sunday on or after today whose round has not ended yet.</summary>
         public static Scheduled Next(DateTime utcNow)
         {
             var local = PacificLocal(utcNow).Date;
@@ -101,59 +89,37 @@ namespace RevivalGuard
 
         public static Spot SpotOfRound(int round) => SPOTS[((round % SPOTS.Length) + SPOTS.Length) % SPOTS.Length];
 
-        /// <summary>"Sunday, Nov 22 at 7 PM Pacific", for a start time.</summary>
         public static string WhenWords(DateTime startUtc)
         {
             var l = PacificLocal(startUtc);
-            return $"{l:dddd}, {l.ToString("MMM d", CultureInfo.InvariantCulture)} at 7 PM Pacific";
+            return $"{l:dddd}, {l.ToString("MMM d", CultureInfo.InvariantCulture)} at 2 PM Pacific";
         }
 
         // ---------------------------------------------------------------- the spots
 
-        /// <summary>A landmark the night is fought over. Ns/Ew are map coordinates (north and east positive); the
-        /// server makes the position and reads the terrain height when the round opens. Three (Zombie Castle, the
-        /// Empyrean Ruin, the Tumerok Fort) are the Shadow Shrine stops a bot landed on 2026-09-28 (docs/PK-EXPANSION.md);
-        /// the rest are read from the gazetteer (Assets/StreamingAssets/place-names.json: ace_world portal instances
-        /// and the AC wiki), to be walked before the first run.</summary>
+        /// <summary>A landmark the night is fought over.</summary>
         public sealed class Spot
         {
             public string Key, Name, Where, Near, Levels;
-            /// <summary>How to walk there, said in the prep (30 minutes before) and start lines (owner 2026-11-18, after the Borg walk test:
-            /// Arwic has no north gate). Null: no directions line.</summary>
+            /// <summary>How to walk there, said in the prep (30 minutes before) and start lines.</summary>
             public string Way;
             public double Ns, Ew;
-            /// <summary>An event portal for the night (owner 2026-11-20, the Dark Isle: retail reached it only by a flagging
-            /// quest): where it lands players (map coordinates; 0 = no event portal), where the way-home portal stands at the
-            /// spot, and the metres around the centre and the landing in which creature generators pause for the window.</summary>
+            /// <summary>An event portal for the night</summary>
             public double LandNs, LandEw, HomeNs, HomeEw, ClearMetres;
             public bool HasGate => LandNs != 0 || LandEw != 0;
             public override string ToString() => $"{Name} ({Where})";
         }
 
-        /// <summary>The rotation, in order from the first run (round 0 = the first). Every one is outdoors and far
-        /// from Holtburg (42.1N 33.6E), the arrival town (owner: never near the Holtburg arrival area). Owner 2026-11-20
-        /// ("Yes, this Sunday"): the Dark Isle takes round 0 and the Mite Maze moves to the end. Owner 2026-11-23 (every
-        /// other Sunday): the rotation moves one spot per held round, so Dec 6 is Zombie Castle. Owner 2026-11-27: Asheron's
-        /// Castle right after Zombie Castle (round 2, Dec 20; the rest one round later, the Mite Maze round 8, Mar 14) and
-        /// Arwic's east lawn at the end (round 9, Mar 28). Owner 2026-11-27, four Darktide recall spots where players fought,
-        /// after it: Aphus Lassel (round 10, Apr 11), Sclavavania (11, Apr 25), the Sanctuary (12, May 9), the Infested Area
-        /// (13, May 23).</summary>
+        /// <summary>The rotation, in order from the first run (round 0 = the first).</summary>
         public static readonly Spot[] SPOTS =
         {
-            // the owner's 2017 Darktide footage "PVP at 150 Island": the open sand of the south beach by the lifestone
-            // (84.6N 58.6E), landblock C8E9 (atlas: walkable sand at sea level, shallows to the north). Retail reached it
-            // only by the Dark Isle Flagging quest or the far east of Vissidal, so PK Night opens a portal from Holtburg.
             new Spot { Key = "darkisle", Name = "the Dark Isle", Where = "84.7N 58.4E", Ns = 84.72, Ew = 58.42,
                        Near = "the sand of the Dark Isle's south beach by its lifestone, north of Vissidal", Levels = "any level",
                        Way = $"The way in is a portal in Holtburg's lower town, open from {LeadWords()} before the start, and a portal home waits on the beach.",
                        LandNs = 84.5667, LandEw = 58.25, HomeNs = 84.5833, HomeEw = 58.1667, ClearMetres = 300 },
             new Spot { Key = "zombiecastle", Name = "Zombie Castle", Where = "45.2S 39.1E", Ns = -45.2, Ew = 39.1,
                        Near = "the castle ruin in southern Osteth, by the Zombie Castle estates", Levels = "20 and up" },
-            // the open hilltop north of the castle buildings (D59A/D69A, z 340-370 on the atlas walk grid, no NPC or
-            // creature generator on it; the Island's harmless rabbit and chicken gens only). The "Asheron's Castle"
-            // portal (35293, on the Island beside the Eastham portal's landing) sets players down at its south edge
-            // (D59A0039, 72 m from the centre). Asheron, the wardens and the Tower Guardian (level 750, fights only when
-            // attacked) stand in the courtyard 80-110 m south. No event portal: the retail way in is open to all.
+            // the open hilltop north of the castle buildings.
             new Spot { Key = "asheronscastle", Name = "Asheron's Castle", Where = "21.5N 69.3E", Ns = 21.4667, Ew = 69.28,
                        Near = "the open hilltop north of Asheron's Castle, where the Asheron's Castle portal lands", Levels = "any level",
                        Way = "From Eastham, take the Asheron's Island portal north-east of town, then the Asheron's Castle portal beside where you land: the hill is just north of the castle." },
@@ -170,38 +136,22 @@ namespace RevivalGuard
             new Spot { Key = "mitemaze", Name = "the Mite Maze", Where = "41.1N 57.0E", Ns = 41.08, Ew = 57.03,
                        Near = "the snowy valley north of Arwic, by the Mite Maze portal", Levels = "any level",
                        Way = "From Arwic, leave by the west gate and head north." },
-            // the owner's "prominent" east lawn where Darktide fought (PkBattlefieldRules arwiceast, 33.4N 57.2E), moved
-            // 24 m east to keep 67 m from the Risen Shelf portal by the east wall. Open grass outside the walls (C7A9, the
-            // walk grid all walkable for 40 m); 84 m from the east wall, 175 m from the Town Network drop. Arwic's walls
-            // have no east gate: out by the south gate and round.
             new Spot { Key = "arwiclawn", Name = "Arwic's east lawn", Where = "33.4N 57.3E", Ns = 33.4, Ew = 57.3,
                        Near = "the open grass just east of Arwic's walls", Levels = "any level",
                        Way = "From Arwic, leave by the south gate and walk east along the outside of the wall: the lawn is past the east wall." },
-            // DARKTIDE RECALL SPOTS (owner 2026-11-27). Each centre is open ground near where the recall lands, clear of
-            // its NPCs, portals and houses; none has an event portal (the recall, or a normal portal, is the way in).
-            // "Monkey island": Recall Aphus Lassel (spell 2931; the portal gem's "Entrance to Tusker Island") and the Town
-            // Network's Oolutanga's Refuge portal both land in the town at F682 (146, 50), 2.2N 95.4E. The centre is the
-            // open low ground 160 m west, down the hill (z 12 to the town's 58), 100 m or more from anything placed.
+            // Darktide recall spots.
             new Spot { Key = "aphuslassel", Name = "Aphus Lassel", Where = "2.3N 94.7E", Ns = 2.2747, Ew = 94.7403,
                        Near = "the open low ground west of Aphus Lassel on Tusker Island, below where its recall lands", Levels = "60 and up",
                        Way = "Cast Recall Aphus Lassel, or take the Town Network portal to Oolutanga's Refuge, then walk about 160 metres west, down the hill out of town." },
-            // "near 21.9S 65.6E" (owner typed 21.95.65.6E; the south reading is the place: nothing lands near 21.9N 65.6E):
-            // the Sclavavania cottage village, where the Sclavavania Portal lands (D164 (77, 19), 21.9S 65.5E). The
-            // centre is the open grass 96 m south, past the last cottages.
+            // "near 21.9S 65.6E": the Sclavavania cottage village, where the Sclavavania Portal lands (D164 (77, 19), 21.9S 65.5E).
             new Spot { Key = "sclavavania", Name = "Sclavavania", Where = "22.3S 65.5E", Ns = -22.321, Ew = 65.519,
                        Near = "the open grass just south of the Sclavavania cottages", Levels = "30 and up",
                        Way = "From Sawato, take the Sclavavania Portal in the ring of settlement portals north-east of town, then walk south out of the cottages." },
-            // "near 82.5S 93.4E": the Cathedral Ruins of Ithaenc, where Sanctuary Recall (spell 2023, the Scroll of
-            // Sanctuary Recall) lands inside the ruin (F418 (37, 49)) beside the Cathedral Ruins Portal's landing. The ruin
-            // is walls and terraces with no open 40 m anywhere, so the centre is the open slope 156 m north-west, below it
-            // (z 47-79 to the ruin's 160-190). Creatures round it are level 70 to 115.
+            // "near 82.5S 93.4E": the Cathedral Ruins of Ithaenc
             new Spot { Key = "sanctuary", Name = "the Sanctuary", Where = "82.1S 92.9E", Ns = -82.0833, Ew = 92.9,
                        Near = "the open slope north-west of the Cathedral Ruins of Ithaenc, below the Sanctuary", Levels = "80 and up",
                        Way = "Cast Sanctuary Recall, then leave the ruins and go about 150 metres north-west, down the slope." },
-            // 43.8N 54.9E: Paradox-touched Olthoi Infested Area Recall (spell 4198, the Scroll of 'Infested Area' Recall)
-            // lands at the camp on the ridge, C4B6 (23, 26), beside Ethan Wintermaine and Hisham al-Evv. The centre is
-            // the open ridge 96 m west, every point 100 m or more from the Paradox olthoi generators (level 265) to the
-            // south-east and 74 m or more from the camp's NPCs.
+            // 43.8N 54.9E: Paradox-touched Olthoi Infested Area Recall lands at the camp on the ridge, C4B6, beside Ethan Wintermaine and Hisham al-Evv.
             new Spot { Key = "infestedarea", Name = "the Infested Area", Where = "43.7N 54.5E", Ns = 43.709, Ew = 54.495,
                        Near = "the open ridge west of the Paradox-touched Olthoi Infested Area camp", Levels = "100 and up",
                        Way = "Read a Scroll of 'Infested Area' Recall to land at the camp, then walk about 100 metres west along the ridge." },
@@ -209,22 +159,15 @@ namespace RevivalGuard
 
         // ---------------------------------------------------------------- the event portals (a spot with HasGate)
 
-        /// <summary>The Holtburg end: the portal stands on the open grass of the lower town west of the well (A9B4 76, 168),
-        /// about 155 m from the lifestone square where newcomers and the dead arrive (owner: never near the Holtburg arrival
-        /// area); not by the cow pen east of the sign (box test 2026-11-20: a portal there stood inside the fence), nor on the
-        /// bank down to the shore at 80, 176. The way-home portal lands players 13 m south-east of it, on the road.</summary>
+        /// <summary>The Holtburg end: the portal stands on the open grass of the lower town west of the well</summary>
         public const double HOLTBURG_GATE_NS = 42.7, HOLTBURG_GATE_EW = 33.5167, HOLTBURG_LAND_NS = 42.6708, HOLTBURG_LAND_EW = 33.5583;
-        /// <summary>The prep time (owner 2026-11-22: "1 hr for people to prep is a long time. make it 30 mins"): the portals
-        /// open this long before the start (and close at the end), and the prep notice goes out then. One number to change:
-        /// the player lines say it through LeadWords().</summary>
+        /// <summary>The prep time: the portals open this long before the start (and close at the end), and the prep notice goes out then.</summary>
         public const int GATE_LEAD_MINUTES = 30;
         /// <summary>A method, not a static field: SPOTS (above, initialised first) uses it.</summary>
         public static string LeadWords() => GATE_LEAD_MINUTES % 60 == 0
             ? (GATE_LEAD_MINUTES == 60 ? "one hour" : $"{GATE_LEAD_MINUTES / 60} hours") : $"{GATE_LEAD_MINUTES} minutes";
 
-        /// <summary>The spot whose portals should stand now (and whose creatures are paused), or null. A running round:
-        /// until its end (a staff round opens them at its start). No round running: the next scheduled one from
-        /// GATE_LEAD_MINUTES before its start, unless that round was already played (ended early by staff).</summary>
+        /// <summary>The spot whose portals should stand now (and whose creatures are paused), or null.</summary>
         public static Spot GateSpot(Live live, Scheduled next, bool nextPlayed, DateTime utcNow)
         {
             if (live != null)
@@ -237,8 +180,7 @@ namespace RevivalGuard
             return utcNow >= next.StartUtc.AddMinutes(-GATE_LEAD_MINUTES) && utcNow < next.EndUtc ? next.Spot : null;
         }
 
-        /// <summary>Map coordinates to an outdoor cell and the landblock-local metres (ACE: 240 m a map unit, 192 m a
-        /// landblock, 24 m a cell, -102 at the origin).</summary>
+        /// <summary>Map coordinates to an outdoor cell and the landblock-local metres.</summary>
         public static (uint cell, float x, float y) CellOfMap(double ns, double ew)
         {
             double gx = (ew + 102) * 240, gy = (ns + 102) * 240;
@@ -315,37 +257,29 @@ namespace RevivalGuard
             public double LeadSaidAt { get; set; }
             public HashSet<string> Said { get; set; } = new HashSet<string>();   // "standings10", "standings20", ...
             public double LastTickAt { get; set; }
-            /// <summary>"fellowship" or "allegiance", fixed when the round opens (pk_night_sides); null in a file saved before
-            /// fellowship mode existed, whose round was scored by allegiance.</summary>
+            /// <summary>"fellowship" or "allegiance", fixed when the round opens</summary>
             public string SideRule { get; set; }
-            /// <summary>Fellowship mode, the anti-hop rule (owner 2026-11-22): each player's first side this round, by guid,
-            /// and the players who changed side since and count for nobody until the end. Saved with the round.</summary>
+            /// <summary>Fellowship mode, the anti-hop rule</summary>
             public Dictionary<uint, uint> Locked { get; set; } = new Dictionary<uint, uint>();
             public HashSet<uint> Benched { get; set; } = new HashSet<uint>();
             [System.Text.Json.Serialization.JsonIgnore] public bool ByFellowship => SideRule == SIDES_FELLOWSHIP;
         }
 
-        /// <summary>A player the tick looked at. Away: online but outside the circle (or unable to hold it), looked at only
-        /// for the anti-hop rule. Regrouping: after a restart mid-round, locked to a fellowship the restart dissolved and
-        /// alone now: counts for nobody but is not benched (they are forming it again).</summary>
+        /// <summary>A player the tick looked at.</summary>
         public struct Presence { public uint Side; public string Label; public uint Guid; public uint Leader; public bool Away; public bool Regrouping; }
 
-        // ---------------------------------------------------------------- the sides (owner 2026-11-22, docs/proposals/pk-night-fellowship.md)
+        // ---------------------------------------------------------------- the sides
 
-        /// <summary>Server property pk_night_sides: "fellowship" (the default) or "allegiance". Anything but "allegiance",
-        /// an unset value included, is fellowship mode.</summary>
+        /// <summary>Server property pk_night_sides: "fellowship" (the default) or "allegiance".</summary>
         public const string SIDES_FELLOWSHIP = "fellowship", SIDES_ALLEGIANCE = "allegiance";
         public static bool IsFellowshipMode(string value) =>
             !string.Equals((value ?? "").Trim(), SIDES_ALLEGIANCE, StringComparison.OrdinalIgnoreCase);
         public static string SidesOf(string value) => IsFellowshipMode(value) ? SIDES_FELLOWSHIP : SIDES_ALLEGIANCE;
 
-        /// <summary>A fellowship's side key, for its lifetime (the Fellowship object: ACE keeps it through a leader change and
-        /// drops it at a disband). Keys sit below player guids (0x50000000 up), so a side of one never meets a fellowship.</summary>
+        /// <summary>A fellowship's side key, for its lifetime.</summary>
         public const uint FELLOW_KEY_BASE = 0x20000000, FELLOW_KEY_END = 0x50000000;
         public static bool IsFellowKey(uint key) => key >= FELLOW_KEY_BASE && key < FELLOW_KEY_END;
 
-        /// <summary>The next fellowship key to hand out: past every key already used (saved rounds and the live one), so a
-        /// restart, which forgets which object had which key, never gives an old key to a new fellowship.</summary>
         public static uint NextFellowKey(IEnumerable<uint> used, uint counter)
         {
             uint k = Math.Max(counter, FELLOW_KEY_BASE);
@@ -357,8 +291,7 @@ namespace RevivalGuard
         public static IEnumerable<uint> KeysOf(Live live) =>
             live == null ? Enumerable.Empty<uint>() : live.Sides.Keys.Concat(live.Locked.Values);
 
-        /// <summary>After a restart mid-round: a fellowship formed again takes back the key its members were locked to
-        /// (the most of them; a key issued before this process started, below firstKey, not yet taken back). 0: none.</summary>
+        /// <summary>After a restart mid-round: a fellowship formed again takes back the key its members were locked to. 0: none.</summary>
         public static uint AdoptKey(Live live, IEnumerable<uint> members, ICollection<uint> adopted, uint firstKey)
         {
             if (live == null || !live.ByFellowship) return 0;
@@ -371,9 +304,7 @@ namespace RevivalGuard
         public static bool LockedToGone(Live live, uint guid, uint firstKey) =>
             live != null && live.ByFellowship && live.Locked.TryGetValue(guid, out var k) && IsFellowKey(k) && k < firstKey;
 
-        /// <summary>The anti-hop rule (fellowship mode only): a player's side is locked to the first side they were counted
-        /// for this round; once they are seen on another (another fellowship, or alone after leaving one) they count for
-        /// nobody until the round ends. Returns who counts in the circle; `benched` gets the players benched just now.</summary>
+        /// <summary>The anti-hop rule: a player's side is locked to the first side they were counted for this round</summary>
         public static List<Presence> Admit(Live live, IEnumerable<Presence> seen, List<uint> benched = null)
         {
             var counted = new List<Presence>();
@@ -394,9 +325,7 @@ namespace RevivalGuard
             return counted;
         }
 
-        /// <summary>Who gets the Banner of the Held Ground for this winner, or 0. Allegiance mode: the side (its monarch, or
-        /// the lone winner), once per allegiance ever (`sides`). Fellowship mode: the fellowship's leader at the end
-        /// (leaderNow; else the last one seen holding), once per player ever: not one already given a banner either way.</summary>
+        /// <summary>Who gets the Banner of the Held Ground for this winner, or 0. Allegiance mode: the side, once per allegiance ever.</summary>
         public static uint BannerTo(bool byFellowship, Standing w, uint leaderNow, ICollection<uint> sides, ICollection<uint> players)
         {
             if (w == null) return 0;
@@ -407,10 +336,7 @@ namespace RevivalGuard
 
         static string Word(bool fs) => fs ? "fellowship" : "allegiance";
 
-        /// <summary>One scoring tick. `present` is every eligible player killer within the radius. "Outnumber to score"
-        /// (owner 2026-11-25): the side with more of its members there than every other side present holds and earns
-        /// the tick, so a big allegiance's extra fellowships no longer block a bigger side; a tie for most is a contest
-        /// and nobody earns it; nobody there, nobody earns it. Returns the side that took the lead on this tick, or 0.</summary>
+        /// <summary>One scoring tick.</summary>
         public static uint Tick(Live live, IEnumerable<Presence> present, double now, double dt, List<uint> benched = null)
         {
             var here = Admit(live, present, benched);
@@ -438,8 +364,7 @@ namespace RevivalGuard
             return 0;
         }
 
-        /// <summary>Best first: most time held; a tie goes to the side that reached its time first (the earlier
-        /// last scoring tick), then the name.</summary>
+        /// <summary>Best first: most time held; a tie goes to the side that reached its time first, then the name.</summary>
         public static List<Standing> Ranked(Live live) =>
             live.Sides.Values.Where(s => s.Held > 0)
                 .OrderByDescending(s => Math.Round(s.Held)).ThenBy(s => s.LastHeldAt).ThenBy(s => s.Name, StringComparer.Ordinal).ToList();
@@ -450,13 +375,10 @@ namespace RevivalGuard
 
         public enum Notice { DayBefore, PrepBefore, TenMinutes, Start, Standings, End }
 
-        /// <summary>Which pre-round notice is due now for a scheduled round, given what was already said for it.
-        /// Each has a window: a notice the server slept through (down at the moment) is skipped, never said late.</summary>
+        /// <summary>Which pre-round notice is due now for a scheduled round, given what was already said for it.</summary>
         public static Notice? DueBefore(Scheduled s, DateTime utcNow, ISet<string> said)
         {
             if (Due(s.StartUtc.AddHours(-24), 20, utcNow) && said.Add("day")) return Notice.DayBefore;
-            // (key "prep", was "hour" before 2026-11-22: a pknight.json saved mid-week with "hour" only means this notice
-            // may still go once at its new time, never twice)
             if (Due(s.StartUtc.AddMinutes(-GATE_LEAD_MINUTES), 15, utcNow) && said.Add("prep")) return Notice.PrepBefore;
             if (Due(s.StartUtc.AddMinutes(-10), 5, utcNow) && said.Add("ten")) return Notice.TenMinutes;
             return null;
@@ -486,7 +408,7 @@ namespace RevivalGuard
         }
 
         public static string DayBeforeLine(Spot spot, bool fs = true) =>
-            $"PK Night is tomorrow, Sunday at 7 PM Pacific: hold the hill at {spot.Name} ({spot.Where}) for {RoundWords()}. The {Word(fs)} that holds it longest takes the night. {HillWords()}" + GateTail(spot);
+            $"PK Night is tomorrow, Sunday at 2 PM Pacific: hold the hill at {spot.Name} ({spot.Where}) for {RoundWords()}. The {Word(fs)} that holds it longest takes the night. {HillWords()}" + GateTail(spot);
 
         public static string PrepBeforeLine(Spot spot, bool fs = true) =>
             $"PK Night begins in {LeadWords()} at {spot.Name} ({spot.Where}). Gather your {Word(fs)}. {HillWords()}" + WayTail(spot);

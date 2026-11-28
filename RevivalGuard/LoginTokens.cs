@@ -16,31 +16,12 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// STAY LOGGED IN (docs/STAY-LOGGED-IN.md, owner 2026-10-01: "once you log in once leave the
-    /// person logged in"). Ours; retail's launcher took the password every time.
-    ///
-    /// After a PASSWORD login our client asks "@logintoken" once it is in the world; this answers on
-    /// the mod channel ("login-token") with a random 256-bit token tied to that account. The client
-    /// keeps only the token, and on a later launch sends it in the login packet's password field as
-    /// PREFIX + token. A prefix on ACE's `AccountExtensions.PasswordMatches` accepts it in place of the
-    /// password, so ACE's own login path runs unchanged around it: StaffLoginGate still refuses a
-    /// staff account from outside the shard's network (a token never bypasses that), bans still boot,
-    /// and a session takeover still needs a verified credential.
-    ///
-    /// Stored HASHED (SHA-256) in LoginTokens.json beside the dll, mode 0600. A token dies when:
-    /// unused for EXPIRY (each use slides it), the account's password changes (a fingerprint of the
-    /// stored password hash is kept with it), the account is banned, the player logs out (the client
-    /// sends 'HTTR' + token on the login port), or the account has more than PER_ACCOUNT newer ones.
-    /// The token is never logged. REVIVAL_LOGIN_TOKENS=0 turns all of it off (tokens then fail).
-    /// </summary>
+    /// <summary>Stay logged in.</summary>
     static class LoginTokens
     {
         internal const string PREFIX = "~htlt1~";            // AcLogin.TOKEN_PREFIX on the client
         internal const uint REVOKE_Q = 0x52545448;           // "HTTR" little-endian
-        /// <summary>"HTRA": SIGN OUT EVERYWHERE (multibox, owner 2026-11-24). The token proves the account; every token
-        /// of that account goes, on every computer. Behind rg_login_revoke_all (off until his yes): off, it is ignored
-        /// and the client's HTTR that follows still ends the one it holds.</summary>
+        /// <summary>"HTRA": sign out everywhere.</summary>
         internal const uint REVOKE_ALL_Q = 0x41525448;
         internal const string P_REVOKE_ALL = "rg_login_revoke_all";
         static readonly TimeSpan EXPIRY = TimeSpan.FromDays(90);
@@ -82,16 +63,13 @@ namespace RevivalGuard
             static bool Prefix(Account account, string password, ref bool __result)
             {
                 if (password == null || !password.StartsWith(PREFIX, StringComparison.Ordinal)) return true;
-                // ONLY ON THE LOGIN PATH. Elsewhere (@passwd's "old password") a token is no password:
-                // a stolen token must not be able to change the password and lock the owner out.
+                // Only on the login path.
                 try { __result = s_On && s_InLogin && account != null && Check(account, password.Substring(PREFIX.Length)); }
                 catch (Exception e) { Mod.Log.Error("[RevivalGuard] LoginTokens check: " + e.Message); __result = false; }
-                return false;                                 // a token is never tried as a password
+                return false;
             }
         }
 
-        /// <summary>A token for an account that does not exist must not auto-create one with the
-        /// token as its password: refuse it as a wrong password before DoLogin gets that far.</summary>
         [HarmonyPatch]
         static class DoLoginPatch
         {
@@ -112,8 +90,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>Set on the login thread for the length of AccountSelectCallback (StaffLoginGate's
-        /// prefix included, which is why this prefix runs first): the only place a token counts.</summary>
+        /// <summary>Set on the login thread for the length of AccountSelectCallback: the only place a token counts.</summary>
         [ThreadStatic] static bool s_InLogin;
 
         /// <summary>Remember which sessions proved a real password.</summary>
@@ -250,7 +227,7 @@ namespace RevivalGuard
                         if (gone) Save();
                     }
                     if (gone) Mod.Log.Info($"[RevivalGuard] login token revoked (Log Out) from {endPoint.Address}");
-                    return false;                             // ours: never hand it to ACE
+                    return false;
                 }
                 catch (Exception e) { Mod.Log.Warn("[RevivalGuard] LoginTokens revoke: " + e.Message); return true; }
             }

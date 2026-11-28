@@ -17,32 +17,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// OLD SNAPJAW, the Blackmire alligator (weenie 900400; docs/ALLIGATOR-BOSS.md). Ours, not retail.
-    /// Owner's brief: "hides at the waters edge. does a roll attack and a bite. lots of teeth".
-    ///
-    /// Everything ordinary is ACE's own: he sleeps at home (the client draws that as the sunk lurk,
-    /// only the eyes above the water), wakes at VisualAwarenessRange, chases, bites through his combat
-    /// table (the Reedshark's AttackHigh1/Med1/Low1), goes home past HomeRadius, and MonsterAi heals
-    /// him when he gets there. This class adds the one thing ACE has no data for, THE DEATH ROLL:
-    ///
-    ///   A prefix on Creature.MeleeAttack (Monster_Melee.cs, declared on Creature). When his roll is
-    ///   ready it replaces that one swing: he broadcasts SpecialAttack1 (the client's DeathRoll clip),
-    ///   clamps on at 0.25 s with an ordinary DamageEvent (dodgeable, armour applies), and if the grab
-    ///   lands the victim is HELD for the roll: snapjaw_roll_ticks more hits of that same mitigated
-    ///   damage times snapjaw_roll_tick_mult, and Leaden Feet (snapjaw_roll_spell) so the escape is
-    ///   slow. Every other swing returns true and ACE bites as normal.
-    ///   Enraged under half health: the roll comes round snapjaw_roll_enraged_s instead of
-    ///   snapjaw_roll_cooldown_s, said once in the chat as an emote.
-    ///
-    /// Also his trophy (a postfix on Creature.GenerateTreasure, the TrophyMounts shape: a player's
-    /// kill puts Mounted Snapjaw Head, 900401, in the corpse inscribed "Slain by ...") and
-    /// @snapjaw [status|reset|go] for the admin panel: reset re-runs his generator (a fresh, full
-    /// Snapjaw at the lair, whatever state the old one was in), go takes the admin to the south bank.
-    ///
-    /// Registers itself from Prepare() (PatchAll calls it), so Mod.cs needs no line. Every hook
-    /// catches its own exceptions; a throw never reaches ACE's tick.
-    /// </summary>
+    /// <summary>Old snapjaw, the Blackmire alligator (weenie 900400; docs/ALLIGATOR-BOSS.md).</summary>
     static class AlligatorBoss
     {
         internal const uint WCID = 900400, TROPHY = 900401, GENERATOR = 900402;
@@ -235,9 +210,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>BACK IN HIS WATER, FACING THE BANK. ACE's return home keeps whatever heading the
-        /// walk back left (away from the bank, since he came from it), so he lurked tail-first. Sleep
-        /// is where a creature settles at home; turn him to his home heading there.</summary>
+        /// <summary>Back in his water, facing the bank.</summary>
         [HarmonyPatch(typeof(Creature), nameof(Creature.Sleep))]
         static class Settle
         {

@@ -13,29 +13,7 @@ using ACE.Server.Network.GameMessages.Messages;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// WHAT THE ADMIN NEEDED BY HAND ON LAUNCH NIGHT, AS COMMANDS (owner, 2026-10-12: "update the admin panel to be
-    /// more useful knowing what we know now about the game"). The admin panel's Server tab has a button for each.
-    ///
-    ///   @funnel [hours]     the new players of the last day (default 24 h) from the telemetry log: characters made,
-    ///                       in the browser or the desktop app, how many entered the world, how long they stayed,
-    ///                       how many kept their browser character and came back; plus the auto (watchdog) reports
-    ///                       in that time, which is where the browser's missing content shows up first.
-    ///   @lockouts [clear]   the addresses StaffLoginGate has locked out, and with "clear", lift them all. That
-    ///                       night the owner's own address was locked out and only a restart cleared it.
-    ///   @resetlogin <character> <password>   RESCUE A LOST GUEST (owner, 2026-10-16: keep players coming back with their
-    ///                       in-game identity). A browser guest who lost their browser data cannot log in as their
-    ///                       account any more; this sets a new password on the account that owns the named character
-    ///                       (online or not), and says which account it was, so the player can log in as it from any
-    ///                       browser (?login=1) or the desktop app. Admin only; staff accounts are refused; the audit
-    ///                       trail gets the character and the account, never the password (AuditTrailCommands hides
-    ///                       the last word of this verb). The password is the LAST word (6 to 64 characters, no
-    ///                       spaces) so a character name with spaces still works. The admin panel's Server tab has
-    ///                       the button (it makes a password when the box is empty).
-    ///   @banchar <days> <character> / @unbanchar <character>   ACE's @ban and @unban, by character: the admin panel's
-    ///                       Live tab bans the selected player's account (owner 2026-10-23). Staff accounts are refused.
-    /// (The third button, "report go", is @ticket go latest: TicketConsole.)
-    /// </summary>
+    /// <summary>What the admin needed by hand on launch night, as commands.</summary>
     static class AdminOps
     {
         static readonly string Reports = Environment.GetEnvironmentVariable("REVIVAL_REPORTS_DIR")
@@ -104,7 +82,7 @@ namespace RevivalGuard
             return account;
         }
 
-        // @banchar <days> <character name>: the admin panel's "ban 7d" (owner 2026-10-23); ACE's own @ban does the rest
+        // @banchar <days> <character name>: the admin panel's "ban 7d"; ACE's own @ban does the rest
         static void BanChar(Session session, params string[] p)
         {
             if (p == null || p.Length < 2 || !double.TryParse(p[0], out var days) || days <= 0)

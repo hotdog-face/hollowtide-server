@@ -10,11 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// USE REFUSALS IN RETAIL'S WORDS (docs/findings/accuracy-2026-10-20/items-interactions.md 7-9). Each wording is
-    /// from the January 2017 retail captures (AC-Mac-Revival/Conformance/pcaps), each behind its own switch:
-    ///   @modifybool <switch> false   ACE's words
-    /// </summary>
+    /// <summary>Use refusals in retail's words.</summary>
     static class RetailUseWords
     {
         internal const string P_COOLDOWN = "retail_cooldown_text", P_LOCKED = "retail_locked_chest_text",
@@ -37,14 +33,11 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Warn($"[RevivalGuard] RetailUseWords: switches not registered with @modifybool ({e.Message}); still read at their defaults"); }
         }
 
-        /// <summary>The item whose use requirements are being checked on this thread (WorldObject.CheckUseRequirements),
-        /// so the transient string it sends can be reworded with that item's cooldown.</summary>
+        /// <summary>The item whose use requirements are being checked on this thread</summary>
         [ThreadStatic] static WorldObject t_Item;
         [ThreadStatic] static Player t_Player;
 
-        /// <summary>7. WorldObject.CheckUseRequirements (the declaring type; overrides call it through base) sends
-        /// "You have used this item too recently" (WorldObject_Use.cs:301-310). Retail's capture:
-        /// "You cannot use that item again for 34 seconds!" (also 1 and 44), a TransientString.</summary>
+        /// <summary>7. WorldObject.CheckUseRequirements sends "You have used this item too recently".</summary>
         [HarmonyPatch]
         static class CooldownContext
         {
@@ -66,8 +59,7 @@ namespace RevivalGuard
             static Exception Finalizer(Exception __exception) { t_Item = null; t_Player = null; return __exception; }
         }
 
-        /// <summary>8. A locked chest: retail's capture "The Yaruldi's Hoard is locked!" (TransientString). ACE says it
-        /// only when fix_chest_missing_inventory_window is on (Chest.cs:104-110); otherwise only the lock sound.</summary>
+        /// <summary>8. A locked chest: retail's capture "The Yaruldi's Hoard is locked!" (TransientString).</summary>
         [HarmonyPatch(typeof(Chest), nameof(Chest.CheckUseRequirements))]
         static class LockedChest
         {
@@ -83,9 +75,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>9. A charged stone used on yourself: retail's capture ends the item list with no full stop,
-        /// "...: Heaume, Branith's Staff, Ring\nYour items are fully charged." (also "\nYou need 1,896 more mana to
-        /// fully charge your items."); ACE writes "Ring.\n..." (ManaStone.cs:179).</summary>
+        /// <summary>9. A charged stone used on yourself</summary>
         [HarmonyPatch(typeof(GameMessageSystemChat), MethodType.Constructor, new[] { typeof(string), typeof(ChatMessageType) })]
         static class ManaStoneList
         {
@@ -101,11 +91,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>2. Confirm Use of Rare Gems. ACE already asks when the option is on (Gem.cs:76), as
-        /// "Are you sure you want to use <name>?". Retail's client asked instead (UseObject @00588a80, VolatileRare
-        /// 0x10000000 + ConfirmVolatileRareUse -> UsageConfirmation_VolatileRare @00566800) with
-        /// "Are you sure you want to use this rare item?". Same Yes/No and the same option, so only the words change
-        /// here: ACE's own branch with retail's sentence, the Yes calling ACE's confirmed path.</summary>
+        /// <summary>2. Confirm Use of Rare Gems.</summary>
         [HarmonyPatch]
         static class RareConfirm
         {

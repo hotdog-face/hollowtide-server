@@ -12,33 +12,7 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE LOOKING-FOR-GROUP BOARD (owner, 2026-09-25: "a looking-for-group board in the social UI
-    /// panel is a great idea"; docs/MODERNIZATION-IDEAS-2026-09-25.md). Ours.
-    ///
-    /// One post per character: a line of text, stamped with the poster's level, where they are,
-    /// and whether they lead a fellowship (then it reads as "looking for more"). Posts live in
-    /// memory only, end when the poster logs off or after POST_MINUTES, and are replaced by the
-    /// poster's next one.
-    ///
-    ///     @lfgboard                 the board
-    ///     @lfgboard post &lt;text&gt;    post or replace yours
-    ///     @lfgboard clear           take yours down
-    ///     @lfgboard join &lt;guid&gt; [password]   join the fellowship a leader listed (open: at once; password:
-    ///                               with it; request: the leader gets a Yes/No)
-    ///     @lfgboard mode open|password|request [password]   a leader: how others get in (password: sets /fpass too)
-    ///
-    /// A LEADER'S POST IS THE FELLOWSHIP'S LISTING (owner 2026-11-21: "let players join the group from that ui
-    /// panel"): it carries the live size (of 9), level range and where the leader is, the leader's note and the join
-    /// mode (LfgListingRule). A fellowship with a merc or Borg in it is never listed or joinable (DESIGN-DECISIONS).
-    ///
-    /// NOT "@lfg": retail's /lfg and @lfg already mean "say this on the LFG chat channel", and the
-    /// bridge sends them there (Program.cs, case "lfg"), so a command by that name never arrives.
-    ///
-    /// Our client reads the board over the mod channel ("lfg", JSON) and shows it on the Fellowship
-    /// page; every change is pushed to every connection that reads the channel, so an open board is
-    /// live. A retail client gets the same board as chat lines from @lfgboard.
-    /// </summary>
+    /// <summary>The looking-for-group board.</summary>
     public static class LfgBoard
     {
         const int POST_MINUTES = 60, MAX_TEXT = 120, MIN_GAP_SECONDS = 10;
@@ -56,7 +30,7 @@ namespace RevivalGuard
 
         static string ChosenMode(uint leader) { lock (s_Lock) return s_Mode.TryGetValue(leader, out var m) ? m : LfgListingRule.REQUEST; }
 
-        /// <summary>The fellowship <paramref name="p"/> leads, or null.</summary>
+        /// <summary>The fellowship p leads, or null.</summary>
         static Fellowship Led(Player p)
         {
             var f = p?.Fellowship;
@@ -70,7 +44,6 @@ namespace RevivalGuard
             return LfgListingRule.Effective(ChosenMode(leader.Guid.Full), f != null && FellowPassword.PasswordOf(f) != null);
         }
 
-        /// <summary>Borg and bots are never on the board (owner rule: Borg fellowships never open to players).</summary>
         static bool Hidden(Player p) => p == null || Mercenaries.IsMerc(p) || FellowPassword.HasBot(Led(p));
 
         internal static void Register()
@@ -112,12 +85,7 @@ namespace RevivalGuard
             }
             if (verb == "join")
             {
-                // A REQUEST, AND THE LEADER DECIDES (owner 2026-09-25: "it should be a send request
-                // then wait type thing. something players cant spam and they see that they sent the
-                // request to join and its pending the other players decision"). The leader gets a
-                // Yes/No (ACE's own confirmation, so a retail leader sees it too); Yes adds the asker
-                // straight in (they asked, so no second invite). One request at a time per asker, and
-                // a declined or unanswered one cannot be repeated to the same leader for a minute.
+                // A request, and the leader decides.
                 uint g = 0;
                 string a = parameters.Length > 1 ? parameters[1] : "";
                 if (a.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) uint.TryParse(a.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out g);
@@ -168,8 +136,7 @@ namespace RevivalGuard
             return r.lo == r.hi ? r.lo.ToString() : $"{r.lo}-{r.hi}";
         }
 
-        /// <summary>@lfgboard mode open|password|request [password]: a leader picks how others get in. Password with a
-        /// word sets the fellowship password as /fpass does (shown to the fellowship); password with none keeps the one set.</summary>
+        /// <summary>@lfgboard mode open|password|request [password]: a leader picks how others get in.</summary>
         static void SetMode(Session session, Player p, string[] args)
         {
             var f = Led(p);
@@ -195,8 +162,7 @@ namespace RevivalGuard
             if (listed) Push();
         }
 
-        /// <summary>The leader's own settings to our client ("lfgme"): the chosen mode and whether a password is set
-        /// (never the password itself).</summary>
+        /// <summary>The leader's own settings to our client ("lfgme"): the chosen mode and whether a password is set.</summary>
         static void SendMe(Session s, Player p)
         {
             if (s == null || !ModChannel.Capable(s)) return;
@@ -204,9 +170,7 @@ namespace RevivalGuard
             ModChannel.Send(s, "lfgme", "{\"m\":\"" + ChosenMode(p.Guid.Full) + "\",\"pw\":" + (f != null && FellowPassword.PasswordOf(f) != null ? "true" : "false") + "}");
         }
 
-        /// <summary>Join from the board: by the listing's mode. Open and password go through FellowPassword.TryJoin
-        /// (retail recruit's checks: not in a fellowship, not full, not quest-locked, no Olthoi, no merc or Borg in it);
-        /// request asks the leader.</summary>
+        /// <summary>Join from the board: by the listing's mode.</summary>
         static void Join(Session session, Player asker, uint leaderGuid, string given, long now)
         {
             Post post;
@@ -280,8 +244,7 @@ namespace RevivalGuard
                 timeout ? $"{leader.Name} didn't answer your request." : yes ? "That fellowship is no longer open to you." : $"{leader.Name} declined your request.");
         }
 
-        /// <summary>A join request's state to the asker: over the channel for our client (which shows
-        /// it on the Join button), and as a chat line for everyone (none when the join already said its own).</summary>
+        /// <summary>A join request's state to the asker: over the channel for our client, and as a chat line for everyone.</summary>
         static void Tell(Session s, uint leaderGuid, string state, string line)
         {
             if (s == null) return;
@@ -328,8 +291,7 @@ namespace RevivalGuard
                 var lp = PlayerManager.GetOnlinePlayer(x.Guid);
                 if (lp != null && Led(lp) != null)
                 {
-                    // the listing: join mode, level range, max size, quest lock, and where the leader is (the client
-                    // names the place, as the admin players list does: AcAdminHud.RowPlace)
+                    // the listing: join mode, level range, max size, quest lock, and where the leader is
                     var f = Led(lp);
                     var r = LfgListingRule.Range(f.GetFellowshipMembers().Values.Where(m => m != null).Select(m => m.Level ?? 1));
                     sb.Append(",\"m\":\"").Append(Mode(lp)).Append("\",\"lo\":").Append(r.lo).Append(",\"hi\":").Append(r.hi)

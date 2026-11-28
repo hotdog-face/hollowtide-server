@@ -8,14 +8,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A WELCOME FOR PLAYERS ON A RETAIL-STYLE CLIENT (owner 2026-11-03, after Hollowtide went on the community server
-    /// list that ThwargLauncher and webAC read: "its a key way to convert players to real engaged players so they see
-    /// the better way to play we've built"). Our client says hello on the mod channel as it enters the world
-    /// (ModChannel, "@revivalclient"); a connection that has not said it by HELLO_WAIT_S after entering is a retail
-    /// client, ThwargLauncher's or webAC's, and gets one line pointing at ours. Once per login; mercenaries never.
-    ///   @modifybool rg_retail_welcome false     off
-    /// </summary>
+    /// <summary>A welcome for players on a retail-style client.</summary>
     static class RetailWelcome
     {
         internal const string P_ON = "rg_retail_welcome";
@@ -41,7 +34,6 @@ namespace RevivalGuard
                     {
                         try
                         {
-                            // the same login still in the world, and it never said our hello
                             if (session == null || p.Session != session || ModChannel.Capable(session)) return;
                             session.Network?.EnqueueSend(new GameMessageSystemChat(LINE, ChatMessageType.Broadcast));
                             Mod.Log.Info($"[RevivalGuard] RetailWelcome: {p.Name} ({session.Account}) is on a retail-style client; told about ours");

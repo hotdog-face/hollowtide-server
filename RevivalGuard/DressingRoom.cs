@@ -25,29 +25,11 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE STAFF DRESSING ROOM (owner 2026-11-03: "a dressing room ... an npc i talk to that opens a ui that allows me to
-    /// select any armor look, and any color show as it would look ... players cant see this. a staff only tool. id use it
-    /// to make npcs, monsters, and my own armor tailors"). Ours. docs/DRESSING-ROOM.md.
-    ///
-    /// The Tailor in the Staff Base (weenie TAILOR) opens our client's Dressing Room panel ("dress" on the mod channel),
-    /// for Sentinel and up only. Every "@dress" verb is a Sentinel command, so the gate is ACE's own access check, not the
-    /// panel. The shard keeps the outfit being built (one per character, lost on logout) and answers each change with:
-    ///  - the state ("dress" {"st":..}) for the panel, and
-    ///  - a PREVIEW: an ObjDescEvent for the staff member's own character, sent to that one connection only. Nobody else
-    ///    sees it, and nothing is saved. The look is ACE's own Creature.CalculateObjDesc (with every patch on it) run on
-    ///    a stand-in creature (weenie MANNEQUIN) that copies the character's body and wears the outfit as real items, so
-    ///    the preview is what the same items would really look like. "close" sends the real look back.
-    /// Apply: "worn" tailors each piece onto the worn item in the same slots (ACE's Tailoring.UpdateArmorProps, the kit's
-    /// own copy), "new" creates the pieces in the pack, "npc" dresses the selected non-player creature with real items
-    /// (not saved: a respawn drops it). "template" writes a create-list datafix snippet beside the mod
-    /// (dressing-room/&lt;name&gt;.sql). Outfits are saved for all staff in dressing-room/outfits.json.
-    /// </summary>
+    /// <summary>The staff dressing room.</summary>
     public static partial class DressingRoom
     {
         public const uint TAILOR = 908200, MANNEQUIN = 908201, TRUNK = 908206;
-        // the room's dressed mannequins, the JawnTide gallery's (2026-11-25-jawntide-3-gallery.sql, 914200+) and the
-        // rune-suit ones that replaced them in the Staff Base (2026-11-26-rune-mannequins.sql, 915530-915559)
+        // the room's dressed mannequins, the JawnTide gallery's and the rune-suit ones that replaced them in the Staff Base
         static bool IsMannequin(uint wcid) => (wcid >= 908202 && wcid <= 908204) || (wcid >= 914200 && wcid <= 914299)
             || (wcid >= 915530 && wcid <= 915559);
         const AccessLevel STAFF = AccessLevel.Sentinel;
@@ -69,22 +51,21 @@ namespace RevivalGuard
             public int It { get; set; }
             public int Fx { get; set; }
             public uint Rd { get; set; }      // reduced to these slots (ValidLocations), as a reduction tool would; 0 = full
-            // A worn piece's own look rows when they are not its weenie's (a mask tailored onto a helm carries the mask's head
-            // part): anim parts (index, model), texture maps (part, old, new), palettes (id, offset, length). Null = the weenie's.
+            // A worn piece's own look rows when they are not its weenie's: anim parts, texture maps, palettes.
             public List<uint[]> Ap { get; set; }
             public List<uint[]> Tm { get; set; }
             public List<uint[]> Pl { get; set; }
+            // Look Lab extras (DressingRoom.Lab.cs): the Lab's own recipe fields as JSON, null = none
+            public string Lab { get; set; }
         }
 
         sealed class Look
         {
             public uint W; public string N; public uint Loc; public uint Cb; public int Pal; public double Sh; public int Cov; public uint Ic; public int It; public int Fx;
-            // every weenie folded into this look (owner 261108-0036): their names and retail set ids, so Match set finds the
-            // set whichever copy's name or id carries it
+            // every weenie folded into this look: their names and retail set ids, so Match set finds the set whichever copy's name or id carries it
             public HashSet<string> Names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             public HashSet<int> Sets = new HashSet<int>();
-            // its styles: one weenie per distinct ClothingTable or texture under the same model (Ancient Armored Helm's three
-            // tables), the representative first; the panel shows them as a Style row of icons
+            // its styles: one weenie per distinct ClothingTable or texture under the same model, the representative first
             public List<Look> Styles = new List<Look>();
             public HashSet<string> StyleKeys = new HashSet<string>();
         }
@@ -97,17 +78,16 @@ namespace RevivalGuard
             public Creature Mannequin;
             public string Msg;
             public bool Open;   // the panel is up (Open .. Close): a Tailor use while it is up keeps the outfit being built
-            // Undo / Redo (owner ticket 261108-0005): the outfit before each change, newest last, HISTORY deep. A shade
-            // drag on one piece is one step (LastOp).
+            // Undo / Redo: the outfit before each change, newest last, HISTORY deep.
             public readonly List<List<Piece>> Undo = new List<List<Piece>>(), Redo = new List<List<Piece>>();
             public string LastOp;
             public DateTime LastOpAt;
-            public RealOutfit LastReal;   // the retail outfit the last Inspire or Remix wore, for Not style (261109-0029)
+            public RealOutfit LastReal;   // the retail outfit the last Inspire or Remix wore, for Not style
         }
         const int HISTORY = 50;
 
         /// <summary>Everything that changes how the outfit looks, for "did this verb change it".</summary>
-        static string Key(List<Piece> l) => string.Join(";", l.Select(x => FormattableString.Invariant($"{x.W},{x.Loc},{x.Rd},{x.Cov},{x.Cb},{x.Pal},{x.Sh:0.###},{x.Ly},{Rows(x.Ap)}/{Rows(x.Tm)}/{Rows(x.Pl)}")));
+        static string Key(List<Piece> l) => string.Join(";", l.Select(x => FormattableString.Invariant($"{x.W},{x.Loc},{x.Rd},{x.Cov},{x.Cb},{x.Pal},{x.Sh:0.###},{x.Ly},{Rows(x.Ap)}/{Rows(x.Tm)}/{Rows(x.Pl)}/{x.Lab}")));
         static List<Piece> Snap(Fit f) => f.Pieces.Select(Copy).ToList();
         static void Restore(Fit f, List<Piece> to) { f.Pieces.Clear(); f.Pieces.AddRange(to.Select(Copy)); }
         static void Push(List<List<Piece>> stack, List<Piece> snap) { stack.Add(snap); if (stack.Count > HISTORY) stack.RemoveAt(0); }
@@ -120,6 +100,7 @@ namespace RevivalGuard
 
         internal static void Register()
         {
+            RegisterLab();
             CommandManager.TryAddCommand(Handle, "dress", STAFF, CommandHandlerFlag.RequiresWorld,
                 "Staff Dressing Room (the panel's own verbs).", "open | list <slot mask> <page> [words] | pick <wcid> | pal <i> <n> | shade <i> <0-1> | layer <i> <1|0|-1> | drop <i> | clear | worn | inspire | remix | notstyle [all] | save <name> | load <name> | delete <name> | apply worn|new|npc <guid> | template <name> | close");
         }
@@ -128,9 +109,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ the Tailor
 
-        /// <summary>Creature.ActOnUse postfix: staff get the panel; anyone else gets a polite no. A mannequin (owner M5
-        /// 261103-0094: "same with these mannequins") opens it with the mannequin's outfit loaded, ready to change and
-        /// wear or put back on it.</summary>
+        /// <summary>Creature.ActOnUse postfix: staff get the panel; anyone else gets a polite no.</summary>
         internal static void TailorUse(Creature npc, WorldObject activator)
         {
             if (npc == null || activator is not Player p || p.Session == null) return;
@@ -153,9 +132,7 @@ namespace RevivalGuard
             Open(p, fromGear: true);
         }
 
-        /// <summary>Storage.CheckUseRequirements prefix for the room's Wardrobe Trunks (owner M5 261103-0093: "chests are
-        /// locked"): staff storage with no house, so ACE's own check (house permission) would always refuse; Sentinel and
-        /// up open them. Their contents keep like any Storage chest's (saved with the chest).</summary>
+        /// <summary>Storage.CheckUseRequirements prefix for the room's Wardrobe Trunks</summary>
         internal static bool TrunkCheck(Storage s, WorldObject activator, ref ActivationResult result)
         {
             if (s == null || s.WeenieClassId != TRUNK) return true;
@@ -168,16 +145,13 @@ namespace RevivalGuard
             return false;
         }
 
-        /// <summary>fromGear (the Tailor, owner ticket 261108-0001 "doesnt match how i look in the 3d world. pants are
-        /// different"): a closed panel opens on the gear worn NOW. The outfit is kept per character until logout, so a
-        /// reopen showed the last session's outfit (or the mannequin's) after the gear had changed. A typed "@dress" and a
-        /// Tailor use while the panel is up keep the outfit being built; saved outfits are what persists.</summary>
+        /// <summary>FromGear: a closed panel opens on the gear worn now.</summary>
         static void Open(Player p, bool fromGear = false)
         {
             StartCatalog();
             var f = FitOf(p);
             f.Msg = null;
-            if ((fromGear && !f.Open) || f.Pieces.Count == 0) { LoadWorn(p, f); f.Undo.Clear(); f.Redo.Clear(); f.LastOp = null; }   // the preview starts as the real look, never a bare body
+            if ((fromGear && !f.Open) || f.Pieces.Count == 0) { LoadWorn(p, f); f.Undo.Clear(); f.Redo.Clear(); f.LastOp = null; }
             f.Open = true;
             SendState(p, f, open: true);
             Preview(p, f);
@@ -194,8 +168,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ the catalogue
 
-        /// <summary>Every weenie in the world database with a ClothingBase in a clothing, armour or cloak slot, one row per
-        /// (ClothingBase, slots): the same look under twenty names shows once, under its lowest weenie id.</summary>
+        /// <summary>Every weenie in the world database with a ClothingBase in a clothing, armour or cloak slot, one row per</summary>
         static void StartCatalog()
         {
             lock (s_Lock)
@@ -225,9 +198,7 @@ namespace RevivalGuard
                             .Where(i => cbs.ContainsKey(i.ObjectId)).GroupBy(i => i.ObjectId).ToDictionary(g => g.Key, g => g.First().Value);
                         var names = ctx.WeeniePropertiesString.Where(s => s.Type == (ushort)PropertyString.Name).Select(s => new { s.ObjectId, s.Value }).ToList()
                             .Where(s => cbs.ContainsKey(s.ObjectId)).GroupBy(s => s.ObjectId).ToDictionary(g => g.Key, g => g.First().Value);
-                        // Our own wearables (owner 2026-11-07: "not just masks but all new tailor items"): a 900000+ weenie's look
-                        // can come from its own anim-part, texture and palette rows (the creature-head masks share one
-                        // ClothingBase and differ only by an anim-part row), or from its setup with no ClothingBase at all.
+                        // Our own wearables: a 900000+ weenie's look can come from its own anim-part, texture and palette rows
                         var aps = ctx.WeeniePropertiesAnimPart.Select(x => new { x.ObjectId, x.Index, x.AnimationId }).ToList()
                             .GroupBy(x => x.ObjectId).ToDictionary(g => g.Key, g => string.Join(",", g.OrderBy(x => x.Index).Select(x => $"{x.Index}:{x.AnimationId:X}")));
                         var tms = ctx.WeeniePropertiesTextureMap.Select(x => new { x.ObjectId, x.Index, x.OldId, x.NewId }).ToList()
@@ -255,11 +226,7 @@ namespace RevivalGuard
                             if (cbs.TryGetValue(d.ObjectId, out var c0) && c0 == 0) icons[d.ObjectId] = d.Value;
                         foreach (var n0 in ctx.WeeniePropertiesString.Where(x => x.ObjectId >= OURS && x.Type == (ushort)PropertyString.Name).ToList())
                             if (cbs.TryGetValue(n0.ObjectId, out var c1) && c1 == 0) names[n0.ObjectId] = n0.Value;
-                        // ONE ROW PER LOOK (owner 261108-0036: "pwylls crown is there twice ... simplify it with one listing of same
-                        // items. even ones that are the same but different tints or colors"). A look is what draws on the body: the
-                        // ClothingTable (the setup only when there is none) and the weenie's own part, texture and palette rows.
-                        // Colour template, shade and icon are tints: the colour picker offers every template the table has. The
-                        // look shows under its lowest weenie id, so a copy of ours (Pwyll's Crown 903331) folds into retail's.
+                        // One row per look.
                         var bySig = new Dictionary<string, Look>();
                         var byW = new Dictionary<uint, Look>();
                         foreach (var kv in cbs.OrderBy(k => k.Key))
@@ -287,9 +254,6 @@ namespace RevivalGuard
                             if (had.StyleKeys.Add(style)) had.Styles.Add(look);
                             byW[kv.Key] = had;
                         }
-                        // then by name: the same name in the same slots is the same thing to the owner ("effectively exactly the same",
-                        // 261108-0036), even where retail baked each colour into its own copy of the model (Armored Sclavus Mask x3)
-                        // or made two shapes under one name (Ancient Armored Helm): one listing, each version a style
                         var byName = new Dictionary<string, Look>(StringComparer.OrdinalIgnoreCase);
                         foreach (var l in list.ToList())
                         {
@@ -331,12 +295,6 @@ namespace RevivalGuard
             ModChannel.Send(p.Session, "dress", JsonSerializer.Serialize(new { list = new { slot, page, pages, total = hits.Count, q = words ?? "", rows } }));
         }
 
-        // ---- which looks draw on this body (owner 261108-0037: "soldiers head metimorphi ... when equipped it seems to have
-        // no appearance"). The Metamorphi pieces are Olthoi player armour: their ClothingTable (0x100006C3) dresses only the
-        // Olthoi body (setup 0x02000041), a heritage this shard removed, so on any playable body there is nothing to draw,
-        // in retail too (ClothingTable::BuildObjDesc). The wardrobe lists only looks that draw on the viewer's body, by ACE's
-        // own lookup (Creature.CalculateObjDesc): the table holds the body's setup, or the setup its alternates map to, with
-        // at least one part. An entry with no part is retail hiding the piece on that body (helmets on a Tumerok).
         static readonly Dictionary<uint, HashSet<uint>> s_Bodies = new Dictionary<uint, HashSet<uint>>();
 
         static HashSet<uint> BodiesOf(uint cb)
@@ -388,12 +346,11 @@ namespace RevivalGuard
             return cat == null ? new List<Look>() : cat.Where(l => DrawsOn(l, p)).ToList();
         }
 
-        // ---- Random (owner 261108-0038: "give me a random button to make starting tailors in the dressing room") ----
+        // ---- Random ----
         static readonly uint[] SUIT = { 0x1, 0x200, 0x400, 0x800, 0x1000, 0x20, 0x2000, 0x4000, 0x100 };   // head, chest, girth, arms, hands, legs, feet
         static readonly Random s_Rng = Random.Shared;   // thread-safe: landblocks tick in parallel, and a shared new Random() corrupts under races
 
-        /// <summary>A random piece of armour or clothing for each body part, in a random colour template and shade; each
-        /// fits with the others (nothing takes another off). One Undo step.</summary>
+        /// <summary>A random piece of armour or clothing for each body part, in a random colour template and shade</summary>
         static void RandomSuit(Player p, Fit f)
         {
             var cat = Drawable(p);
@@ -413,8 +370,6 @@ namespace RevivalGuard
             f.Msg = $"A random suit of {f.Pieces.Count} pieces. Random again for another; Undo goes back.";
         }
 
-        // ---- Match set (owner 261108-0041: "ability to make a matching suit around one piece of armor that grabs and sets the
-        // things that are meant to go with it") ----
         static readonly HashSet<string> SLOT_WORDS = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "helm", "helmet", "coif", "cap", "hat", "basinet", "armet", "heaume", "crown", "mask", "cowl", "hood", "kabuton", "circlet",
@@ -425,8 +380,7 @@ namespace RevivalGuard
         };
         static readonly HashSet<string> GRADE_WORDS = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "greater", "lesser", "superior", "ancient", "major", "minor", "fine", "heavy", "light" };
 
-        /// <summary>A piece's family: its name less the words that name the body part ("Helm of the Dark Lord" and
-        /// "Breastplate of the Dark Lord" are both "the dark lord"); with grades dropped too when <paramref name="loose"/>.</summary>
+        /// <summary>A piece's family: its name less the words that name the body part; with grades dropped too when loose.</summary>
         static string Family(string name, bool loose)
         {
             var w = (name ?? "").Replace("'s ", " ").Split(new[] { ' ', ',', '-' }, StringSplitOptions.RemoveEmptyEntries)
@@ -434,10 +388,7 @@ namespace RevivalGuard
             return string.Join(" ", w);
         }
 
-        /// <summary>From the piece in the selected slot, the other pieces of its set: retail's set id when it has one, else
-        /// the same family of names (Family; loosened when the strict one finds nothing). The biggest pieces first, each
-        /// only where it fits beside the piece and those already chosen, in the piece's colour when they have it. Pieces
-        /// of the outfit in slots the set has nothing for stay. One Undo step.</summary>
+        /// <summary>From the piece in the selected slot, the other pieces of its set</summary>
         static void MatchSet(Player p, Fit f, Piece anchor)
         {
             var cat = Drawable(p);
@@ -470,8 +421,7 @@ namespace RevivalGuard
             f.Msg = $"Matched {chosen.Count - 1} piece{(chosen.Count == 2 ? "" : "s")} to the {anchor.N} (by its {(how == "set" ? "armour set" : "name")}). Undo goes back.";
         }
 
-        /// <summary>Whether shade can change this look (owner 261108-0040): some colour template's palette set has more
-        /// than one palette to pick from. Cached per ClothingTable.</summary>
+        /// <summary>Whether shade can change this look: some colour template's palette set has more than one palette to pick from.</summary>
         static readonly Dictionary<uint, bool> s_Shades = new Dictionary<uint, bool>();
         static bool ShadesOf(uint cb)
         {
@@ -492,9 +442,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A ClothingTable's look: the parts and textures it puts on each body, without its colour templates (owner
-        /// 261108-0036: looks that differ only by tint are one listing). Two tables that are copies of each other fold;
-        /// a different texture (Celdon over the leather mesh) is a different look. Unreadable tables stay their own look.</summary>
+        /// <summary>A ClothingTable's look: the parts and textures it puts on each body, without its colour templates.</summary>
         static string ModelSig(uint cb)
         {
             try
@@ -535,9 +483,7 @@ namespace RevivalGuard
             return new Look { W = wcid, N = n ?? "#" + wcid, Loc = (uint)loc, Cb = cb, Pal = pal, Sh = sh, Cov = cov, Ic = ic, It = it, Fx = fx };
         }
 
-        /// <summary>The palette templates this look's ClothingTable has (the only ones it can show), with ACE's names and a
-        /// swatch: the colour that template gives the look's first sub-palette at this shade, read the way CalculateObjDesc
-        /// picks it (the PaletteSet's palette for the shade), at the middle of that sub-palette's colour range.</summary>
+        /// <summary>The palette templates this look's ClothingTable has, with ACE's names and a swatch</summary>
         static List<object[]> PalettesOf(uint cb, double shade = 0, long keep = -1)
         {
             var r = new List<object[]>();
@@ -545,13 +491,9 @@ namespace RevivalGuard
             try
             {
                 var t = DatManager.PortalDat.ReadFromDat<ClothingTable>(cb);
-                // The swatch shows the sub-palettes that change from template to template. Many armours list a trim or
-                // leather range first that every template shares, and that range made all their swatches the same tan.
+                // The swatch shows the sub-palettes that change from template to template.
                 var dyed = DressingRoomSwatch.Dyed(t.ClothingSubPalEffects.Values
                     .Select(e => (IReadOnlyList<uint>)e.CloSubPalettes.Select(c => c.PaletteSet).ToList()).ToList());
-                // owner 261108-0040 ("rynthid tenticle cape shows lots of options but cant be changed"): a template that
-                // gives exactly the colours an earlier one gives is not a choice, so it is listed once (the worn one wins);
-                // a look whose templates all give the same colours has one entry and the panel hides its Colour row
                 string Colours(CloSubPalEffect e) => string.Join(";", e.CloSubPalettes.Select(c => c.PaletteSet.ToString("X") + "@" + string.Join(",", c.Ranges.Select(g => g.Offset + "+" + g.NumColors))));
                 var seen = new Dictionary<string, int>();
                 foreach (var k in t.ClothingSubPalEffects.Keys.OrderBy(k => k == keep ? -1L : k))
@@ -567,9 +509,7 @@ namespace RevivalGuard
             return r;
         }
 
-        /// <summary>The colour this template gives the item at this shade (owner 261109-0030: "a grey square to show a blue
-        /// tinted item"): every palette entry it writes into the dyed ranges, averaged (DressingRoomSwatch), from the
-        /// palette the shade picks out of each set, as the worn item is drawn.</summary>
+        /// <summary>The colour this template gives the item at this shade</summary>
         static string Swatch(CloSubPalEffect e, double shade, List<int> dyed)
         {
             try
@@ -623,16 +563,12 @@ namespace RevivalGuard
         const uint REDUCIBLE = (uint)(EquipMask.ChestArmor | EquipMask.AbdomenArmor | EquipMask.UpperArmArmor | EquipMask.LowerArmArmor
                                       | EquipMask.UpperLegArmor | EquipMask.LowerLegArmor | EquipMask.FootWear);
 
-        /// <summary>What the Main, Lower and Middle reduction tools would leave of a piece in these slots, exactly as
-        /// ACE's Tailoring.TailorReduceArmor picks (docs/findings/tailoring-reduction-2026-11-06.md). A piece in one
-        /// slot has no choice (TailoringParity refuses the tools on it). Each choice: (slots, button, tooltip).</summary>
+        /// <summary>What the Main, Lower and Middle reduction tools would leave of a piece in these slots</summary>
         static List<(uint Loc, string Short, string Long)> ReduceChoices(uint loc, uint wcid = 0)
         {
             var r = new List<(uint, string, string)>();
             if (System.Numerics.BitOperations.PopCount(loc & REDUCIBLE) < 2) return r;
-            // full robes and guises (every body armour slot) cannot be tailored or reduced (RobeTailoring, retail T9):
-            // a hooded robe keeps its head, so it takes a helm off. EXCEPT the no-spell outfits (Dapper Suit etc.), which
-            // the owner let reduce like a hauberk (SuitReduction, 2026-11-08): Main keeps the chest, Middle the upper legs.
+            // full robes and guises cannot be tailored or reduced: a hooded robe keeps its head, so it takes a helm off.
             const uint FULL = (uint)(EquipMask.ChestArmor | EquipMask.AbdomenArmor | EquipMask.UpperArmArmor | EquipMask.LowerArmArmor | EquipMask.UpperLegArmor | EquipMask.LowerLegArmor);
             if ((loc & FULL) == FULL)
             {
@@ -650,7 +586,6 @@ namespace RevivalGuard
             else if (Has(EquipMask.AbdomenArmor)) r.Add(((uint)EquipMask.AbdomenArmor, "Girth", "Abdomen only (an Armor Main Reduction Tool)"));
             // Middle: upper legs
             if (Has(EquipMask.UpperLegArmor)) r.Add(((uint)EquipMask.UpperLegArmor, "Upper", "Upper legs only (an Armor Middle Reduction Tool)"));
-            // Lower: never a chest piece; lower arms, else lower legs, else feet
             if (!Has(EquipMask.ChestArmor))
             {
                 if (Has(EquipMask.UpperArmArmor)) r.Add(((uint)EquipMask.LowerArmArmor, "Lower", "Lower arms only (an Armor Lower Reduction Tool)"));
@@ -673,9 +608,7 @@ namespace RevivalGuard
 
         static Piece FromLook(Look l) => new Piece { W = l.W, N = l.N, Loc = l.Loc, Cov = l.Cov, Cb = l.Cb, Pal = l.Pal, Sh = l.Sh, Ly = 0 };
 
-        /// <summary>A new piece takes the place of any piece it clashes with, by ACE's rule for putting it on
-        /// (Creature.GetEquippedItems): clothing and armour clash where they cover the same body (ClothingPriority), so a
-        /// shirt and breeches that both list the abdomen as a slot are worn together; anything else by its slots.</summary>
+        /// <summary>A new piece takes the place of any piece it clashes with, by ACE's rule for putting it on</summary>
         static bool Clash(Piece a, Piece b)
         {
             const uint CLOAK = (uint)EquipMask.Cloak;   // a cloak is worn over everything; it clashes only with a cloak
@@ -691,22 +624,11 @@ namespace RevivalGuard
             f.Pieces.Sort((a, b) => ELoc(a).CompareTo(ELoc(b)));
         }
 
-        /// <summary>Owner ticket 261108-0006 ("changing chest armor that covers head wiped out ... the helm i chose and wanted
-        /// to build around"). Retail wears one piece per body part: a piece that covers the head (a hooded robe, the
-        /// Doomshark Hide Coat, the Cowl of the Sand) cannot be worn with a helm, and putting it on takes the helm off. But
-        /// retail's reduction tools cut a multi-slot ARMOUR piece down to one slot (Main: chest), and a coat cut to its
-        /// chest leaves the head free. So: when the new piece would take off pieces already chosen and one of its
-        /// reductions still covers the slot being dressed (sel; any, from an older panel) and takes off fewer, wear it
-        /// reduced and keep them (Covers > Full wears the whole piece). Whatever still comes off is named, and Undo puts
-        /// it back.</summary>
         static void Pick(Fit f, Piece x, uint sel)
         {
             // a piece in the slot being dressed is simply replaced; the others are the chosen pieces this would wipe
             bool Replaced(Piece o) => sel != 0 ? (ELoc(o) & sel) != 0 : ELoc(o) == ELoc(x);
             List<Piece> Lost(Piece y) => f.Pieces.Where(o => Clash(o, y) && !Replaced(o)).ToList();
-            // OWNER 2026-11-08 (report 261109-0011): "if i select a slot in the dressing room it should only effect that
-            // slot as if it were reduced". A piece picked for one slot is worn reduced to the reduction that covers that
-            // slot whenever there is one, so the rest of the outfit stays on (Covers > Full wears the whole piece).
             var full = Lost(x);
             var kept = new List<Piece>();
             if (sel != 0 && (x.Loc & REDUCIBLE & ~sel) != 0)
@@ -783,6 +705,7 @@ namespace RevivalGuard
                         shades = ShadesOf(x.Cb) ? 1 : 0,
                         styles = StylesOf(x.W),
                         cover = ReduceChoices(x.Loc, x.W).Select(c => new object[] { c.Loc, c.Short, c.Long }),
+                        cb = x.Cb, lab = LabOn ? x.Lab : null,
                     };
                 }),
                 // each saved outfit as a tile: its name and the icon of its chest piece (else its first)
@@ -798,6 +721,7 @@ namespace RevivalGuard
                 redo = f.Redo.Count,
                 real = f.LastReal != null ? 1 : 0,          // Not style has a look to hide
                 rall = HideForAll(p) ? 1 : 0,               // and may hide it for all staff
+                lab = LabOn ? 1 : 0,                        // the Lab drawer (rg_dress_lab)
             };
             ModChannel.Send(p.Session, "dress", JsonSerializer.Serialize(new { st }));
         }
@@ -865,6 +789,8 @@ namespace RevivalGuard
                             break;
                         }
                     case "drop": { var x = At(1); if (x != null) f.Pieces.Remove(x); break; }
+                    case "lab":
+                    case "lablook": if (!LabVerb(p, f, verb, a)) return; break;
                     case "random": RandomSuit(p, f); f.LastReal = null; break;
                     case "inspire": Inspire(p, f); break;
                     case "remix": Remix(p, f); break;
@@ -880,8 +806,12 @@ namespace RevivalGuard
                             var name = CleanName(rest);
                             if (name.Length == 0) { int k = 1; while (all.ContainsKey("Outfit " + k)) k++; name = "Outfit " + k; }   // the visual panel types nothing
                             all[name] = f.Pieces.Select(Copy).ToList(); SaveOutfits(all);
-                            Template(p, f, name);   // the content template beside it (dressing-room/<name>.sql)
-                            f.Msg = $"Saved as {name}, with its template.";
+                            if (f.Pieces.Any(FreeColour)) f.Msg = $"Saved as {name}. No template: a free colour cannot ride in one.";
+                            else
+                            {
+                                Template(p, f, name);   // the content template beside it (dressing-room/<name>.sql)
+                                f.Msg = $"Saved as {name}, with its template.";
+                            }
                             look = false;
                             break;
                         }
@@ -923,8 +853,7 @@ namespace RevivalGuard
                 f.Msg = "That did not work: " + e.Message;
                 Mod.Log.Warn($"[RevivalGuard] DressingRoom: {verb}: {e}");
             }
-            // history: any verb that changed the outfit is one step (undo/redo keep their own stacks); a run of shade moves
-            // on the same piece is one step, so a drag is undone in one go
+            // history: any verb that changed the outfit is one step; a run of shade moves on the same piece is one step, so a drag is undone in one go
             if (verb != "undo" && verb != "redo" && Key(f.Pieces) != beforeKey)
             {
                 string op = verb == "shade" ? "shade " + (a.Length > 1 ? a[1] : "") : verb;
@@ -959,12 +888,6 @@ namespace RevivalGuard
             if (l != null) { x.Ic = l.Ic; x.It = l.It; x.Fx = l.Fx; }
         }
 
-        /// <summary>Owner ticket 261108-0008 ("icons dont look like they look in game ... kojis beast helm looks like something
-        /// else"). The icon a piece made or tailored from this look should carry: its colour template's own icon in its
-        /// ClothingTable (what retail's tailored and dyed clothing shows), else the look weenie's icon. ACE instead takes the
-        /// table's FIRST template's icon when the item's template is not in the table (WorldObject.CalculateObjDesc), and
-        /// Koji's Beast (template 4, table 0x10000541 has no 4) became another helm's icon 0x06003166. The made item gets
-        /// this icon and IgnoreCloIcons so ACE leaves it.</summary>
         static uint IconFor(Piece x)
         {
             var l = LookOf(x.W);
@@ -981,9 +904,7 @@ namespace RevivalGuard
             return own;
         }
 
-        /// <summary>The icon a look's row shows: the one the item shows in game (IconFor), not its weenie's raw Icon. Owner
-        /// ticket 261110-0006: the Amethyst Oculus (table 0x1000057A, template 13: a purple eye, 0x060034A0) listed under its
-        /// weenie's white helm 0x06002A58, which nothing in game shows.</summary>
+        /// <summary>The icon a look's row shows: the one the item shows in game (IconFor), not its weenie's raw Icon.</summary>
         static uint ShownIcon(Look l) => IconFor(new Piece { W = l.W, Cb = l.Cb, Pal = l.Pal, Ic = l.Ic });
 
         /// <summary>A made or tailored piece shows the icon of the look it carries (IconFor), and ACE keeps it.</summary>
@@ -995,10 +916,7 @@ namespace RevivalGuard
             wo.IgnoreCloIcons = true;
         }
 
-        /// <summary>The look's own rows (a mask's head part, a costume's texture or palette rows) onto a worn piece being
-        /// tailored: ACE's UpdateArmorProps copies the ClothingBase, setup and colours, not these, so a mask tailored onto a
-        /// helm wore the plain table's look. Anim parts apply on any item (ApplyOwnAnimParts); texture rows only on our
-        /// own 900000+ weenies (ItemTextureMaps).</summary>
+        /// <summary>The look's own rows onto a worn piece being tailored</summary>
         static void CopyOwnRows(WorldObject src, WorldObject target)
         {
             var aps = src.Biota.PropertiesAnimPart?.Clone(src.BiotaDatabaseLock) ?? new List<ACE.Entity.Models.PropertiesAnimPart>();
@@ -1022,7 +940,7 @@ namespace RevivalGuard
             name.StartsWith("Outfit ", StringComparison.OrdinalIgnoreCase) && int.TryParse(name.Substring(7), out var n) ? n : int.MaxValue;
 
         static Piece Copy(Piece x) => new Piece { W = x.W, N = x.N, Loc = x.Loc, Cov = x.Cov, Ic = x.Ic, It = x.It, Fx = x.Fx, Cb = x.Cb, Pal = x.Pal, Sh = x.Sh, Ly = x.Ly, Rd = x.Rd,
-            Ap = x.Ap?.Select(r => (uint[])r.Clone()).ToList(), Tm = x.Tm?.Select(r => (uint[])r.Clone()).ToList(), Pl = x.Pl?.Select(r => (uint[])r.Clone()).ToList() };
+            Ap = x.Ap?.Select(r => (uint[])r.Clone()).ToList(), Tm = x.Tm?.Select(r => (uint[])r.Clone()).ToList(), Pl = x.Pl?.Select(r => (uint[])r.Clone()).ToList(), Lab = x.Lab };
 
         static string Rows(List<uint[]> l) => l == null ? "" : string.Join(",", l.Select(r => string.Join(":", r)));
 
@@ -1095,6 +1013,20 @@ namespace RevivalGuard
         /// <summary>A real item for this piece, as the piece would make it (the cached one is re-coloured each time).</summary>
         static WorldObject Item(Fit f, Piece x)
         {
+            var lab = LabOf(x);
+            if (lab != null && lab.Table && x.Ap == null && x.Tm == null && x.Pl == null)
+            {   // Lab extras: its own cached item, wearing a preview table
+                uint key = x.W | 0x80000000u;
+                if (!f.Items.TryGetValue(key, out var lw) || lw == null)
+                {
+                    lw = WorldObjectFactory.CreateNewWorldObject(x.W);
+                    if (lw == null) return null;
+                    f.Items[key] = lw;
+                }
+                Colour(lw, x);
+                LabPreview(lw, x, lab);
+                return lw;
+            }
             if (x.Ap != null || x.Tm != null || x.Pl != null)
             {   // its own rows: a fresh item each time (the cached one has the weenie's)
                 var own = WorldObjectFactory.CreateNewWorldObject(x.W);
@@ -1115,9 +1047,6 @@ namespace RevivalGuard
         static void Colour(WorldObject wo, Piece x)
         {
             if (x.Cb != 0) wo.ClothingBase = x.Cb;   // a worn piece loaded with "worn" may be tailored already
-            // Always, so the preview item carries the worn piece's own colour: a worn piece with no PaletteTemplate drew the
-            // weenie's default template in the preview (and a cached item kept the last piece's). Catalogue looks carry
-            // their weenie's own (LookOf), so this changes nothing for them. CalculateObjDesc reads null as 0.
             wo.PaletteTemplate = x.Pal > 0 ? x.Pal : (int?)null;
             wo.Shade = x.Sh;
             wo.TopLayerPriority = x.Ly > 0 ? true : x.Ly < 0 ? false : (bool?)null;
@@ -1153,9 +1082,17 @@ namespace RevivalGuard
 
         static void Preview(Player p, Fit f)
         {
-            var m = Stand(f, p);
-            if (m == null) { f.Msg = "The preview needs the Dressing Room mannequin (weenie " + MANNEQUIN + ")."; SendState(p, f); return; }
-            var desc = m.CalculateObjDesc();
+            ACE.Entity.ObjDesc desc;
+            lock (s_LabLock)
+            {
+                try
+                {
+                    var m = Stand(f, p);
+                    if (m == null) { f.Msg = "The preview needs the Dressing Room mannequin (weenie " + MANNEQUIN + ")."; SendState(p, f); return; }
+                    desc = m.CalculateObjDesc();
+                }
+                finally { LabPreviewEnd(); }
+            }
             // the one line of AddBaseModelData that only a Player gets: the hair texture, after the body-style textures
             int at = 0;
             if (p.HairStyle.HasValue && p.Heritage.HasValue && p.Gender.HasValue)
@@ -1174,7 +1111,6 @@ namespace RevivalGuard
         static void Close(Player p)
         {
             FitOf(p).Open = false;
-            // always, not only after a preview: a stale preview left on screen would pass for the real look
             p.Session.Network.EnqueueSend(new GameMessageObjDescEvent(p));
             ModChannel.Send(p.Session, "dress", "{\"closed\":1}");
         }
@@ -1205,6 +1141,8 @@ namespace RevivalGuard
         /// <summary>Each piece onto the worn item in exactly its slots, as a tailoring kit would (name, look, colours, icon).</summary>
         static void ApplyWorn(Player p, Fit f)
         {
+            var free = f.Pieces.FirstOrDefault(FreeColour);
+            if (free != null) { f.Msg = $"{free.N} has a free colour, which worn gear cannot keep: give it its own colours back, or use Make items."; return; }
             var worn = WornLooks(p).ToList();
             int done = 0; var missed = new List<string>();
             foreach (var x in f.Pieces)
@@ -1224,12 +1162,13 @@ namespace RevivalGuard
                 done++;
             }
             p.EnqueueBroadcast(new GameMessageObjDescEvent(p));
-            f.Msg = $"Tailored {done} worn piece{(done == 1 ? "" : "s")}." + (missed.Count > 0 ? " Nothing worn in the slots of: " + string.Join(", ", missed) + "." : "");
+            f.Msg = $"Tailored {done} worn piece{(done == 1 ? "" : "s")}." + (missed.Count > 0 ? " Nothing worn in the slots of: " + string.Join(", ", missed) + "." : "")
+                + (f.Pieces.Any(x => LabOf(x) != null) ? " Lab materials, skins and effects stay off worn gear." : "");
         }
 
         static void ApplyNew(Player p, Fit f)
         {
-            int done = 0;
+            int done = 0; string note = null;
             foreach (var x in f.Pieces)
             {
                 var wo = WorldObjectFactory.CreateNewWorldObject(x.W);
@@ -1237,22 +1176,22 @@ namespace RevivalGuard
                 Colour(wo, x);
                 WriteRows(wo, x);
                 SetIcon(wo, x);
+                note = LabMake(wo, x) ?? note;
                 if (p.TryCreateInInventoryWithNetworking(wo)) done++;
                 else wo.Destroy();
             }
             f.Msg = $"Made {done} of {f.Pieces.Count} piece{(f.Pieces.Count == 1 ? "" : "s")} in your pack."
-                + (done < f.Pieces.Count ? " The rest did not fit: your pack is full or you carry too much." : "");
+                + (done < f.Pieces.Count ? " The rest did not fit: your pack is full or you carry too much." : "") + (note != null ? " " + note : "");
         }
 
-        /// <summary>The selected creature (never a player) takes off its clothing and armour and wears the outfit as real
-        /// items. Not saved: it is a look for staff content work; "template" is the saved form.</summary>
+        /// <summary>The selected creature takes off its clothing and armour and wears the outfit as real items.</summary>
         static void ApplyNpc(Player p, Fit f, uint guid)
         {
             var c = guid != 0 ? p.CurrentLandblock?.GetObject(new ObjectGuid(guid)) as Creature : null;
             if (c == null || c is Player) { f.Msg = "Select a creature or NPC first (not a player)."; return; }
             foreach (var w in WornLooks(c))
                 if (c.TryDequipObject(w.Guid, out var off, out _)) off.Destroy();
-            int done = 0;
+            int done = 0; string note = null;
             foreach (var x in f.Pieces)
             {
                 var wo = WorldObjectFactory.CreateNewWorldObject(x.W);
@@ -1260,18 +1199,19 @@ namespace RevivalGuard
                 Colour(wo, x);
                 WriteRows(wo, x);
                 SetIcon(wo, x);
+                note = LabMake(wo, x) ?? note;
                 if (c.TryEquipObject(wo, (EquipMask)ELoc(x))) done++;
                 else wo.Destroy();
             }
             c.EnqueueBroadcast(new GameMessageObjDescEvent(c));
-            f.Msg = $"Dressed {c.Name} in {done} piece{(done == 1 ? "" : "s")}. A respawn undresses it; save a template to keep it.";
+            f.Msg = $"Dressed {c.Name} in {done} piece{(done == 1 ? "" : "s")}. A respawn undresses it; save a template to keep it." + (note != null ? " " + note : "");
         }
 
-        /// <summary>dressing-room/&lt;name&gt;.sql: the outfit as create-list rows (destination Wield, palette, shade) for a
-        /// weenie id the content author sets, the way retail NPCs are dressed.</summary>
+        /// <summary>dressing-room/&lt;name&gt;.sql</summary>
         static void Template(Player p, Fit f, string name)
         {
             if (name.Length == 0 || f.Pieces.Count == 0) { f.Msg = "Name the template, and put something in the outfit."; return; }
+            if (f.Pieces.Any(FreeColour)) { f.Msg = "A free colour cannot ride in a template: give that piece its own colours back first."; return; }
             var dir = Dir(); if (dir == null) { f.Msg = "No folder for templates."; return; }
             var file = Path.Combine(dir, name.Replace(' ', '-').Replace("'", "") + ".sql");
             var sb = new StringBuilder();
@@ -1287,6 +1227,7 @@ namespace RevivalGuard
                 string note = x.N.Replace("\n", " ").Replace("--", "-")
                     + (x.Ly != 0 ? (x.Ly > 0 ? ", layered on top" : ", layered underneath") : "")
                     + (x.Rd != 0 ? $", reduced to slots 0x{x.Rd:X} (a create list cannot carry a reduction)" : "")
+                    + (LabOf(x) != null ? ", Lab material, skin or effect not carried (a create list cannot)" : "")
                     + (own != null && x.Cb != 0 && own.Cb != x.Cb ? $", tailored: its look is ClothingBase 0x{x.Cb:X8}, not this weenie's own" : "");
                 sb.AppendLine(FormattableString.Invariant($"  (@wcid, 2, {x.W}, 1, {x.Pal}, {x.Sh:0.####}, 0){(i < f.Pieces.Count - 1 ? "," : ";")}   -- {note}"));
             }

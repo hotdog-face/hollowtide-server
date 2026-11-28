@@ -11,23 +11,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AN IDLE LANDBLOCK IS NOT UNLOADED WITH A PLAYER IN IT (ticket 261109-0037, Rocket, Facility Hub Portal Gem).
-    ///
-    /// ACE unloads a block whose lastActiveTime is 5 minutes old: its heartbeat (every 5 s) queues it and UnloadLandblocks
-    /// runs Landblock.Unload at the end of that world tick. lastActiveTime is refreshed only by a player's own Heartbeat
-    /// (every 5 s) in that block. A player who teleports into a block in the seconds before its unload, before their first
-    /// heartbeat there, is unloaded with it: RemoveWorldObjectInternal sets CurrentLandblock = null and destroys the
-    /// physics body. Nothing ticks them after that: their action queue (the gem's UseDone, IsBusy = false) never runs,
-    /// positions are never read, every use answers "You're too busy!" and only a relog clears it. Rocket's server_busy
-    /// was exactly that body: cell NULL, cell id 0, not active, no contact, Location still the gem's destination.
-    ///
-    /// Here, just before ACE drains its destruction queue, a queued block with anyone in it (its players list, a player
-    /// pending addition, or an online player whose CurrentLandblock is it) is taken out of the queue and marked active,
-    /// as the player's own heartbeat would have done a moment later. Everything else unloads as before. A shutdown
-    /// (ShutdownInProgress) unloads everything, as ACE intends. @reloadblock already refuses occupied blocks.
-    /// Switch: rg_unload_guard (default on).
-    /// </summary>
     [HarmonyPatch]
     public static class LandblockUnloadGuard
     {

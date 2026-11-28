@@ -7,26 +7,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A NEW ATTACK PRESS REPLACES ONE STILL WAITING ON ITS WALK (F7 261117-0010, Mystic Warrior, level 169 in the Egg
-    /// Orchard among Olthoi Rippers: "Occasionally I cannot attack until I tap spacebar. Especially with olthoi"; also
-    /// 261114-0019, Money Maker). ACE's HandleActionTargetedMeleeAttack swings at once only at a target within 0.6 m, or
-    /// within 4 m and IsMeleeVisible (a ray from the attacker's centre that must reach the target before anything else).
-    /// Otherwise it sets MeleeTarget and calls CreateMoveToChain, which for a non-PK player sends a MoveToObject and polls
-    /// every 0.1 s for the player to come within the target's use radius, for up to 15 s (Player_Move.cs:16); with
-    /// UseChargeAttack it is a server MoveTo instead (IsMoving). When our walk ends before the server agrees (it stops on a
-    /// server TurnTo, on "arrived" by its own copy of the positions, or the Assistant gives up on the target; in a pack of
-    /// olthoi, likely also a ray blocked by another olthoi's body: not reproduced), every new request on that monster
-    /// returns at "already in melee loop?" (MeleeTarget alive) with no AttackDone, so the attack key and the Assistant do
-    /// nothing. (A press on ANOTHER monster gets through: the client's selection change sends CancelAttack first.) A jump
-    /// (or any movement key) sends a Jump/MoveToState, whose handler calls StopExistingMoveToChains: the chain answers
-    /// false, OnAttackDone clears MeleeTarget, and the next press swings. That is why the spacebar freed it.
-    /// Here a request that would be dropped that way, while a walk or turn for an attack that has not swung is pending,
-    /// stops that chain the same way a jump does and is sent again 0.3 s later, after the chain's own answer
-    /// (OnAttackDone). Another target: after MeleeLatchRule.OTHER_TARGET_WAIT; the same target: after SAME_TARGET_WAIT, so
-    /// a run toward a far monster is not restarted by a second press. PK players (FastTick, CreateMoveToChain2): the jump's
-    /// StopExistingMoveToChains2 plus MeleeLatchGuard's finish. Switch: rg_melee_restart (on).
-    /// </summary>
     [HarmonyPatch(typeof(Player), nameof(Player.HandleActionTargetedMeleeAttack))]
     static class MeleeRestart
     {
@@ -55,9 +35,7 @@ namespace RevivalGuard
 
                 int seq = p.AttackSequence;
                 string old = $"{t.Name} 0x{t.Guid.Full:X8}";
-                // what a jump does (GameActionJump.Handle): the chain answers false on its next tick, i.e. OnAttackDone
-                // a charge (UseChargeAttack: ACE's own MoveTo, no chain) ends through the physics move-to, as a jump's
-                // movement does: OnMoveComplete -> HandleActionCancelAttack -> OnAttackDone
+                // what a jump does: the chain answers false on its next tick, i.e. OnAttackDone a charge ends through the physics move-to
                 if (p.FastTick) p.StopExistingMoveToChains2();
                 else { if (p.IsPlayerMovingTo) p.StopExistingMoveToChains(); if (p.IsMoving) p.PhysicsObj?.cancel_moveto(); }
                 var chain = new ActionChain();
@@ -99,12 +77,11 @@ namespace RevivalGuard
             catch (Exception e) { TickGuard.Report("MeleeRestart", e); return true; }
         }
 
-        /// <summary>The attack waits on a walk or turn: a PK move-to (CreateMoveToChain2), a non-PK move-to chain
-        /// (CreateMoveToChain, 15 s) or a charge (UseChargeAttack: Player.MoveTo, IsMoving until it completes).</summary>
+        /// <summary>The attack waits on a walk or turn: a PK move-to, a non-PK move-to chain or a charge.</summary>
         internal static bool Pending(Player p) =>
             p.FastTick ? p.IsPlayerMovingTo2 || p.MoveToParams?.Callback != null : p.IsPlayerMovingTo || p.IsMoving;
 
-        /// <summary>When the attack now in hand was accepted (its AttackSequence was taken): the restart's clock.</summary>
+        /// <summary>When the attack now in hand was accepted: the restart's clock.</summary>
         static void Postfix(Player __instance, int __state)
         {
             try

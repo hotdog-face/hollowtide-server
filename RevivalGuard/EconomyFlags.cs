@@ -5,17 +5,12 @@ using System.Threading;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// EconomyWatch's pure pieces (no ACE types), so NetTest can run them (tools/nettest/EconomyFlagsCase.cs).
-    /// FlagGate: one flag per window per character. The last flag time lives on the character's history, not on
-    /// a sample: the old check read it from the sample made that heartbeat, which was always new, so every
-    /// heartbeat flagged again (2026-10-20: 120 lines in 10 min for one player).
-    /// </summary>
+    /// <summary>EconomyWatch's pure pieces (no ACE types), so NetTest can run them (tools/nettest/EconomyFlagsCase.cs).</summary>
     sealed class FlagGate
     {
         public DateTime LastFlag;
 
-        /// <summary>True (and remembers now) when no flag was raised in the last windowMinutes.</summary>
+        /// <summary>True when no flag was raised in the last windowMinutes.</summary>
         public bool TryFlag(DateTime now, double windowMinutes)
         {
             if (LastFlag != default && (now - LastFlag).TotalMinutes < windowMinutes) return false;
@@ -24,10 +19,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// Appends lines to files on one background thread, so a landblock thread never waits on the disk. Enqueue is
-    /// non-blocking; past MaxQueued lines it drops (and counts) rather than grow without bound.
-    /// </summary>
     sealed class BackgroundAppender
     {
         public const int MaxQueued = 10_000;
@@ -51,7 +42,7 @@ namespace RevivalGuard
             return false;
         }
 
-        /// <summary>Waits until everything queued so far is on disk (tests; never from a landblock thread).</summary>
+        /// <summary>Waits until everything queued so far is on disk.</summary>
         public bool Flush(int timeoutMs)
         {
             var until = Environment.TickCount64 + timeoutMs;

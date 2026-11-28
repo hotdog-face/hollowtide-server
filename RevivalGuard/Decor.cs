@@ -21,34 +21,13 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE WORLD DECORATOR'S SERVER END (docs/proposals/world-decorator.md, owner 2026-11-21). The client's Decorate mode
-    /// (AcDecorMode) sends these; nobody types them. Every verb refuses unless the file Mods/RevivalGuard/decor/enabled exists
-    /// (a test shard: Developer and up) or, on live (owner 2026-11-25), the property rg_decor_live is on (Admins only); one gate,
-    /// DecorAccessRule, before any verb runs. Live never gets the enabled file. Edits change the
-    /// running world at once and are kept in Mods/RevivalGuard/decor/&lt;area&gt;.json, the layer that
-    /// tools/decor/decor.py turns into a datafix (server rows) and a cell-overlay record (DAT statics). The database is
-    /// never written here: a restart puts the test shard's rows back until a datafix is applied.
-    /// Layer: one entry per thing touched, keyed, holding its first-seen pose ("before") and its latest ("after", null =
-    /// removed), so the file is the net result.
-    /// V2 (owner 2026-11-23, "decorate the whole world of dereth easily in game"): one layer per AREA (&lt;area&gt;.json, with
-    /// the landblocks it covers, its name and its spot), padlocks ("locks"), undo kept per area on disk (&lt;area&gt;.undo.json:
-    /// each command's edits before and after), batches (one message, one undo step), kits (decor/kits/), and each landblock
-    /// gets its edits when it loads (DecorBlockLoad), not only when Decorate opens.
-    ///   s:&lt;guid&gt;     a placed server object (landblock_instance row, link children included)
-    ///   a:&lt;n&gt;         a server object added from the palette (a Stuck copy of a retail weenie)
-    ///   t:&lt;blk&gt;:&lt;i&gt;  a DAT static of block blk, i-th entry of its object list
-    ///   n:&lt;n&gt;         a DAT static added from the palette
-    /// Poses are AC landblock-local: cell, x, y, z, qw, qx, qy, qz.
-    /// </summary>
+    /// <summary>The world decorator's server end.</summary>
     internal static partial class Decor
     {
         static readonly object s_Lock = new object();
         static string Dir => Path.Combine(ModFolder.Path(), "decor");
         static bool Enabled => File.Exists(Path.Combine(Dir, "enabled"));
-        /// <summary>LIVE (owner 2026-11-25: "Yes, work on live"): with no enabled file, ACE's bool property rg_decor_live switches the
-        /// decorator on, for Admins only (DecorAccessRule). Off by default; its switch is the datafix *-decor-live-on.sql. On live
-        /// the layer under the mod IS the lasting world data (re-applied at every landblock load); Publish records the yes.</summary>
+        /// <summary>LIVE: with no enabled file, ACE's bool property rg_decor_live switches the decorator on, for Admins only.</summary>
         internal const string P_LIVE = "rg_decor_live";
         static volatile bool s_FileOn;
         static bool LiveSwitch { get { try { return PropertyManager.GetBool(P_LIVE, false).Item; } catch { return false; } } }
@@ -72,7 +51,7 @@ namespace RevivalGuard
         // a long batch arrives as several chat lines ("part"), put together before it runs
         static readonly Dictionary<string, string[]> s_Parts = new Dictionary<string, string[]>();
 
-        /// <summary>Verbs that change the layout: each run is ONE undo step (a batch of fifty is one step too).</summary>
+        /// <summary>Verbs that change the layout: each run is one undo step (a batch of fifty is one step too).</summary>
         static readonly HashSet<string> s_Editing = new HashSet<string>
             { "scale", "piecescale", "move", "remove", "restore", "add", "unadd", "static", "staticadd", "batch", "revert", "way",
               "encspawn", "encboss", "encchest", "encset", "encmove", "encpatrol", "encremove", "ground" };
@@ -84,7 +63,7 @@ namespace RevivalGuard
             void Reply(string t) => me.Session?.Network?.EnqueueSend(new GameMessageSystemChat("[Decor] " + t, ChatMessageType.Broadcast));
             s_FileOn = Enabled;
             var mode = Mode;
-            // ONE GATE FOR EVERY VERB ("part" and the read-only ones too), before anything is parsed or loaded
+            // One gate for every verb ("part" and the read-only ones too), before anything is parsed or loaded
             string no = DecorAccessRule.Refuse(mode, (int)s.AccessLevel, args.Length > 0 ? args[0] : "");
             if (no != null)
             {
@@ -185,8 +164,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>batch &lt;label_words&gt; &lt;verb args&gt;;&lt;verb args&gt;;...: a kit, line, ring, brush stroke or group edit as one
-        /// message, one undo step and one answer (the props it added, in order, and what was refused).</summary>
+        /// <summary>batch &lt;label_words&gt; &lt;verb args&gt;;&lt;verb args&gt;;...</summary>
         static void Batch(Session s, Player me, string[] args, Action<string> reply)
         {
             var ops = string.Join(" ", args.Skip(2)).Split(';').Select(x => x.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)).Where(x => x.Length > 0).ToList();
@@ -239,7 +217,7 @@ namespace RevivalGuard
             reply($"{ar.Layer["name"]}: made. Your changes go in it now.");
         }
 
-        /// <summary>goto [id]: the decorator to an area's spot (where it was made, or Holtburg's lifestone).</summary>
+        /// <summary>goto [id]: the decorator to an area's spot.</summary>
         static void GoTo(Player me, string id, Action<string> reply)
         {
             var ar = id != null && s_Areas.TryGetValue(id, out var x) ? x : ActiveOf(me);
@@ -263,10 +241,7 @@ namespace RevivalGuard
             return null;
         }
 
-        // ---- a generator's linked row: most of a town (NPCs, forges, seasonal decor) ----
-        // Its landblock_instance row is a link child: ACE makes a profile on the parent generator with Id = the row's guid and
-        // spawns it with a NEW dynamic guid (GeneratorProfile.Spawn). So a live object is traced to its row here, and the profile
-        // is what keeps a move or a removal true when it respawns (DecorSpawn).
+        // a generator's linked row: most of a town (NPCs, forges, seasonal decor)
 
         static GeneratorProfile ProfileOf(WorldObject wo) =>
             wo.Generator?.GeneratorProfiles?.FirstOrDefault(p => p.Spawned.ContainsKey(wo.Guid.Full));
@@ -288,15 +263,13 @@ namespace RevivalGuard
             return null;
         }
 
-        /// <summary>A placed generator that makes exactly one kind of thing around itself (the Collector, Azimar, the town cow, a
-        /// costumer): moving what it made means moving its row. The weenie's profile table is shared by every copy, so it is never
-        /// edited, and one that names an absolute spot can't follow.</summary>
+        /// <summary>A placed generator that makes exactly one kind of thing around itself: moving what it made means moving its row.</summary>
         static WorldObject GenRowOf(WorldObject wo)
         {
             var g = wo.Generator;
             if (g == null || (g.Guid.Full & 0xF0000000u) != 0x70000000u || g.Generator != null || g.GeneratorProfiles == null) return null;
             var real = g.GeneratorProfiles.Where(p => !p.IsPlaceholder).ToList();
-            // exactly one at a time: an apple tree's generator (max -1) keeps several, and one apple can't carry the tree (audit 11-23)
+            // exactly one at a time: an apple tree's generator (max -1) keeps several, and one apple can't carry the tree
             if (real.Count != 1 || real[0].Biota.MaxCreate != 1 || (real[0].Id & 0xF0000000u) == 0x70000000u || (real[0].Biota.ObjCellId ?? 0) > 0) return null;
             return g;
         }
@@ -326,7 +299,7 @@ namespace RevivalGuard
             p.Biota.OriginX ?? 0f, p.Biota.OriginY ?? 0f, p.Biota.OriginZ ?? 0f,
             p.Biota.AnglesX ?? 0f, p.Biota.AnglesY ?? 0f, p.Biota.AnglesZ ?? 0f, p.Biota.AnglesW ?? 1f);
 
-        /// <summary>DecorSpawn, before a linked row spawns: false = the layout removed it. A moved row spawns where it was put.</summary>
+        /// <summary>DecorSpawn, before a linked row spawns: false = the layout removed it.</summary>
         internal static bool RowMaySpawn(GeneratorProfile p)
         {
             lock (s_Lock)
@@ -382,8 +355,7 @@ namespace RevivalGuard
             return $"{wo.Name} isn't part of the town's layout (something dropped or spawned).";
         }
 
-        /// <summary>A size is a weenie property, so a scaled row publishes as a copy of its weenie, and that copy has no emotes:
-        /// anything that talks, opens or teleports keeps its size.</summary>
+        /// <summary>A size is a weenie property, so a scaled row publishes as a copy of its weenie, and that copy has no emotes</summary>
         static string WhyNoScale(WorldObject wo)
         {
             if (s_Added.ContainsKey(wo.Guid.Full)) return null;
@@ -413,7 +385,7 @@ namespace RevivalGuard
                 if (LockedName(key) != null) o["locked"] = true;
             }
             o["wcid"] = wo.WeenieClassId;
-            // its drawing, so a kit of Turbine's things can show them while placing (F7 261124-0004)
+            // its drawing, so a kit of Turbine's things can show them while placing
             if (wo.SetupTableId != 0) o["setup"] = $"0x{wo.SetupTableId:X8}";
             string noCopy = WhyNoCopy(wo);
             if (noCopy != null) o["nocopy"] = noCopy;
@@ -424,8 +396,7 @@ namespace RevivalGuard
 
         static void Answer(Session s, JsonObject o) { if (s_InfoInto != null) s_InfoInto.Add(o); else Send(s, o); }
 
-        /// <summary>@decor audit (test shard): every object in the landblocks around you is really moved, moved back, removed and
-        /// restored through the same verbs the panel sends, and the result written to decor/audit.json. The layer ends as it began.</summary>
+        /// <summary>@decor audit: every object in the landblocks around you is really moved, moved back</summary>
         static void Audit(Player me, Action<string> reply)
         {
             uint bx = (uint)me.Location.LandblockId.Landblock >> 8 & 0xFFu, by = (uint)me.Location.LandblockId.Landblock & 0xFFu;
@@ -525,7 +496,6 @@ namespace RevivalGuard
             var gen = GenRowOf(wo);
             if (gen != null && key == $"s:{gen.Guid.Full:X8}") { MoveWithGenerator(wo, gen, pose, key, reply); return; }
             var profile = placed ? ProfileOf(wo) : null;
-            // the row's own pose for a spawn (it may have scattered); written only once the move worked: no "after" must never exist
             var first = PoseOf(profile != null ? ProfilePose(profile) : wo.Location);
             if (!Place(wo, pose, reply)) return;
             var e = Entry(key, () => new JsonObject
@@ -535,7 +505,6 @@ namespace RevivalGuard
             });
             e["after"] = PoseOf(wo.Location);
             if (profile != null) SetProfilePose(profile, wo.Location);
-            // back on its original spot with its own size: no longer an edit (an undo must not leave a row in the datafix)
             if (placed && e["scale"] == null && e["before"] is JsonObject b && wo.Location.DistanceTo(PosFrom(b)) < 0.005f
                 && Math.Abs(Math.Abs(wo.Location.RotationW * N(b["qw"]) + wo.Location.RotationZ * N(b["qz"])) - 1f) < 0.0005f)
                 Del(key);
@@ -621,7 +590,7 @@ namespace RevivalGuard
             var profile = ProfileOfRow(row);
             if (profile != null)
             {
-                Del(key);   // first: its spawn must no longer be held back
+                Del(key);
                 SetProfilePose(profile, PosFrom(before));
                 if (wo == null)
                 {
@@ -652,11 +621,10 @@ namespace RevivalGuard
                 // it stood here before: nothing nearby may refuse it (a portal beside a wall came back as "could not place")
                 bool wasEthereal = wo.Ethereal ?? false;
                 wo.Ethereal = true;
-                Del(key);   // first: a generator's own first spawn must not be held back
+                Del(key);
                 if (!wo.EnterWorld())
                 {
-                    // ACE's placement refuses a spot in the air or against a wall that the world's own load accepts (a portal above
-                    // its steps). So it enters at your feet, where placement always works, and goes straight back into its cell.
+                    // ACE's placement refuses a spot in the air or against a wall that the world's own load accepts (a portal above its steps).
                     wo.Destroy();
                     wo = WorldObjectFactory.CreateWorldObject(DatabaseManager.World.GetCachedWeenie((uint)D(e["wcid"])), new ObjectGuid(row));
                     wo.Ethereal = true;
@@ -680,8 +648,7 @@ namespace RevivalGuard
             reply($"{wo.Name} is back where it was.");
         }
 
-        /// <summary>add &lt;wcid&gt; &lt;pose&gt; [size]: a Stuck copy of a retail weenie (the palette, a copy of something in the world, a
-        /// kit, a line, a ring or a brush stroke).</summary>
+        /// <summary>add &lt;wcid&gt; &lt;pose&gt; [size]: a Stuck copy of a retail weenie.</summary>
         static void Add(Session s, Player me, string[] a, Action<string> reply)
         {
             uint wcid = uint.Parse(a[1], CultureInfo.InvariantCulture);
@@ -699,8 +666,7 @@ namespace RevivalGuard
             var wo = MakeAdd(wcid, pose, size, t => { why = t; reply(t); });
             if (wo == null)
             {
-                // the client queued this add: say so, or its next "added" answer was taken for this one. A hidden trigger's
-                // look can still go down as a map piece (F7 261123-0014): "piece" asks the client to do that instead.
+                // the client queued this add: say so, or its next "added" answer was taken for this one.
                 var no = new JsonObject { ["k"] = "refused", ["wcid"] = wcid, ["why"] = why };
                 if (why != null && why.Contains(HIDDEN_TRIGGER)) no["piece"] = true;
                 if (s_BatchAdded == null && s != null) Send(s, no);
@@ -719,12 +685,10 @@ namespace RevivalGuard
             else if (s != null) Send(s, msg);
         }
 
-        /// <summary>Things a copy must never be: anything that walks, talks back as a creature, teleports or spawns.</summary>
         static string WhyNoCopy(WorldObject wo)
         {
             if (wo is Creature) return "New NPCs and monsters can't be placed: copy props and map pieces.";
-            // the "flat dirt floor patch" props (Tusker's Friend, The Tunnel, Scold ...) are invisible pressure plates: no client
-            // is sent one, so a click placed nothing anyone could see, and stepping on one fires its trap (F7 261123-0014)
+            // the "flat dirt floor patch" props are invisible pressure plates
             if (wo is PressurePlate || wo.Visibility)
                 return $"{wo.Name} is {HIDDEN_TRIGGER} (a trap that fires when stepped on), so it can't be placed as a prop.";
             if (wo is Portal || wo is Door || wo is Lifestone || wo.IsGenerator || wo is House || wo is Hook || wo is Storage)
@@ -757,7 +721,6 @@ namespace RevivalGuard
             foreach (var ar in s_Areas.Values)
             {
                 n = Math.Max(n, (int)(ar.Layer["next"]?.GetValue<int>() ?? 1));
-                // a stale "next" (a hand-edited or old file) never hands out a key an edit already has (Codex review 11-23)
                 if (ar.Layer["edits"] is JsonObject ed)
                     foreach (var kv in ed)
                         if (kv.Key.StartsWith("a:") && int.TryParse(kv.Key.Substring(2), out var k)) n = Math.Max(n, k + 1);
@@ -773,8 +736,6 @@ namespace RevivalGuard
             if (!(Get(key) is JsonObject e)) { reply("Nothing to take away."); return; }
             uint guid = Hex((string)e["guid"]!);
             var wo = s_Added.ContainsKey(guid) ? Find(me, guid) : null;
-            // Not found = not in any loaded landblock; an added prop is never saved (DecorNoSave), so it is gone for good
-            // and the entry can go too. Found: destroyed first, then forgotten.
             wo?.Destroy();
             Del(key);
             s_Added.Remove(guid);
@@ -788,8 +749,7 @@ namespace RevivalGuard
             string key = $"t:{a[1].ToUpperInvariant()}:{a[2]}";
             if (Locked(key, reply)) return;
             if (a[4] == "reset") { Del(key); return; }
-            // a ROOM's object (decor-world): <blk> is then its cell (more than four hex digits), the entry names the cell, and the
-            // pose must be inside the rooms (decor.py rewrites that cell's object list in the overlay)
+            // a ROOM's object: <blk> is then its cell, the entry names the cell, and the pose must be inside the rooms
             uint where = Hex(a[1]);
             bool room = where > 0xFFFF;
             if (room && WhyNotRoom(where, reply)) return;
@@ -820,18 +780,14 @@ namespace RevivalGuard
 
         static readonly Dictionary<uint, string> s_Added = new Dictionary<uint, string>();
 
-        /// <summary>A prop this tool added (this server run). ACE saves every dynamic object lying on a landblock to the
-        /// shard database (WorldObject.IsDynamicThatShouldPersistToShard), so without <see cref="DecorNoSave"/> an added
-        /// prop outlived its layout entry: three test Wells stayed on the box shard and blocked 0.1.125's regression set
-        /// (2026-11-22). The layout is the only record; Reapply puts the additions back after a restart.</summary>
+        /// <summary>A prop this tool added (this server run).</summary>
         internal static bool IsAdded(WorldObject wo)
         {
             if (wo == null) return false;
             lock (s_Lock) return s_Added.ContainsKey(wo.Guid.Full);
         }
 
-        /// <summary>The layer key of a live object: its row (a placed object's own guid, or a generator's linked row it was spawned
-        /// from), or an object this tool added. Null for a generator's random pick or something loose in the world.</summary>
+        /// <summary>The layer key of a live object: its row, or an object this tool added.</summary>
         static string KeyOf(WorldObject wo, out bool placed)
         {
             uint g = wo.Guid.Full;
@@ -850,12 +806,10 @@ namespace RevivalGuard
         {
             pos.LandblockId = new LandblockId(pos.GetCell());
             if (wo.PhysicsObj == null) { reply($"{wo.Name} has no body in the world."); return false; }
-            // A decorator puts a thing where it is told: straight into the cell, no walking transition. SetPosition's transition
-            // refused a painting flush on a wall or an NPC beside a table ("Collided", "NoValidPosition") while the client showed
-            // it moved (F7 261122-0027, 0030).
+            // A decorator puts a thing where it is told: straight into the cell, no walking transition.
             var phys = wo.PhysicsObj;
             var target = pos.PhysPosition();
-            // indoors the origin sits ON the floor, the room's boundary: ask for the room a hand above it (decor-world)
+            // Indoors the origin sits on the floor, the room's boundary: ask for the room a hand above it (decor-world)
             var cell = phys.AdjustPosition(target, pos.Indoors ? new System.Numerics.Vector3(0f, 0f, 0.1f) : System.Numerics.Vector3.Zero, false, true);
             var r = phys.ForceIntoCell(cell, target);
             if (r != ACE.Server.Physics.Common.SetPositionError.OK) { reply($"{wo.Name} can't go there ({r})."); return false; }
@@ -867,19 +821,14 @@ namespace RevivalGuard
             if (NoFall(wo))
             {
                 wo.EnqueueBroadcastPhysicsState();
-                // and the whole object again: a client that had it from before a restart's layer was put back (logged in right
-                // there, the block loading under it) kept drawing it fallen on the floor after the SetState alone (box test 11-26)
+                // and the whole object again
                 wo.EnqueueBroadcast(new GameMessageUpdateObject(wo));
             }
             wo.SendUpdatePosition(true);
             return true;
         }
 
-        /// <summary>A decorated thing stays where it was put. A retail lamp or painting has Gravity (PhysicsState 0x400), and every
-        /// client, ours (ServerLink.GravitySettle) and retail's, lets such a thing fall to the first floor it can collide with:
-        /// a lamp on a table without physics landed on the ground (owner F7 261126-0025) and a painting hung on a Staff Base wall
-        /// fell to the floor (261126-0026), though the server and the layer kept the height. True = it had Gravity (a placed
-        /// object then needs its physics state sent again).</summary>
+        /// <summary>A decorated thing stays where it was put.</summary>
         internal static bool NoFall(WorldObject wo)
         {
             if (wo == null || wo is Creature || wo.GravityStatus == false) return false;
@@ -942,8 +891,7 @@ namespace RevivalGuard
 
         static bool ValidId(string id) => id.Length > 0 && id.Length <= 40 && id.All(c => (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-');
 
-        /// <summary>Every area on this shard. holtburg.json from before areas loads untouched (its edits as they were; "blocks",
-        /// "name" and "home" are added beside them). The drudge range is made once, its three target drudges locked.</summary>
+        /// <summary>Every area on this shard. holtburg.json from before areas loads untouched.</summary>
         static void Load()
         {
             if (s_Areas != null) return;
@@ -966,7 +914,6 @@ namespace RevivalGuard
                 }
                 catch (Exception e)
                 {
-                    // set aside, never overwritten: Save writes every area each step, and a fresh holtburg (below) would replace it
                     string aside = f + ".unreadable-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
                     try { File.Move(f, aside); } catch { }
                     Mod.Log.Warn($"[RevivalGuard] Decor: {f} unreadable, kept as {Path.GetFileName(aside)}: {e.Message}");
@@ -976,8 +923,6 @@ namespace RevivalGuard
                 s_Areas[FIRST_AREA] = new Area { Id = FIRST_AREA, Layer = new JsonObject { ["area"] = FIRST_AREA, ["next"] = 1, ["edits"] = new JsonObject() } };
             if (!s_Areas.ContainsKey("drudge-range") && !File.Exists(Path.Combine(Dir, "drudge-range.json")))
             {
-                // owner 2026-11-23: "decorate the drudge target practice area first". The three Pyreal Target Drudges
-                // (tools/public-shard/datafixes/20261123-3-holtburg-dummies-move.sql) start locked.
                 var locks = new JsonObject();
                 foreach (var g in new[] { "7A9B4E70", "7A9B4E71", "7A9B4E72" }) locks["s:" + g] = "Pyreal Target Drudge";
                 s_Areas["drudge-range"] = new Area
@@ -1167,8 +1112,7 @@ namespace RevivalGuard
 
         static string Num(JsonNode n) => D(n).ToString("0.#####", CultureInfo.InvariantCulture);
 
-        /// <summary>Make the world and the layer match <paramref name="want"/> for one key (null = no edit: as retail has it).
-        /// Undo, redo and Revert all come through here.</summary>
+        /// <summary>Make the world and the layer match want for one key (null = no edit: as retail has it).</summary>
         static void Reconcile(Player me, string key, JsonObject want, Area into, Action<string> reply)
         {
             var cur = Get(key);
@@ -1257,8 +1201,7 @@ namespace RevivalGuard
             ["keys"] = new JsonArray(ar.Edits.Select(kv => (JsonNode)kv.Key).ToArray()),   // the panel's publish summary sorts by area
         };
 
-        /// <summary>Every area's edits and locks together (the client draws every map-piece edit in view), the area list, the
-        /// active one's undo and redo, and the kits.</summary>
+        /// <summary>Every area's edits and locks together, the area list, the active one's undo and redo, and the kits.</summary>
         static void SendState(Session s, Player me)
         {
             Reapply(me);
@@ -1291,8 +1234,7 @@ namespace RevivalGuard
 
         // ---- self-restoring: each landblock gets its edits when it loads, without anyone pressing Decorate ----
 
-        /// <summary>DecorBlockLoad, after a landblock's own objects are in: its moves, removals and sizes, and the props added
-        /// in it (each exactly once: an added prop is never saved, and one still in the world is left alone).</summary>
+        /// <summary>DecorBlockLoad, after a landblock's own objects are in: its moves, removals and sizes, and the props added in it.</summary>
         internal static void ApplyBlock(Landblock lb)
         {
             if (!On) return;
@@ -1330,7 +1272,7 @@ namespace RevivalGuard
                 {
                     var wo = Find(me, Hex((string)e["guid"]!));
                     if (wo == null) return false;
-                    if (!e.ContainsKey("after")) return false;   // never a removal by omission
+                    if (!e.ContainsKey("after")) return false;
                     if (e["spawn0"] != null)
                     {
                         var child = SpawnOf(wo);
@@ -1368,11 +1310,7 @@ namespace RevivalGuard
             return false;
         }
 
-        // ---- one-click publish (owner 2026-11-24: "Publish this area", his in-game "Yes, publish" is his yes) ----
-        // The mod only WRITES A REQUEST: decor/publish/requests/<area>.json, the approved layer as it was at the click plus the
-        // approval record (who, when, which area). tools/decor/publish_job.py on the GPU box (run by publish-watch.sh) picks it
-        // up, builds the datafix and undo with decor.py into its outbox, and writes decor/publish/status/<area>.json back,
-        // which the panel shows. Nothing here runs a program or reaches live; the coordinator forwards approved packages.
+        // one-click publish
 
         static string PubDir => Path.Combine(Dir, "publish");
 
@@ -1406,10 +1344,7 @@ namespace RevivalGuard
             Directory.CreateDirectory(Path.Combine(PubDir, "status"));
             if (LiveMode)
             {
-                // LIVE: the layer under the mod already is the lasting world data (every landblock load re-applies it), so no
-                // datafix is waited for, and none may be applied (it would add every prop a second time). The request is the
-                // approval record; tools/decor/pull-live.sh copies it (read only) to the box, which builds the package for git
-                // and the client release. A dated copy of the approved layer stays here as the restore point.
+                // LIVE: the layer under the mod already is the lasting world data, so no datafix is waited for, and none may be applied.
                 bool client = N(4) > 0 || ar.Layer["world"] != null;
                 req["target"] = "live-layer";
                 Directory.CreateDirectory(Path.Combine(PubDir, "approved"));
@@ -1453,9 +1388,7 @@ namespace RevivalGuard
 
         static string KitDir => Path.Combine(Dir, "kits");
 
-        /// <summary>kitsave &lt;Name_With_Underscores&gt; w|m &lt;wcid|model&gt; &lt;x y z qw qx qy qz size&gt; [name words_ [look]];...
-        /// Any weenie and any model goes in (Turbine's own things too, F7 261124-0004): a w item is placed later through add,
-        /// which refuses NPCs, portals, doors and generators (WhyNoCopy) there as well. look: a w item's setup, for the ghost.</summary>
+        /// <summary>kitsave &lt;Name_With_Underscores&gt</summary>
         static void KitSave(string[] a, Action<string> reply)
         {
             string name = string.Join(" ", a[1].Split('_', StringSplitOptions.RemoveEmptyEntries)).Trim();
@@ -1498,7 +1431,6 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Props added by the decorator are never written to the shard database (see Decor.IsAdded).</summary>
     [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.IsDynamicThatShouldPersistToShard))]
     static class DecorNoSave
     {
@@ -1510,8 +1442,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>A linked row the layout removed stays gone, one it moved respawns there, at its size. Off unless this shard has
-    /// decor/enabled, and only for link profiles: anything else passes straight through.</summary>
+    /// <summary>A linked row the layout removed stays gone, one it moved respawns there, at its size.</summary>
     [HarmonyPatch(typeof(GeneratorProfile), nameof(GeneratorProfile.Spawn))]
     static class DecorSpawn
     {
@@ -1532,8 +1463,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Self-restoring layouts (decor v2): when a landblock has made its own objects, its decor edits go on (queued
-    /// behind CreateWorldObjects' own action, so the objects are there). Off unless this shard has decor/enabled.</summary>
+    /// <summary>Self-restoring layouts: when a landblock has made its own objects, its decor edits go on.</summary>
     [HarmonyPatch]
     static class DecorBlockLoad
     {

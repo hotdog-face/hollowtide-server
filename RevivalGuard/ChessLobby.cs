@@ -23,36 +23,7 @@ using PLandblock = ACE.Server.Physics.Common.Landblock;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE CHESS LOBBY (owner 2026-11-25: "i also want to make it easier for players to play chess in the game. the top left
-    /// chess icon currently does nothing"). Our client's Game Center icon opens a lobby when no game runs (ChessHud.Lobby.cs);
-    /// this is its server half, all behind rg_chess_lobby (default OFF: /chess says it is not open, nothing is spawned or
-    /// recorded).
-    ///
-    ///   Play the computer: "/chess ai easy|normal" sets a TEMPORARY chessboard (weenie 14341, as the 12 placed in the world)
-    ///   beside the player on open flat ground (ChessLobbyRule.Check) and starts ACE's own match with its AI as Black. Easy
-    ///   is ACE's AI (one move deep); Normal is ours (NormalAi: also looks at the reply), because ACE's minimax
-    ///   (AsyncCalculateAiComplexMove) is broken and never called by ACE (its min side takes the max, and it can pick an
-    ///   illegal move).
-    ///   Challenge: "/chess challenge &lt;name|0xguid&gt;": in person only, both within NEAR_M (owner: like the allegiance
-    ///   swear); far, the challenger is told where the other is. The other gets ACE's Yes/No; on Yes a temporary board
-    ///   appears between them and both are seated (challenger White).
-    ///   Boards: the 12 placed boards, named by the nearest town, with map coordinates for the client's pins.
-    ///   Record, titles, ladder: every finished game with a player (any board) counts unless ChessLobbyRule.Counts says
-    ///   not (one account, one connection, under 10 moves, a pair's 4th win in a day); games with the computer are kept
-    ///   apart. Retail titles nothing else grants at 1/10/25/50 wins and a first win over Normal. Our ladder rating is
-    ///   our own (players only); ACE's ChessRank is left alone except that a lobby game with the computer no longer moves it
-    ///   (one click anywhere would make it farmable).
-    ///
-    /// TEMPORARY BOARDS NEVER LIE AROUND: never saved to the shard (PersistPatch), never rot-timed by ACE (TimeToRot -1, so
-    /// it is ours to remove), put away PUT_AWAY_S after the game ends, after IDLE_MIN with no move, after MAX_LIFE_MIN in
-    /// any case, and when the landblock unloads they go with it. One per player, MAX_BOARDS on the shard. A board is not
-    /// loot (stuck, ACE's Game) and the pieces are ACE's own game pieces. A piece that cannot walk to its square (a tree
-    /// root, a slope) used to hang a match forever; for temporary boards a 30 s watchdog ends the motion and plays on.
-    ///
-    /// Client: "/chess lobby" answers on the mod channel ("chess", JSON). State: Chess/records.json beside the dll.
-    /// Staff: "/chess temp" lists the temporary boards, "/chess clear" puts them all away.
-    /// </summary>
+    /// <summary>The chess lobby.</summary>
     public static partial class ChessLobby
     {
         internal const string P_ON = "rg_chess_lobby";
@@ -80,6 +51,8 @@ namespace RevivalGuard
         sealed class Challenge { public uint From, To; public string FromName, ToName; public DateTime At; public int Clock; }
         sealed class PlacedBoard { public string Name, Where; public float Ns, Ew; public uint Lb; public float X, Y; }
 
+        sealed class OpenReq { public uint From; public string Name; public int Level, Clock; public DateTime At; }
+        static readonly Dictionary<uint, OpenReq> s_Open = new Dictionary<uint, OpenReq>();   // an open "looking for a match", by poster
         static readonly object s_Lock = new object();
         static readonly Dictionary<uint, Temp> s_Temps = new Dictionary<uint, Temp>();
         static readonly Dictionary<uint, Challenge> s_Challenges = new Dictionary<uint, Challenge>();   // by challenger
@@ -103,7 +76,7 @@ namespace RevivalGuard
             Task.Run(LoadPlaced);
             CommandManager.TryAddCommand(Command, "chess", AccessLevel.Player, CommandHandlerFlag.RequiresWorld,
                 "Chess: play the computer, challenge a player near you, find a board, your record.",
-                "[lobby | ai easy|normal | challenge <name> | cancel | boards | record]");
+                "[lobby | ai easy|normal | challenge <name> | open [c10] | accept <name> | cancel | boards | record]");
             Mod.Log.Info($"[RevivalGuard] ChessLobby: {(On ? "ON" : "off")} ({P_ON}), {s_Records.Count} records; /chess");
         }
 
@@ -225,6 +198,8 @@ namespace RevivalGuard
                     case "ai": case "computer": PlayAi(me, rest); Send(me); break;
                     case "challenge": Challenge_(me, rest); Send(me); break;
                     case "cancel": Cancel(me); Send(me); break;
+                    case "open": PostOpen(me, rest); Send(me); break;
+                    case "accept": AcceptOpen(me, rest); Send(me); break;
                     case "rematch": Rematch(me); Send(me); break;
                     case "watch": WatchCmd(me, rest); break;
                     case "unwatch": Unwatch(me, true); break;
@@ -321,9 +296,43 @@ namespace RevivalGuard
 
         static void Cancel(Player me)
         {
-            Challenge c;
-            lock (s_Lock) { s_Challenges.TryGetValue(me.Guid.Full, out c); s_Challenges.Remove(me.Guid.Full); }
-            Say(me, c == null ? "You have no challenge waiting." : $"Challenge to {c.ToName} withdrawn.");
+            Challenge c; bool open;
+            lock (s_Lock) { s_Challenges.TryGetValue(me.Guid.Full, out c); s_Challenges.Remove(me.Guid.Full); open = s_Open.Remove(me.Guid.Full); }
+            Say(me, c != null ? $"Challenge to {c.ToName} withdrawn." : open ? "Your request is withdrawn." : "You have no challenge waiting.");
+        }
+
+        static bool Fresh(OpenReq o) => (DateTime.UtcNow - o.At).TotalSeconds < R.OPEN_S;
+
+        /// <summary>"/chess open [c10]": an open request any online player can accept (one per player; a new one replaces it).</summary>
+        static void PostOpen(Player me, string arg)
+        {
+            if (!On) { Say(me, R.NOT_OPEN); return; }
+            if (InMatch(me) || HasTemp(me.Guid.Full)) { Say(me, R.YOU_BUSY); return; }
+            int clock = R.ParseClock((arg ?? "").Trim()); if (clock < 0) clock = 0;
+            lock (s_Lock) s_Open[me.Guid.Full] = new OpenReq { From = me.Guid.Full, Name = me.Name, Level = me.Level ?? 1, Clock = clock, At = DateTime.UtcNow };
+            Say(me, R.OpenPosted(clock));
+        }
+
+        /// <summary>"/chess accept 0x..": a Yes to the poster's request, through the same path as a challenge's Yes (Answered).</summary>
+        static void AcceptOpen(Player me, string arg)
+        {
+            var them = FindTarget(me, arg);
+            OpenReq o = null;
+            if (them != null) lock (s_Lock) s_Open.TryGetValue(them.Guid.Full, out o);
+            if (them == null || o == null || !Fresh(o)) { Say(me, R.OPEN_GONE); return; }
+            if (them == me) { Say(me, "That is your own request."); return; }
+            if (InMatch(me) || HasTemp(me.Guid.Full)) { Say(me, R.YOU_BUSY); return; }
+            if (InMatch(them) || HasTemp(them.Guid.Full)) { lock (s_Lock) s_Open.Remove(them.Guid.Full); Say(me, R.Busy(them.Name)); return; }
+            lock (s_Lock)
+                if (s_Challenges.TryGetValue(them.Guid.Full, out var pend) && (DateTime.UtcNow - pend.At).TotalSeconds < R.CHALLENGE_S) { Say(me, R.Busy(them.Name)); return; }
+            if (!Near(me, them)) { Say(me, R.FarLine(them.Name, DeathLog.WhereOf(them))); return; }   // the request stays up
+            lock (s_Lock)
+            {
+                s_Open.Remove(them.Guid.Full);
+                s_Challenges[them.Guid.Full] = new Challenge { From = them.Guid.Full, To = me.Guid.Full, FromName = them.Name, ToName = me.Name, At = DateTime.UtcNow, Clock = o.Clock };
+            }
+            Say(them, R.OpenAccepted(me.Name));
+            Answered(me, them.Guid.Full, true, false);
         }
 
         /// <summary>The challenged player's Yes/No (ChessConfirmation).</summary>
@@ -363,7 +372,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ the board
 
-        /// <summary>A spot near <paramref name="basePos"/> + (dx, dy) on its landblock where a board may stand, or null.</summary>
+        /// <summary>A spot near basePos + (dx, dy) on its landblock where a board may stand, or null.</summary>
         static ACE.Entity.Position FindSpot(Player p, ACE.Entity.Position basePos, float dx, float dy, out R.Spot why)
         {
             why = R.Spot.Indoors;
@@ -424,8 +433,7 @@ namespace RevivalGuard
             at.PositionZ += 0.45f;
             wo.Location = at;
             wo.TimeToRot = -1;
-            // the board's setup has no effect table, so its exit (ChessLobbyGame.FadeAndDestroy) would play nothing: the
-            // drudge pieces' own table (0x3400001A, ace_world drudgepawn), whose Destroy fades the object out
+            // the board's setup has no effect table, so its exit would play nothing: the drudge pieces' own table, whose Destroy fades the object out
             wo.SetProperty(ACE.Entity.Enum.Properties.PropertyDataId.PhysicsEffectTable, BOARD_FX_TABLE);
             var t = new Temp
             {
@@ -448,7 +456,7 @@ namespace RevivalGuard
             return t;
         }
 
-        /// <summary>End the match (if it still runs) and put the board away soon. Safe from any thread: runs on the board.</summary>
+        /// <summary>End the match (if it still runs) and put the board away soon.</summary>
         static void EndAndPutAway(Temp t, int winner, string why)
         {
             if (t == null) return;
@@ -461,7 +469,6 @@ namespace RevivalGuard
                     var m = t.Board.ChessMatch;
                     if (m != null && (m.State == ChessState.InProgress || m.State == ChessState.WaitingForPlayers))
                     {
-                        // a game that never started has no winner
                         m.Finish(m.State == ChessState.WaitingForPlayers ? Chess.ChessWinnerEndGame : winner);
                     }
                 }
@@ -482,7 +489,6 @@ namespace RevivalGuard
                 {
                     var m = t.Board.ChessMatch;
                     if (m != null && m.State != ChessState.Finished) m.Finish(Chess.ChessWinnerEndGame);
-                    // F7 261125-0057: the board goes with an effect everyone near sees, then is removed
                     if (!t.Board.IsDestroyed) FadeAndDestroy(t.Board);
                     Mod.Log.Info($"[RevivalGuard] ChessLobby: temporary board 0x{t.Guid:X8} put away");
                 }
@@ -505,6 +511,7 @@ namespace RevivalGuard
                 list = s_Temps.Values.ToList();
                 foreach (var k in s_Challenges.Where(kv => (now - kv.Value.At).TotalSeconds > R.CHALLENGE_S + 30).Select(kv => kv.Key).ToList())
                     s_Challenges.Remove(k);
+                foreach (var k in s_Open.Where(kv => !Fresh(kv.Value)).Select(kv => kv.Key).ToList()) s_Open.Remove(k);
             }
             foreach (var t in list)
             {
@@ -548,8 +555,6 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A piece that never reached its square (ACE's MoveTo failed, so PieceReady never came): stop its walk,
-        /// remove a captured piece still standing, and play on as PieceReady would have.</summary>
         static void Unstick(Temp t)
         {
             var chain = new ActionChain();
@@ -583,14 +588,11 @@ namespace RevivalGuard
         }
 
         internal static bool IsTemp(uint guid) { lock (s_Lock) return s_Temps.ContainsKey(guid) || s_PutAway.Contains(guid); }
-        /// <summary>Boards put away: still never saved while their exit effect plays (ChessLobbyGame.FadeAndDestroy).</summary>
         static readonly HashSet<uint> s_PutAway = new HashSet<uint>();
 
         // ------------------------------------------------------------------ Normal: our AI
 
-        /// <summary>Normal: every legal move, each answered by the opponent's best legal reply (ACE's own board score; a reply
-        /// that mates scores worst of all), the move whose worst reply leaves us best; a move that mates scores best. Black or
-        /// White alike. About 900 positions a move, so it stays on the board's own tick.</summary>
+        /// <summary>Normal: every legal move, each answered by the opponent's best legal reply, the move whose worst reply leaves us best</summary>
         internal static bool NormalMove(ChessMatch m)
         {
             var L = m.Logic;
@@ -638,7 +640,7 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>Whether <paramref name="c"/> has a move that leaves its king safe (only asked when it is in check).</summary>
+        /// <summary>Whether c has a move that leaves its king safe (only asked when it is in check).</summary>
         static bool HasLegal(ChessLogic L, ChessColor c)
         {
             var l = new List<ChessMove>();
@@ -808,7 +810,7 @@ namespace RevivalGuard
         {
             if (!On) return "{\"on\":0}";
             var now = DateTime.UtcNow;
-            object meRec; List<object> ladder; List<object> boards; string msg; object pending = null;
+            object meRec; List<object> ladder; List<object> boards; string msg; object pending = null; object mine = null; List<OpenReq> openAll;
             lock (s_Lock)
             {
                 s_Records.TryGetValue(me.Guid.Full, out var r);
@@ -826,6 +828,15 @@ namespace RevivalGuard
                 s_Msg.TryGetValue(me.Guid.Full, out msg);
                 if (s_Challenges.TryGetValue(me.Guid.Full, out var c) && (now - c.At).TotalSeconds < R.CHALLENGE_S)
                     pending = new { n = c.ToName, left = (int)(R.CHALLENGE_S - (now - c.At).TotalSeconds) };
+                if (s_Open.TryGetValue(me.Guid.Full, out var mo) && Fresh(mo)) mine = new { c = mo.Clock, left = (int)(R.OPEN_S - (now - mo.At).TotalSeconds) };
+                openAll = s_Open.Values.Where(x => x.From != me.Guid.Full && Fresh(x)).OrderBy(x => x.At).ToList();
+            }
+            var open = new List<object>();
+            foreach (var x in openAll)
+            {
+                var op = PlayerManager.GetOnlinePlayer(x.From);
+                if (op == null || op.CloakStatus == CloakStatus.On || InMatch(op) || HasTemp(x.From)) continue;
+                open.Add(new { n = x.Name, g = $"0x{x.From:X8}", l = x.Level, c = x.Clock, near = Near(me, op) ? 1 : 0, left = (int)(R.OPEN_S - (now - x.At).TotalSeconds) });
             }
             var near = new List<object>();
             foreach (var p in PlayerManager.GetAllOnline())
@@ -849,14 +860,13 @@ namespace RevivalGuard
             var o = new
             {
                 on = 1, busy = InMatch(me) || HasTemp(me.Guid.Full) ? 1 : 0, near_m = (int)R.NEAR_M, msg = msg ?? "",
-                pending, me = meRec, near = near.Take(20).ToList(), friends, boards, ladder, games = GamesNear(me),
+                pending, mine, open = open.Take(10).ToList(), me = meRec, near = near.Take(20).ToList(), friends, boards, ladder, games = GamesNear(me),
             };
             return JsonSerializer.Serialize(o);
         }
 
         // ------------------------------------------------------------------ hooks
 
-        /// <summary>A temporary board is never saved to the shard (a dynamic Game would be, on a landblock save).</summary>
         [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.IsDynamicThatShouldPersistToShard))]
         static class PersistPatch
         {

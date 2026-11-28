@@ -8,19 +8,9 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// DARKTIDE SEASON 1 ON THE WORLD LOOP (rules and words: PkSeasonRules.cs). Nothing happens until an admin plans a
-    /// season (the admin panel's Events tab, "s1 plan"): with no PkLedger/schedule.json this is inert. A planned season
-    /// opens by itself at its PK Night (the ladder so far is archived as the Preseason, no titles), announces a day and
-    /// an hour before, posts the season's top three after every recorded PK Night round, warns a day before the end,
-    /// and ends by itself after the last PK Night with the titles (EndSeason). Needs pk_renown_enabled (live: on).
-    ///
-    ///     @pkseason                    (admin) the plan and where it stands
+    /// <summary> darktide season 1 on the world loop (rules and words: PkSeasonRules.cs).
     ///     @pkseason plan [yyyy-mm-dd] [nights]  plan Darktide Season 1 (default: Sunday 2026-12-06, 5 PK Nights to Jan 31)
-    ///     @pkseason cancel             drop a plan that has not opened yet
-    ///     @pkseason start              open the planned season now
-    ///     @pkseason end                end the running season now, with its titles
-    /// </summary>
+    /// @pkseason cancel drop a plan that has not opened yet
     internal static partial class PkRenown
     {
         static PkSeasonRules.Schedule s_Plan;

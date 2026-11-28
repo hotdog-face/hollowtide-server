@@ -5,32 +5,11 @@ using DatEnvCell = ACE.DatLoader.FileTypes.EnvCell;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// CELL FURNITURE TAKEN OUT OF THE WORLD. An EnvCell's static objects (tables, benches, shelves)
-    /// come from client_cell_1.dat, not from the database: ACE's physics EnvCell copies them from the
-    /// DAT in its constructor and `init_static_objects` builds a PhysicsObj for each, so no SQL and
-    /// no admin command can remove one. Hiding one only in the client left an invisible wall, because
-    /// the server still collided with it.
-    ///
-    /// So the constructor's lists are filtered here, before `init_static_objects` ever sees them, for
-    /// exactly the (cell, index in the DAT list, model id) entries below; all three must match, so a
-    /// DAT whose list differs removes nothing. THE SAME LIST is in the client's
-    /// Assets/StreamingAssets/hidden-cell-statics.json (AcHiddenCellStatics), which skips drawing
-    /// and colliding them; change both together.
-    ///
-    /// Patched on the declaring type (ACE.Server.Physics.Common.EnvCell's own constructor from the
-    /// DAT EnvCell, the only one DBObj.GetEnvCell calls). Cells already built stay as they were
-    /// until the shard restarts, which a deploy does.
-    ///
-    /// First use: Hotel Swank's Jeeves room, owner 2026-09-27 ("yes remove the swank furniture").
-    /// </summary>
+    /// <summary>Cell furniture taken out of the world.</summary>
     [HarmonyPatch(typeof(PhysEnvCell), MethodType.Constructor, new[] { typeof(DatEnvCell) })]
     public static class HiddenCellStatics
     {
-        // (cell, index, model). Hotel Swank 0x018A0249: the three north-wall benches, the west table,
-        // the bookshelf, and the eight display weapons lying on that table. Kept: the lifestone-style
-        // crystal pillar (13), the rugs (14, 15), the light (16), the numbered plaques (17-25) and the
-        // crystal on its pedestal (26).
+        // (cell, index, model).
         static readonly (uint cell, int index, uint model)[] s_Hidden =
         {
             (0x018A0249, 0, 0x020002FB), (0x018A0249, 1, 0x020002FB), (0x018A0249, 2, 0x020002FB),
@@ -38,8 +17,7 @@ namespace RevivalGuard
             (0x018A0249, 5, 0x02000FC8), (0x018A0249, 6, 0x02000FC0), (0x018A0249, 7, 0x02000FC9),
             (0x018A0249, 8, 0x02000FCA), (0x018A0249, 9, 0x02000FCD), (0x018A0249, 10, 0x02000FCB),
             (0x018A0249, 11, 0x02000FC4), (0x018A0249, 12, 0x02000FCC),
-            // The Witch Cave 0x0069: retail's placeholder sky dome (setup 0x020015DB, an effect with no mesh or
-            // collision), listed so the two lists stay in step (owner wants black behind the cave, 2026-09-29).
+            // The Witch Cave 0x0069: retail's placeholder sky dome, listed so the two lists stay in step.
             (0x00690100, 0, 0x020015DB),
             (0x00690101, 1, 0x020015DB),
             (0x00690102, 0, 0x020015DB),
@@ -61,10 +39,9 @@ namespace RevivalGuard
             (0x00690118, 0, 0x020015DB),
             (0x00690119, 2, 0x020015DB),
             (0x0069011A, 0, 0x020015DB),
-            // The Marketplace 0x016C01C2: the east wall's three couches, so the Broker's stall stands against the wall
-            // (owner ticket 261101-0015, 2026-11-01). Kept: the room's light (2) and the piece over the north door (3).
+            // The Marketplace 0x016C01C2: the east wall's three couches, so the Broker's stall stands against the wall.
             (0x016C01C2, 0, 0x02000122), (0x016C01C2, 1, 0x02000122), (0x016C01C2, 4, 0x02000122),
-            // and 0x016C01C3, open to it: the same wall's other two couches (owner 2026-11-01, the stall centred at y -35)
+            // and 0x016C01C3, open to it: the same wall's other two couches
             (0x016C01C3, 0, 0x02000122), (0x016C01C3, 1, 0x02000122),
         };
 

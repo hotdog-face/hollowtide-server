@@ -5,12 +5,7 @@ using ACE.Server.Network;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The running festivals' keys for the client, on mod channel "festivals" ("lightbringer,frostfell"; empty when
-    /// none). Sent after the hello and to everyone when the set changes (SeasonalCalendar's minute tick), so a GM's
-    /// @festival on/off reaches the client too; its own calendar cannot see that. The client's first use: the
-    /// Lightbringer's red water (AcBloodWater, docs/findings/lightbringer-red-water.md).
-    /// </summary>
+    /// <summary>The running festivals' keys for the client, on mod channel "festivals" ("lightbringer,frostfell"; empty when none).</summary>
     static class FestivalChannel
     {
         const string CHANNEL = "festivals";

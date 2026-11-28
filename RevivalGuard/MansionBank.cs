@@ -8,26 +8,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE ALLEGIANCE BANK (owner, 2026-09-27; docs/MANSIONS-AND-PK.md). Ours.
-    ///
-    /// One storage chest of a mansion, chosen by its owner (the monarch): open it, type
-    /// /mansion bank on. From then on:
-    ///   - any member of the owner's allegiance may OPEN it and put things in, without the house's
-    ///     storage permission (House.HasPermission is widened for that one chest only);
-    ///   - only the owner's account and officers of the chosen level (/mansion bank rank 1-3, default
-    ///     1 = Speaker and up) may take anything OUT. Every way an item leaves an open container --
-    ///     moving it to a pack, wielding it, splitting or merging a stack -- first finds it through
-    ///     Player.FindObject with LastUsedContainer in the search, so the refusal is made there: a
-    ///     member who is not allowed simply cannot pick it up. Appraisal searches Everywhere and is
-    ///     left alone, so members can still see what the bank holds;
-    ///   - every opening is diffed against what the chest held when it opened, and what left or
-    ///     arrived is written to the bank's log (/mansion bank log, kept in mansions.json).
-    ///     Withdrawals are also said to every online member as an Allegiance line.
-    /// The contents are ACE's own house storage, saved by ACE on every add and remove.
-    /// The designation dies with the owner's ownership: a new owner of the mansion does not inherit
-    /// a bank, because every check compares the chest's record with the house's current owner.
-    /// </summary>
+    /// <summary>The allegiance bank.</summary>
     internal static class MansionBank
     {
         sealed class Snap { public uint Opener; public string OpenerName; public Dictionary<uint, (string Name, int Count)> Items; }
@@ -35,8 +16,7 @@ namespace RevivalGuard
         [ThreadStatic] static Storage t_Checking;
         static readonly Dictionary<uint, double> s_LastRefusal = new Dictionary<uint, double>();
 
-        /// <summary>The live bank record for this chest, or null when it is not a bank (or its
-        /// mansion changed hands since it was made one).</summary>
+        /// <summary>The live bank record for this chest, or null when it is not a bank.</summary>
         internal static BankRec BankFor(Storage s)
         {
             if (s == null) return null;
@@ -140,7 +120,7 @@ namespace RevivalGuard
                 {
                     var rec = BankFor(s);
                     if (rec == null) return;
-                    Settle(s, rec);                   // a close that never reached FinishClose
+                    Settle(s, rec);
                     TakeSnapshot(s, player);
                 }
                 catch (Exception e) { Mod.Log.Error($"[RevivalGuard] MansionBank open: {e}"); }

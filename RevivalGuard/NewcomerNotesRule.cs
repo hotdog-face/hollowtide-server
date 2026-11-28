@@ -4,24 +4,12 @@ using System.Globalization;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of NewcomerNotes (no ACE types; tools/nettest compiles it by path, NewcomerNotesCase): who gets the
-    /// first-gank note and the swap-coin notice, and every line a player reads. Ours, not retail.
-    ///
-    /// FIRST GANK (owner 2026-11-21, move 3 of docs/findings/pk-server-plan-2026-11-21.md): a character under level 30
-    /// killed by another player for the first time gets one note, after it is back at its lifestone: where the corpse is
-    /// and how long it stays, its vitae, Azimar's free blessing, the allegiances recruiting, the next PK Night and whether
-    /// the killer is Wanted. Every fact is read from the server at the moment (corpse timer, vitae, settings); a part whose
-    /// feature is off says nothing. SWAP COINS (owner 2026-11-21: "we need to tell new players about the free imbue swap
-    /// coins they get in arwic"): one line at level SWAP_LEVEL to a character that has not collected them.
-    /// Player text: plain, short, no em dashes (docs/outreach/VOICE.md); the owner approves it.
-    /// </summary>
+    /// <summary>The pure part of NewcomerNotes: who gets the first-gank note and the swap-coin notice, and every line a player reads.</summary>
     public static class NewcomerNotesRule
     {
         /// <summary>The note goes to victims below this level (the plan's "under 30").</summary>
         public const int GANK_UNDER = 30;
-        /// <summary>The swap-coin notice comes at this level: the tusker band where a character keeps one weapon for a
-        /// while (Leveling Guide "30 to 75"), so its five once-only gems are not spent on a weapon it soon drops.</summary>
+        /// <summary>The swap-coin notice comes at this level</summary>
         public const int SWAP_LEVEL = 30;
         /// <summary>Quest stamps (ACE character quest registry): once per character, kept across logins and restarts.</summary>
         public const string GANK_FLAG = "RgFirstGankNote", SWAP_FLAG = "RgSwapCoinNotice";
@@ -35,9 +23,7 @@ namespace RevivalGuard
         public static bool SwapNoticeDue(int before, int now, bool alreadyNoticed, bool hasCoins, bool botOrStaff) =>
             before < SWAP_LEVEL && now >= SWAP_LEVEL && !alreadyNoticed && !hasCoins && !botOrStaff;
 
-        /// <summary>LUMINANCE AT 200 (owner 2026-11-27, balance review: all four players past 200 had none, every luminance
-        /// award lost): one notice at level LUM_LEVEL, or at the first login at or past it, to a character whose luminance
-        /// is not open yet (Nalicana's flag, or a luminance maximum).</summary>
+        /// <summary>Luminance at 200: one notice at level LUM_LEVEL, or at the first login at or past it</summary>
         public const int LUM_LEVEL = 200;
         public const string LUM_FLAG = "RgLuminanceNotice";
         /// <summary>Nalicana stamps it when she takes Battle Lord Gregor's Mnemosyne (quest-guide oracleportalentry).</summary>
@@ -51,8 +37,7 @@ namespace RevivalGuard
             "You can earn luminance now, but it starts at Nalicana's Test: kill Battle Lord Gregor in the Gurog Ice Cave (84.9N 7.1W) "
           + "and give his Mnemosyne to Nalicana in Asheron's Castle. Until then every luminance award is lost. The Journal's Where next has it.";
 
-        /// <summary>What the server knew at the moment the note is written. Null / negative = unknown or off: that line
-        /// is left out rather than guessed.</summary>
+        /// <summary>What the server knew at the moment the note is written.</summary>
         public sealed class Facts
         {
             public string Killer;
@@ -68,7 +53,7 @@ namespace RevivalGuard
             public DateTime PkNightLocal;       // the same moment in Pacific time
             public bool PkNightRunningNow;
             public bool KillerWanted;
-            public bool FestivalSeason;         // Oct 1 to Nov 1: the Pumpkin Buffer stands in Azimar's spots
+            public bool FestivalSeason;
         }
 
         /// <summary>The small notice at the top of the screen.</summary>
@@ -102,8 +87,8 @@ namespace RevivalGuard
 
             if (f.PkNightStartUtc.HasValue)
                 l.Add(f.PkNightRunningNow
-                    ? "Want a fair fight? PK Night is on right now, and runs every other Sunday at 7 PM Pacific."
-                    : $"Want a fair fight? PK Night runs every other Sunday at 7 PM Pacific. The next one is {When(f.PkNightLocal)} Pacific.");
+                    ? "Want a fair fight? PK Night is on right now, and runs every other Sunday at 2 PM Pacific."
+                    : $"Want a fair fight? PK Night runs every other Sunday at 2 PM Pacific. The next one is {When(f.PkNightLocal)} Pacific.");
 
             if (f.KillerWanted && f.Killer != null)
                 l.Add($"{f.Killer} is Wanted on the PK board: five fair kills in a row without falling. Whoever ends the streak earns extra renown.");
@@ -129,7 +114,6 @@ namespace RevivalGuard
         public static string Pct(double p) =>
             (Math.Abs(p - Math.Round(p)) < 0.05 ? Math.Round(p).ToString(CultureInfo.InvariantCulture) : p.ToString("0.#", CultureInfo.InvariantCulture)) + "%";
 
-        /// <summary>"Sunday, November 22 at 7 PM" (Pacific local time in).</summary>
         public static string When(DateTime local)
         {
             int h = local.Hour % 12 == 0 ? 12 : local.Hour % 12;

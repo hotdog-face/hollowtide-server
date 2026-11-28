@@ -3,13 +3,7 @@ using System.Text;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ChatGuard's repeat-rule key, pure C# (no ACE types) so NetTest runs it (tools/nettest/ChatRepeatCase.cs).
-    /// ChatChannel 0x0147 is [u32 channel][string16L text]. The guard used to read a string16L first, which took
-    /// the channel's low 16 bits as the length: co-vassals (0x01000000) and allegiance broadcast (0x02000000) read
-    /// "" for EVERY line, so the third line in 30 s was refused as "already said that" (report 261022-0020).
-    /// The channel is part of the key: the same line on two channels is not a repeat.
-    /// </summary>
+    /// <summary>ChatGuard's repeat-rule key, pure C# (no ACE types) so NetTest runs it (tools/nettest/ChatRepeatCase.cs).</summary>
     static class ChatRepeatKey
     {
         public const uint Talk = 0x0015, Tell = 0x005D, Emote = 0x01DF, TalkDirect = 0x0032, ChatChannel = 0x0147;
@@ -25,7 +19,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>ACE's String16L: u16 length, that many bytes. Only a comparison key, so Latin-1 is enough.</summary>
+        /// <summary>ACE's String16L: u16 length, that many bytes.</summary>
         static string String16L(BinaryReader r)
         {
             int n = r.ReadUInt16();

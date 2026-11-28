@@ -10,30 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A WORLD CHEST GIVES BACK WHAT A PLAYER LEFT IN IT, INSTEAD OF DESTROYING IT.
-    ///
-    /// Report 261025-0021 (Rock Frog, 2026-10-25 12:58 UTC, Holtburg Meeting Hall chest 0x70125000): moving gear to a
-    /// mule through a chest, the mule's Take All moved 16 of the 30 items, then "it closed out and said my bags were
-    /// full and now the chest is empty". 14 items were destroyed, among them 3 Coalesced Aetheria, Amuli Coat and
-    /// Leggings, Covenant Gauntlets (docs/findings/chest-reset-item-loss-261025-0021.md).
-    ///
-    /// ACE: `Chest.Open` arms `Reset` for `ChestResetInterval` later (120 s for every chest with no ResetInterval,
-    /// counted from the FIRST open, not the last). `Reset` closes the chest on whoever is looking and calls
-    /// `Container.ClearUnmanagedInventory`, which runs `Destroy()` on every item the chest's generator did not make,
-    /// and `Destroy` deletes the item's rows from the shard. A landblock unload (5 min with nobody there) destroys the
-    /// chest and everything in it the same way. Retail did this too; with mules on the same account it is a trap that
-    /// eats whole inventories, and item loss is the one kind of bug we never accept.
-    ///
-    /// SO: who put each item into a world chest is remembered (the put, and a split stack's new half). When the chest
-    /// resets or is destroyed, each item with a remembered owner is taken out of the chest first and handed back:
-    ///   - the owner is online in the chest's own landblock: straight into the pack, with ACE's networking;
-    ///   - otherwise (logged out to a mule, gone elsewhere, full or over burden): saved into the owner's main pack in
-    ///     the database, where ACE's login loads it (GetPossessedBiotasInParallel reads Container rows; ACE's own
-    ///     SaveBiotaToDatabase keeps the biota cache in step, so a relog does not serve a stale copy).
-    /// Items with no remembered owner (made by an emote, or put in before this mod loaded) are left to ACE, logged.
-    /// The chest's generated loot still resets as before. Storage (house chests) is never cleared by ACE and is skipped.
-    /// </summary>
+    /// <summary>A world chest gives back what a player left in it, instead of destroying it.</summary>
     public static class ChestReturnsItems
     {
         sealed class Placer { public uint Guid; public string Name; }
@@ -65,8 +42,7 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>Takes every player-placed item out of the chest and hands it back. Called before ACE clears or
-        /// destroys the chest's inventory. Never throws.</summary>
+        /// <summary>Takes every player-placed item out of the chest and hands it back.</summary>
         internal static void ReturnAll(Container container, string why)
         {
             try
@@ -123,7 +99,6 @@ namespace RevivalGuard
                     }
                     notHere = "no room or burden";
                 }
-                // The owner's main pack in the database: loaded at their next login, whatever the pack holds.
                 item.Location = null;
                 item.WielderId = null;
                 item.OwnerId = ownerGuid;
@@ -150,7 +125,7 @@ namespace RevivalGuard
 
         // ---- where items go in -----------------------------------------------------------------
 
-        /// <summary>A whole item put into a container. Private in ACE; one overload.</summary>
+        /// <summary>A whole item put into a container.</summary>
         [HarmonyPatch(typeof(Player), "DoHandleActionPutItemInContainer")]
         static class Put
         {
@@ -181,8 +156,7 @@ namespace RevivalGuard
             static void Prefix(Container __instance) => ReturnAll(__instance, "reset");
         }
 
-        /// <summary>The chest itself destroyed: landblock unload, a cleared chest fading out, a landblock reload.
-        /// Declared on WorldObject; the type test keeps it to chests.</summary>
+        /// <summary>The chest itself destroyed: landblock unload, a cleared chest fading out, a landblock reload.</summary>
         [HarmonyPatch(typeof(WorldObject), nameof(WorldObject.Destroy))]
         static class Destroyed
         {

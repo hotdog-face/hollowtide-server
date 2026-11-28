@@ -16,13 +16,7 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// @unlockwield &lt;character&gt; &lt;item name | 0x&lt;guid&gt;&gt; (owner 2026-11-20, "Staff command, next restart"):
-    /// undoes a binding recipe's lock (TinkerLock) for staff. Finds the item in the character's pack or wielded slots,
-    /// online or offline, removes AllowedWielder (and AllowedActivator when it names the same character, so a lock from
-    /// the same source goes whole), saves, and for an online player sends the change. Several matches are listed with
-    /// their guids. Developer and Admin only.
-    /// </summary>
+    /// <summary>@unlockwield &lt;character&gt; &lt;item name | 0x&lt;guid&gt;&gt;: undoes a binding recipe's lock for staff.</summary>
     public static class UnlockWield
     {
         internal static void Register()

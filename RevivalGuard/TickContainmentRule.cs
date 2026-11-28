@@ -3,21 +3,11 @@ using System.Collections.Generic;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of TickContainment (no ACE types; tools/nettest compiles it by path): what to say about one
-    /// contained tick exception, and when an object has failed often enough to be taken out of the tick.
-    ///
-    /// Per object: the first failure of each kind (site + exception type) is logged in full with its stack; later
-    /// failures of that kind give one summary line per <see cref="TickFaultLimits.RepeatEveryS"/> with how many were
-    /// held back. <see cref="TickFaultLimits.QuarantineAfter"/> failures inside <see cref="TickFaultLimits.WindowS"/>
-    /// quarantine the object (once), and that line is always said. Across all objects, the other lines are capped per
-    /// minute so a fault in a common code path (every monster at once) cannot flood the log; what the cap holds back is
-    /// counted (<see cref="TickFaultBudget.HeldBack"/>) and said on the next line it allows.
-    /// </summary>
+    /// <summary>The pure part of TickContainment</summary>
     public sealed class TickFaultLimits
     {
         public int QuarantineAfter = 5;          // failures inside the window that take an object out of the tick
-        public double WindowS = 120;             // a failure older than this no longer counts toward quarantine
+        public double WindowS = 120;
         public double RepeatEveryS = 60;         // a repeated kind of failure: one summary line per object this often
         public int LinesPerMinute = 30;          // non-quarantine lines, all objects together, per minute
     }
@@ -32,7 +22,7 @@ namespace RevivalGuard
         public bool Quarantine;       // true exactly once: this failure takes the object out of the tick
     }
 
-    /// <summary>Lines allowed per minute across every object. Not thread safe: the caller locks.</summary>
+    /// <summary>Lines allowed per minute across every object.</summary>
     public sealed class TickFaultBudget
     {
         double m_Start = double.MinValue;
@@ -48,7 +38,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>One object's tick failures. Not thread safe: the caller locks.</summary>
+    /// <summary>One object's tick failures.</summary>
     public sealed class TickFaultRecord
     {
         readonly HashSet<string> m_Seen = new HashSet<string>();

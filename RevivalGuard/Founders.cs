@@ -12,25 +12,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE FOUNDERS (owner, 2026-10-11: "one time only bragging rights that only people who were early supporters get
-    /// and they can keep for life ... 'i was there' when the game started. Im an OG"; per account; everyone who
-    /// arrived by 31 October 2026).
-    ///
-    /// Once per ACCOUNT made by the cutoff (Account.CreateTime), the first character that enters the world after this
-    /// went live is given:
-    ///   * the Founder's Shirt (901913): retail's anniversary-shirt tradition, in a gold no other item has;
-    ///   * the Founder's Banner (901914): a wall-hook banner for a house;
-    ///   * the title "Founder" (ACE CharacterTitle.HollowtideFounder, 9001), made the displayed title.
-    /// Both items are Bonded (tools/gpubox-ace/founders.sql): never lost on death. The shirt is also Attuned (never
-    /// traded, sold or dropped); the banner is not, because ACE will not hang an attuned item on a hook (report
-    /// 261021-0046). An
-    /// account made after the cutoff never qualifies, so nobody can come by them later. Hollow Company accounts are
-    /// left out. A pack too full for the gifts is told so, and the gifts wait for the next login.
-    ///
-    /// Who has been given them: Founders/granted.txt beside the mod (one account id a line), so a set is never
-    /// given twice whatever happens to the character it went to.
-    /// </summary>
     static class Founders
     {
         static readonly DateTime CUTOFF = new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc);   // made before November
@@ -101,8 +82,7 @@ namespace RevivalGuard
                     Tell(p, "You are one of Hollowtide's founders, and gifts are waiting for you: make room for two items in your main pack and log in again.");
                     return;
                 }
-                // Both made and checked (slots AND burden) before either goes in: a shirt given and a banner refused
-                // left the account unstamped, so the shirt came again at every login.
+                // Both made and checked before either goes in
                 var gifts = new List<WorldObject>();
                 foreach (var wcid in new[] { SHIRT, BANNER })
                 {

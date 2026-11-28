@@ -17,56 +17,16 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// WORLD BOSSES: the server half of Bael'Zharon (wcid 900200, owner-approved 2026-09-27;
-    /// docs/NEW-CONTENT-BAELZHARON-GOLEMS.md). The fight itself is world data
-    /// (tools/gpubox-ace/new-content-baelzharon-golems.sql) and works without this file; this adds
-    /// what the data cannot say:
-    ///
-    ///   phases once   ACE runs a WoundedTaunt emote set on EVERY hit inside its health window
-    ///                 (EmoteManager.GetEmoteSet), so the phase lines printed 3-4 times per phase in
-    ///                 the 2026-09-27 kills (and Aerbax's portal line does the same, QUESTS-BOSSES).
-    ///                 A prefix on EmoteManager.OnDamage lets each window's set run once per life.
-    ///                 With it, the phase extras: at the 47-51% set Boon of the Demon on himself
-    ///                 (retail spell 2048, Magic Defense +200, one of Bael'Zharon's own three
-    ///                 beneficial spells); at 22-26% his rage (Damage Rating +30, spells every 1.5 s).
-    ///                 Each window also plays PlayScript BaelZharonSmite (0x96) on him: the client's
-    ///                 sculpt (expansion/creatures/baelzharon) roars to it with its full CastBig clip.
-    ///   every hand    The Death emote titles the killer (Beacon of Hope, 573); a postfix on
-    ///                 Creature.OnDeath gives it to every player in his damage history.
-    ///   24 h, kept    (rg_world_boss_schedule OFF, the old rule.) Deaths are written to
-    ///                 Mods/RevivalGuard/WorldBoss/deaths.json; a postfix on the GeneratorProfile
-    ///                 constructor holds the profile until death + 24 h, and the world tick releases it
-    ///                 when that passes (the generator's own Delay is 7 days since world-boss-schedule.sql,
-    ///                 so it no longer does it alone).
-    ///   schedule      (rg_world_boss_schedule ON.) WorldBossSchedule.cs: fixed risings, warnings, a
-    ///                 timed window, the map marker and personal rewards (docs/WORLD-BOSS-SYSTEM.md).
-    ///   awake lair    His landblock is loaded once on the first world tick, so he spawns and the
-    ///                 world broadcast goes out when he is due, not when someone happens to walk in;
-    ///                 the Landblock KeepAlive (80007) in the SQL keeps it loaded after that. Since
-    ///                 2026-10-01 that is an OUTDOOR landblock (world-boss-outdoor.sql): no portal leads
-    ///                 to him, the map marker is the only exact place, and the way there is the players' to find.
-    ///   seasonal      (2026-10-21) Jack o' the Harvest, Old Bitterfrost and Mother Thistledown rise on the
-    ///                 schedule only while their festival runs (SeasonalCalendar.IsFestivalActive); never by the
-    ///                 24 h rule, and their lairs are not preloaded (docs/WORLD-BOSS-SYSTEM.md section 8).
-    ///
-    ///   @worldboss            (Player) when each boss rises next; admins see the state and verbs
-    ///   @worldboss respawn    (Admin) schedule on: a window now; off: forget the death, generator now
-    ///
-    /// Every target is declared where it is patched (Creature.OnDeath, EmoteManager.OnDamage, the
-    /// GeneratorProfile constructor, PlayerManager.Tick); a missing one is logged and skipped, never
-    /// thrown (a throw in PatchAll leaves every other guard off). Admin feedback is ours.
-    /// </summary>
+    /// <summary>World bosses: the server half of Bael'Zharon.</summary>
     static class WorldBoss
     {
-        /// <summary>One world boss. Adding a boss is one more entry: his weenie and lair generator in
-        /// SQL, and these fields (docs/WORLD-BOSS-SYSTEM.md, "Adding a boss").</summary>
+        /// <summary>One world boss.</summary>
         internal sealed class Spec
         {
             public uint Wcid; public string Name; public ushort Lair; public TimeSpan Respawn; public uint Title;
             // the schedule (WorldBossSchedule)
             public string Key;                 // short id on the wire and in schedule.json
-            public string Where;               // the region, vaguely, for chat ("the Direlands"); never a route
+            public string Where;
             public double NS, EW;              // where he stands: the map marker, the only exact place given
             public DateTime AnchorLocal;       // one rising, UTC-5 wall time; the rest follow every Interval
             public TimeSpan Interval, Lead, Window;
@@ -90,9 +50,6 @@ namespace RevivalGuard
         {
             [BAEL] = new Spec
             {
-                // Outdoors since 2026-10-01 (owner: "summon Bael in a outdoor location ... show it on the
-                // map but dont tell people the route"). Generator 900202 stands at the site
-                // (tools/gpubox-ace/world-boss-outdoor.sql); NS/EW is the marker, Where is all chat says.
                 Wcid = BAEL, Name = "Bael'Zharon", Lair = 0x347D, Respawn = TimeSpan.FromHours(24), Title = 573,
                 Key = "bael", Where = "the Direlands", NS = -1.5, EW = -60.0,   // 0x347D001D (84, 108)
                 AnchorLocal = new DateTime(2026, 9, 28, 20, 0, 0), Interval = TimeSpan.FromHours(7),
@@ -100,13 +57,9 @@ namespace RevivalGuard
                 Stir = "The sky darkens over the Direlands. Bael'Zharon, the Hopeslayer, stirs somewhere in the wilds.",
                 Escaped = "Bael'Zharon fades back into the Shadow, unbeaten.",
                 Kill = WorldBossSchedule.BAEL_KILL, Weekly = WorldBossSchedule.BAEL_WEEKLY,
-                Doll = 29917, DollChance = 0.10,   // Pack Bael'Zharon (owner 2026-10-28: world boss drops at 10%)
+                Doll = 29917, DollChance = 0.10,   // Pack Bael'Zharon
             },
-            // SEASONAL BOSSES (owner-approved 2026-10-21, seasonal improvement #4): one per festival, rising
-            // only while SeasonalCalendar has that festival on. World data: tools/gpubox-ace/gen_seasonal_world_bosses.py.
-            // Every 5 hours (5 and 24 share no factor, so the risings walk round the clock), anchored on the half
-            // hour so a rising never shares a start with Bael'Zharon's whole hours. No KeepAlive in the data: the
-            // schedule holds the lair awake only around a window (WorldBossSchedule.KeepAwake).
+            // Seasonal bosses: one per festival, rising only while SeasonalCalendar has that festival on.
             [HARVEST] = new Spec
             {
                 Wcid = HARVEST, Name = "Jack o' the Harvest", Lair = 0x47CF, Respawn = TimeSpan.FromHours(24), Title = 325,   // Pumpkin Slayer
@@ -258,8 +211,7 @@ namespace RevivalGuard
             return LandblockManager.IsLoaded(id) ? LandblockManager.GetLandblock(id, false) : null;
         }
 
-        /// <summary>His landblock and the loaded ones around it: outdoors he chases (bael-mobile.sql) and
-        /// can cross a landblock edge before MonsterAi's leash brings him home.</summary>
+        /// <summary>His landblock and the loaded ones around it</summary>
         internal static IEnumerable<Landblock> LairAndAdjacent(Spec s)
         {
             var lb = LoadedLair(s);
@@ -308,9 +260,6 @@ namespace RevivalGuard
         static readonly ConditionalWeakTable<Creature, Fighters> s_Fighters = new ConditionalWeakTable<Creature, Fighters>();
         internal const string P_SCALE_K = "rg_worldboss_scale_per_fighter", P_SCALE_CAP = "rg_worldboss_scale_cap";
 
-        /// <summary>A player (or a player's pet) damaging him for the first time this life raises his max health to
-        /// WorldBossScaling.TargetMax and his current health by the same amount (WorldBossScaling.cs has the formula).
-        /// Runs on his landblock thread, from EmoteManager.OnDamage, which ACE calls after each hit has landed.</summary>
         static void ScaleForFighter(Spec s, Creature c, Creature attacker)
         {
             var who = attacker is Player p ? p : (attacker as CombatPet)?.P_PetOwner;
@@ -337,9 +286,7 @@ namespace RevivalGuard
                     c.SetProperty(PropertyInt.DamageRating, (c.GetProperty(PropertyInt.DamageRating) ?? 0) + sp.Enrage);
                 return;
             }
-            // The phase roar: PlayScript BaelZharonSmite (0x96) on him. Not in his retail effect
-            // table (0x34000028), so the retail client plays nothing; our client's sculpt maps it to
-            // its full CastBig clip (expansion/creatures/baelzharon, scripts[]). One per window.
+            // The phase roar: PlayScript BaelZharonSmite (0x96) on him.
             c.EnqueueBroadcast(new GameMessageScript(c.Guid, PlayScript.BaelZharonSmite));
             if (windowMin > 0.4f && windowMin < 0.6f)
             {
@@ -368,8 +315,7 @@ namespace RevivalGuard
             catch (Exception e) { Mod.Log.Error($"[RevivalGuard] WorldBossSchedule: rewards for {s.Name}: {e}"); }
         }
 
-        /// <summary>The 24 h rule while the schedule is off: the generator's own Delay is 7 days now,
-        /// so once death + 24 h has passed (or no death is recorded) his profile is released here.</summary>
+        /// <summary>The 24 h rule while the schedule is off</summary>
         static double s_NextOldRule;
         internal static void OldRuleTick()
         {
@@ -390,7 +336,7 @@ namespace RevivalGuard
             var wcid = profile?.Biota?.WeenieClassId ?? 0;
             if (!Bosses.TryGetValue(wcid, out var s)) return;
             if (WorldBossSchedule.HoldNewProfile(s, profile)) return;   // the schedule owns him
-            if (!s.YearRound) { profile.NextAvailable = DateTime.UtcNow.AddDays(1); return; }   // no 24 h rule for a festival boss: schedule off, he never rises
+            if (!s.YearRound) { profile.NextAvailable = DateTime.UtcNow.AddDays(1); return; }
             var due = DueAt(s);
             if (due == null || profile.NextAvailable >= due.Value) return;
             profile.NextAvailable = due.Value;
@@ -449,8 +395,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>First world tick: register the command and load each lair once (world thread, as
-    /// LandblockReload does its loads).</summary>
+    /// <summary>First world tick: register the command and load each lair once (world thread, as LandblockReload does its loads).</summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     static class WorldBossLairs
     {

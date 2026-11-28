@@ -8,36 +8,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// PK DEATH LOOT, RETAIL'S RULES. The shard is full PvP and the owner chose retail's harsher PK
-    /// death over ACE's (2026-09-22, docs/PK-RULESET-2026-09-22.md). Turbine's April 2010 update says
-    /// rare weapons, armor and jewelry are no longer guaranteed to drop; they stay in ACE's value sort.
-    /// The remaining normal-bonded rare types are forced onto the corpse. The update does not say
-    /// clearly whether its equipment rule covers every rare or only newly rebalanced rares, so this
-    /// applies the named equipment categories to all rares. ACE's Player.CalculateDeathItems keeps the 35+ gate on
-    /// wielded gear for a PK death (measured: a level 23 victim kept its worn Mace and Buckler twice)
-    /// and has no rare step at all (the Eye of Muramm dropped only when it topped the value sort).
-    ///
-    /// ONE TRANSPILER on the method that declares the rule, with three anchors that each occur once
-    /// in the live dll (verified by reading its IL, 2026-09-22):
-    ///   1. "ldc.i4.s 35" in "canDropWielded = level >= 35" becomes WieldGate(this, corpse), which is
-    ///      35 for a normal death and 0 for a PK death, so wielded gear is eligible at any level;
-    ///   2. "new DeathItems(inventory)" takes SortInput(inventory, this, corpse), which removes only
-    ///      non-equipment rares from the value sort on a PK death;
-    ///   3. "GetSlipperyItems()" returns WithRares(list, this, corpse), which appends each normal-bonded
-    ///      non-equipment rare still in the victim's possession, worn or packed. ACE's own loop removes them,
-    ///      puts them on the corpse, lists them in the one retail-format "You've lost ..." line and in
-    ///      the [CORPSE] log line, the same way the Slippery crystals already went.
-    /// Equipment means melee, missile and caster weapons, armor, jewelry, and clothing whose ValidLocations
-    /// overlap armor or extremity slots. This follows Turbine's April 2010 "Lay of the Land" update:
-    /// https://asheron.fandom.com/wiki/Announcements_-_2010/03_-_Lay_of_the_Land . A rare is an item whose
-    /// weenie carries PropertyInt.RareId (17): 339 weenies in ace_world, every
-    /// wcid in ACE's LootGenerationFactory_Rare tier tables among them, and TryCreateRare builds the
-    /// object from that weenie. Bonded (BondedStatus.Bonded) rares, the foolproof rare salvage, stay
-    /// bonded and never drop; Destroy rares are destroyed by ACE before this step; Slippery ones are
-    /// already in the list. A non-PK death is untouched: IsPKDeath is false, every helper returns its
-    /// input. Any anchor that is missing is logged and that rule is left as ACE has it, never thrown.
-    /// </summary>
+    /// <summary>PK death loot, retail's rules.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.CalculateDeathItems))]
     static class PkDeathLoot
     {
@@ -85,7 +56,7 @@ namespace RevivalGuard
                 var c = code[i];
                 if (WieldHooked && i == gate)
                 {
-                    // level < 35  ->  level < WieldGate(this, corpse)
+                    // level < 35 -> level < WieldGate(this, corpse)
                     var first = new CodeInstruction(OpCodes.Ldarg_0);
                     c.MoveLabelsTo(first); c.MoveBlocksTo(first);
                     result.Add(first);
@@ -95,7 +66,7 @@ namespace RevivalGuard
                 }
                 if (RareHooked && i == sort)
                 {
-                    // new DeathItems(inventory)  ->  new DeathItems(SortInput(inventory, this, corpse))
+                    // new DeathItems(inventory) -> new DeathItems(SortInput(inventory, this, corpse))
                     var first = new CodeInstruction(OpCodes.Ldarg_0);
                     c.MoveLabelsTo(first); c.MoveBlocksTo(first);
                     result.Add(first);
@@ -107,7 +78,7 @@ namespace RevivalGuard
                 result.Add(c);
                 if (RareHooked && i == slip)
                 {
-                    // GetSlipperyItems()  ->  WithRares(GetSlipperyItems(), this, corpse)
+                    // GetSlipperyItems() -> WithRares(GetSlipperyItems(), this, corpse)
                     result.Add(new CodeInstruction(OpCodes.Ldarg_0));
                     result.Add(new CodeInstruction(OpCodes.Ldarg_1));
                     result.Add(new CodeInstruction(OpCodes.Call, AccessTools.Method(self, nameof(WithRares))));
@@ -154,8 +125,6 @@ namespace RevivalGuard
             try
             {
                 if (!IsPkDeath(p, c)) return slippery;
-                // ACE's Slippery list stays whole: a Slippery item always drops, and the value sort never sees bonded
-                // items, so taking Slippery rare gear off this list would make it never drop at all.
                 var list = new List<WorldObject>(slippery ?? new List<WorldObject>());
                 var seen = new HashSet<uint>(list.Select(i => i.Guid.Full));
                 var rares = new List<WorldObject>();
@@ -164,7 +133,7 @@ namespace RevivalGuard
                 foreach (var item in p.GetAllPossessions())
                 {
                     if (!IsRare(item)) continue;
-                    if ((item.Bonded ?? BondedStatus.Normal) != BondedStatus.Normal) continue;   // Bonded never drops; Destroy is gone; Slippery is already listed
+                    if ((item.Bonded ?? BondedStatus.Normal) != BondedStatus.Normal) continue;
                     if (IsRareEquipment(item)) { sorted++; continue; }
                     if (!seen.Add(item.Guid.Full)) continue;
                     rares.Add(item);
@@ -178,20 +147,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>
-    /// HOW MANY ITEMS A PK DEATH DROPS, RETAIL'S COUNT (owner 2026-10-17: "yes do retail", after the loot research in
-    /// docs/LOOT-RESEARCH-2026-10-17.md). Turbine's Throne of Destiny FAQ: NPK deaths moved to floor(level/20) + 0..2, but PK
-    /// deaths kept the old count, floor(effective level / 10) + 0..2 with the effective level capped at 126 (12 to 14 items
-    /// at the cap). ACE's GetNumItemsDropped uses /20 for every death (its own comment quotes the /10 rule), so a level 100
-    /// PK lost 5 to 7 items where retail took 10 to 12. A PK death takes retail's count.
-    ///
-    /// AN NPK DEATH (owner 2026-10-20 "Match retail"; docs/findings/death-item-count-2026-10-20.md). The same FAQ: levels
-    /// 11-20 drop 1 non-wielded item (ACE: 0 or 1), above 20 floor(level/20) + 0..2 "for a maximum of 15 items" (ACE caps
-    /// at 14, so levels 260+ lost one fewer). The count covers the value-sorted items only: pkt_2017-1-30_1485769877, a
-    /// level 200 NPK killed twice by a Ravenous Eater, lost 10 and 11 sorted items plus all 8 rare gems both times, which
-    /// ACE already drops outside the count (BondedStatus.Slippery). ACE's Clutch of the Miser step (-5 per augmentation,
-    /// NPK only) is kept. Switch retail_npk_death_count (default on; off = ACE's NPK count).
-    /// </summary>
+    /// <summary>How many items a PK death drops, retail's count.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.GetNumItemsDropped))]
     static class PkDeathItemCount
     {

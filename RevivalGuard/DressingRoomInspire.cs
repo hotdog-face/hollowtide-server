@@ -10,23 +10,7 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// INSPIRE and REMIX (owner 2026-11-08: "the random button works well and creates some pretty wild results. but they
-    /// are ugly. i wonder is it possible to get a button that gets me more usable tailors like players would make with a
-    /// button press? we have pcap data of old player tailors to push off of").
-    ///
-    /// RetailOutfits.json (tools/dressing-room/outfits_extract.py) holds every worn look the retail captures saw on a
-    /// player, as the ObjDesc the server drew: part swaps, texture swaps and sub-palettes, with no name. Each is read back
-    /// into wardrobe pieces once, against the ClothingTables of our own catalogue, for the body it was seen on:
-    ///  - pieces: the looks whose parts (and texture swaps, which tell Celdon from leather on one mesh) that body shows,
-    ///    best explained first, never two that clash, each part explained once;
-    ///  - colours: for each piece, the colour template whose palette sets hold the palettes seen at its colour ranges, and
-    ///    the shade that picks that palette from its set (PaletteSet.GetPaletteID run backwards).
-    /// Inspire wears one of them (only pieces that draw on the viewer's body). Remix keeps a real outfit's colours and
-    /// swaps each piece for another look in the same slots that has the same colour template. Each is one Undo step.
-    /// The file holds only looks the builder's style pass kept (outfit_style.py, ticket 261109-0029), and Not style hides
-    /// one more (DressingRoomHidden.cs).
-    /// </summary>
+    /// <summary>INSPIRE and REMIX.</summary>
     public static partial class DressingRoom
     {
         sealed class RealOutfit { public List<Piece> P = new List<Piece>(); public int Seen; public HashSet<string> Ids = new HashSet<string>(); }
@@ -37,7 +21,7 @@ namespace RevivalGuard
         const uint NULL_PART = 0x010001EC;   // the empty model: on a player it fills the spare attachment parts
         sealed class Cand { public Look L; public List<(uint I, uint M, HashSet<(uint, uint)> T)> Fx; }
 
-        /// <summary>Starts reading the real outfits (after the catalogue). True when they are ready.</summary>
+        /// <summary>Starts reading the real outfits (after the catalogue).</summary>
         static bool RealReady()
         {
             lock (s_Lock)
@@ -136,8 +120,7 @@ namespace RevivalGuard
                     Colour(piece, subs);
                     chosen.Add(piece);
                 }
-                // how much of what the player wore we could name: the parts that differ from the bare body (hair and
-                // face swaps count too, so this is a floor)
+                // how much of what the player wore we could name: the parts that differ from the bare body (hair and face swaps count too, so this is a floor)
                 try
                 {
                     var bare = DatManager.PortalDat.ReadFromDat<SetupModel>(o.GetProperty("s").GetUInt32()).Parts;
@@ -219,17 +202,13 @@ namespace RevivalGuard
             return null;
         }
 
-        // ---- Not style (owner ticket 261109-0029: "inspire button needs a way to remove options that were not good tailors
-        // from players but just things they wore for practical reasons. not style") ----
         static InspireHidden s_Hidden;
         static string HiddenFile() => Path.Combine(Dir() ?? "", "inspire-hidden.json");
         static InspireHidden Hidden() { lock (s_Lock) return s_Hidden ??= InspireHidden.Load(HiddenFile()); }
 
-        /// <summary>Hiding a look for all staff is the owner's (Admin and up); anyone in the room hides it for themselves.</summary>
         static bool HideForAll(Player p) => p?.Session != null && p.Session.AccessLevel >= AccessLevel.Admin;
 
-        /// <summary>Not style: the outfit the last Inspire or Remix came from stops coming up (for this character, or for all
-        /// staff), and Inspire puts on another (one Undo step).</summary>
+        /// <summary>Not style: the outfit the last Inspire or Remix came from stops coming up, and Inspire puts on another.</summary>
         static void NotStyle(Player p, Fit f, bool everyone)
         {
             var r = f.LastReal;
@@ -272,8 +251,7 @@ namespace RevivalGuard
             f.Msg = $"An outfit a retail player wore{(r.Seen > 1 ? $" (seen {r.Seen} times)" : "")}, one of {total}. Inspire again for another; Undo goes back.";
         }
 
-        /// <summary>Remix: a real outfit's colours, each piece swapped for another look in the same slots that has the same
-        /// colour template.</summary>
+        /// <summary>Remix: a real outfit's colours, each piece swapped for another look in the same slots that has the same colour template.</summary>
         static void Remix(Player p, Fit f)
         {
             if (!RealReady()) { f.Msg = NotReady(); return; }

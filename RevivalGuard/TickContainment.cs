@@ -18,23 +18,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ONE BAD OBJECT CANNOT STOP THE WORLD (live crash 2026-11-14 04:09 UTC: a NullReferenceException on the world
-    /// thread took the whole server down). ACE's world loop (WorldManager.UpdateWorld) has no catch: a throw from any
-    /// object's tick, or an AggregateException out of the landblock Parallel.ForEach, ends the world thread and the
-    /// process. Each per-object tick ACE runs is wrapped here:
-    ///   Landblock.TickPhysics          -> WorldObject/Player.UpdateObjectPhysics          (parallel)
-    ///   Landblock.TickMultiThreadedWork -> Creature.Monster_Tick, WorldObject.GeneratorUpdate,
-    ///                                     GeneratorRegeneration, Decay                    (parallel)
-    ///   Landblock.TickSingleThreadedWork -> Player.Player_Tick, every Heartbeat override  (world thread)
-    /// A throw is logged (TickContainmentRule: once in full per object and kind, then paced), that object skips the rest
-    /// of its tick, and its next tick time is pushed on so ACE's due-list loops cannot spin on it. Repeated throws
-    /// quarantine it: an object leaves the tick lists (it stays in the world, inert; @reloadblock makes it afresh), a
-    /// player is logged out cleanly. A last-resort catch on each landblock tick and PlayerManager.Tick covers what
-    /// is not one object's (a landblock's action queue, its save). Switch rg_tick_containment (default on; off = stock,
-    /// the throw ends the world). Counters and the quarantine list: @tickfaults. A debug throw for the box test:
-    /// @tickfaults test, refused unless rg_tick_fault_test is on.
-    /// </summary>
+    /// <summary>One bad object cannot stop the world.</summary>
     static class TickContainment
     {
         internal const string P_ON = "rg_tick_containment";
@@ -46,7 +30,7 @@ namespace RevivalGuard
         static readonly ConditionalWeakTable<object, TickFaultRecord> s_Records = new ConditionalWeakTable<object, TickFaultRecord>();
 
         // the switch, read at most every 2 s: the prefixes run for every object every tick
-        static long s_SwitchAt = -10_000;   // not long.MinValue: now - MinValue overflows negative and the switch is never read
+        static long s_SwitchAt = -10_000;
         static volatile bool s_On = true;
         internal static bool On
         {
@@ -88,8 +72,7 @@ namespace RevivalGuard
             public TestThrow(string site) : base($"RevivalGuard tick containment test throw ({site})") { }
         }
 
-        /// <summary>Every patched tick's prefix. True: run the tick. False: a quarantined object, skipped. Throws the
-        /// armed test exception (inside the patched method, so its finalizer sees it like any other).</summary>
+        /// <summary>Every patched tick's prefix.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static bool Gate(WorldObject wo, string site)
         {
@@ -109,8 +92,7 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>Every patched tick's finalizer. Null: contained (the world goes on). The exception: stock behaviour
-        /// (switch off), or a nested call whose outer tick contains it.</summary>
+        /// <summary>Every patched tick's finalizer.</summary>
         internal static Exception Contain(Exception e, WorldObject wo, string site)
         {
             if (e == null) return null;
@@ -205,9 +187,7 @@ namespace RevivalGuard
             {
                 if (p.Session != null) p.Session.LogOffPlayer(true);
                 else { p.LogOut(true, true); }
-                // ACE's logout ends with a chain on the player's own action queue, which Player_Tick runs, and a
-                // quarantined player's ticks are skipped: finish it as ACE's forced logoff does (off the landblock,
-                // saved, offline), so the client goes back to character select now, not after the 15 min fallback
+                // ACE's logout ends with a chain on the player's own action queue, which Player_Tick runs, and a quarantined player's ticks are skipped
                 if (p.CurrentLandblock != null)
                 {
                     if (s_FinalizeLogout != null) s_FinalizeLogout.Invoke(p, null);
@@ -270,7 +250,7 @@ namespace RevivalGuard
             s_QuarantinedCount = s_Quarantined.Count;
         }
 
-        /// <summary>A landblock tick or PlayerManager.Tick threw past every per-object catch. Paced like an object's.</summary>
+        /// <summary>A landblock tick or PlayerManager.Tick threw past every per-object catch.</summary>
         internal static Exception Backstop(Exception e, object key, string site, string what)
         {
             if (e == null) return null;
@@ -424,11 +404,9 @@ namespace RevivalGuard
         }
     }
 
-    // ---- the per-object patches. Priority.First: the gate runs before any other prefix on these methods, and each
-    // finalizer covers every prefix and postfix as well as ACE's own body. ----
+    // the per-object patches.
 
-    /// <summary>Heartbeat, every override. Overrides call base.Heartbeat, so only the outermost call contains (the
-    /// depth count): the whole object skips its heartbeat, not just the base part.</summary>
+    /// <summary>Heartbeat, every override.</summary>
     [HarmonyPatch]
     static class TickContainHeartbeat
     {

@@ -4,25 +4,7 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE RELIQUARY SET'S NUMBERS, PURE (no ACE types): ReliquarySet.cs runs them, tools/nettest compiles this file by
-    /// path (ReliquarySetCase.cs there). Round 2, The Drowned Reliquary (docs/content-review/round2-drowned-reliquary-concept.md
-    /// appendix E; docs/content-review/round2/set-bonus.md).
-    ///
-    /// The set is EquipmentSetId 924 on weenies 924300-924305. A player can wear at most four of them at once: one of the
-    /// three weapons (Keeper's Hook, Tidecaller Bow, Brinelight Orb), the Reliquary Ward shield, the Saltglass Amulet and
-    /// the Drowned Signet. So pieces are counted by SLOT, not by item: the three weapons are one piece between them, and a
-    /// second Signet (the other ring finger) or a second Hook (dual wield) adds nothing. That keeps "full set" meaning
-    /// one of each, the way the concept reads, and stops two rings standing in for the shield.
-    ///
-    /// Tiers, written the way client_portal.dat's SpellSet writes a retail set (each tier the whole list for that count,
-    /// a count with no tier of its own takes the tier below, as ACE's SpellSetTiersNoGaps does):
-    ///   2 pieces: Minor Focus (2581)
-    ///   3 pieces: Minor Focus (2581)
-    ///   4 pieces: Minor Focus (2581), Major Frost Ward (2612)
-    /// The concept says "Major Cold Ward"; the spell table has no spell by that name. Retail's cold-protection cantrip is
-    /// Major Frost Ward (2612, category 289 ColdWardProtection, "Reduces damage the target takes from Cold by 15%").
-    /// </summary>
+    /// <summary>The reliquary set's numbers, PURE: ReliquarySet.cs runs them, tools/nettest compiles this file by path.</summary>
     static class ReliquarySetRule
     {
         public const int SET_ID = 924;

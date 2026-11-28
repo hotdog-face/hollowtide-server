@@ -8,28 +8,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A CLOSED DOOR STOPS A SWORD (owner, 2026-10-07: "i was able to consistently kill things and be killed
-    /// through doors. doors should block things from attacking each other when closed").
-    ///
-    /// ACE's melee reach is a distance with the line of sight only sometimes asked:
-    ///   * a player: Player_Melee.HandleActionTargetedMeleeAttack_Inner attacks when
-    ///     `dist &lt;= MeleeDistance (0.6) || dist &lt;= StickyDistance (4) &amp;&amp; IsMeleeVisible(target)` -- under
-    ///     0.6 m the sight test is skipped, and a door is thinner than that, so two bodies either side of one
-    ///     are "touching"; the hit frames then call DamageTarget without looking again;
-    ///   * a monster: Monster_Navigation.IsMeleeRange is `GetDistanceToTarget() &lt;= MaxMeleeRange`, no sight
-    ///     test at all.
-    ///
-    /// NOT IsMeleeVisible everywhere: ACE skips it up close for a reason (a physics sweep that starts inside
-    /// the other body's cylinder need not report it, and bodies overlap in a scrum), and a monster asks
-    /// IsMeleeRange every tick. So the test is narrow: is a CLOSED door between the two? A door counts when
-    /// the two stand on opposite sides of its panel (its local +Y is the panel's normal) and the line between
-    /// them crosses the panel within DOOR_HALF_WIDTH of its centre, at a height near it. Doors are listed per
-    /// landblock and refreshed every DOOR_REFRESH seconds; an open door (IsOpen) never blocks.
-    ///
-    /// A monster is then not in melee range of a target behind a closed door, and a player's melee hit on one
-    /// does nothing. Arrows and bolts are left alone: projectiles collide with the door on their own.
-    /// </summary>
+    /// <summary>A closed door stops a sword.</summary>
     public static class MeleeThroughDoors
     {
         const float DOOR_HALF_WIDTH = 1.0f;   // metres either side of the door's centre the line may cross
@@ -97,11 +76,7 @@ namespace RevivalGuard
             }
         }
 
-        // OUT OF REACH WHEN THE BLOW LANDS (owner, 2026-10-07: "bronnoc was attacking me and i ran away, his
-        // swings kept hitting me even after i put a lot of distance between us"). ACE measures reach when the
-        // swing STARTS and never again: the hit frames, up to a second later, land wherever the target has run.
-        // So at the hit: a player's blow needs the target within StickyDistance (4 m) plus PLAYER_SLACK, a
-        // monster's within MaxMeleeRange (0.75 m) plus MONSTER_SLACK (a monster's miss reads as an evade).
+        // Out of reach when the blow lands.
         const float PLAYER_SLACK = 0.5f, MONSTER_SLACK = 1.25f;
         const double TELL_EVERY = 2.0;
         static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, DateTime> s_Told = new System.Collections.Concurrent.ConcurrentDictionary<uint, DateTime>();
@@ -130,8 +105,7 @@ namespace RevivalGuard
                 if (target == null || damageSource?.ProjectileSource != null) return true;   // a projectile: physics decides
                 if (!DoorBetween(__instance, target) && !OutOfReach(__instance, target, Player.StickyDistance + PLAYER_SLACK)) return true;
                 __result = null;                                                              // swung at a door, or at air
-                // SAY SO (PvP sweep 2026-10-08: a blocked blow printed nothing on either client). Once per
-                // TELL_EVERY seconds per attacker, so an auto-repeat chain does not flood the chat.
+                // Say so.
                 var now = DateTime.UtcNow;
                 if (!s_Told.TryGetValue(__instance.Guid.Full, out var last) || (now - last).TotalSeconds >= TELL_EVERY)
                 {

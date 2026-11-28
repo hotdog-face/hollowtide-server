@@ -21,43 +21,11 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// VARROW THE UNBOWED, the Darktide duelist (weenie 901050; docs/DUELIST-BOSS.md). Ours, not retail.
-    /// Owner's brief (2026-09-28): "a boss that is a bit more like a real pk duel. Cunning, smart and
-    /// hard to kill." MADE, NOT ADDED: the switch `duelist_ai` defaults OFF, and with it off he is an
-    /// ordinary ACE monster rolling his own spellbook (and MonsterAi treats him like any other).
-    ///
-    /// A UTILITY BRAIN. Two decision points, both ACE's own:
-    ///   * Creature.GetNextAttackType (ACE asks it whenever a monster picks its next attack): a prefix
-    ///     scores every attack he could make now -- rebuff, self-cleanse, heal spell, dispel the
-    ///     target's buffs, drain, the next step of the vulnerability stack, the burst, a plain swing
-    ///     or bolt -- and hands ACE the best one (Magic with CurrentSpell set, or Melee). ACE then does
-    ///     the rest exactly as for any caster: spell words in chat (AiUseHumanMagicAnimations), the
-    ///     human cast gestures, mana, range, facing, resist rolls, projectiles.
-    ///   * Creature.Monster_Tick (every 0.2 s): a prefix scores the MOVES -- retreat, break line of
-    ///     sight behind a pillar, kite, use a healing kit -- and while one runs it takes the tick
-    ///     (returns false), as MonsterAi does. Otherwise ACE's tick runs: its chase is how he closes.
-    /// Each score has a little noise, and his thresholds (when to heal, when to run) are re-rolled
-    /// every fight and after every use, so he never repeats one fixed pattern.
-    ///
-    /// FAIR. He reads only what a PK could read off an opponent in retail: the stance they are in and
-    /// what they hold (melee, bow, wand), their health, stamina and mana bars, the enchantments on
-    /// them (their buffed values show on an assess), their armour and resistances (assess), where they
-    /// are, and what his own health is doing. Never their input, never a cast before it lands.
-    /// Everything he does has a tell and a counter; docs/DUELIST-BOSS.md lists them.
-    ///
-    ///   @duelist                     switches, tuning, counters
-    ///   @duelist reset | go          a fresh Varrow at the arena (its generator re-run) | to the arena's south edge
-    ///   @duelist trace [sec]         log every decision with its scores, and his position twice a
-    ///                                second, to ACE_Log.txt ([Duelist] lines); tools/monsterai/duelist/duelist_summary.py reads them
-    ///
-    /// Registers itself from Prepare() (PatchAll calls it), so Mod.cs needs no line. Every hook
-    /// catches its own exceptions; a throw falls back to ACE's own behaviour.
-    /// </summary>
+    /// <summary>Varrow the unbowed, the Darktide duelist (weenie 901050; docs/DUELIST-BOSS.md).</summary>
     static class DuelistAi
     {
         internal const uint WCID = 901050, BLADE = 901051, PILLAR = 901052;
-        const uint WAND = 46397;   // retail Shadownether Isparian Wand: what he casts with (owner 2026-09-29, "casting spells with his sword in hand")
+        const uint WAND = 46397;   // retail Shadownether Isparian Wand: what he casts with
         const uint ARENA_BLOCK = 0x2832, GEN_GUID = 0x72832000, GEN_WCID = 901053;   // tools/gpubox-ace/duelist-boss.sql (not applied on live)
         // the arena's south edge, 25 m from its centre (96, 96) and outside the 24 m at which he wakes, facing north
         static readonly ACE.Entity.Position ArenaEdge = new ACE.Entity.Position(0x28320023, 96.0f, 70.0f, 77.0f, 0f, 0f, 0f, 1f);
@@ -115,7 +83,7 @@ namespace RevivalGuard
         const uint DRAIN_STAM = 2330;       // Vigor Siphon (Drain Stamina Other VII)
         const uint DISPEL_LIFE = 4347;      // Incantation of Nullify Life Magic Other, positive only (4-6 spells)
         const uint DISPEL_CREATURE = 4338;  // Incantation of Nullify Creature Magic Other, positive only
-        const uint CLEANSE_SELF = 3180;     // Eradicate All Magic Self (VII), negative only: every curse up to level VII (the VIII form costs 320 mana)
+        const uint CLEANSE_SELF = 3180;     // Eradicate All Magic Self, negative only: every curse up to level VII
         const uint FUTILITY = 2282;         // Futility (Magic Yield Other VII): their magic defense down, so his curses stick
         const uint STAM_TO_MANA = 1681;     // Stamina to Mana Self VI: mana management when a melee gives him none to drain
         static readonly uint[] s_HealIds = { 2073, 2072, 1161 };   // Adja's Intervention / Gift (VII), Heal Self VI: the self one wins
@@ -125,8 +93,7 @@ namespace RevivalGuard
         static Spell Sp(uint id) => s_Spells.GetOrAdd(id, i => new Spell(i));
         static uint s_Heal;
 
-        /// <summary>Spells need the DATs, which are not loaded when PatchAll runs Prepare(): resolve on
-        /// first use, and log every id's name once so a staging log shows what he will cast.</summary>
+        /// <summary>Spells need the DATs, which are not loaded when PatchAll runs Prepare</summary>
         static void ResolveSpells()
         {
             if (s_Heal != 0) return;
@@ -150,7 +117,7 @@ namespace RevivalGuard
             s_Log = PropertyManager.GetBool(P_LOG, false).Item;
         }
 
-        /// <summary>True when this creature is the duelist AND his brain is switched on.</summary>
+        /// <summary>True when this creature is the duelist and his brain is switched on.</summary>
         internal static bool Owns(Creature c)
         {
             if (c == null || c.WeenieClassId != WCID) return false;
@@ -176,13 +143,13 @@ namespace RevivalGuard
             public double NextConvert, NextHealSpell, CheckAt;
             public uint Pending;
             public double CursesOffUntil;   // too many resists in a row: he stops cursing for a while and bolts raw
-            public readonly Dictionary<uint, int> ResistsOf = new Dictionary<uint, int>();   // a curse he just threw: did it land? (checked a few seconds on, on the target's own enchantments)   // this target sticks to him: kiting and running get him nothing, so he fights with the blade
+            public readonly Dictionary<uint, int> ResistsOf = new Dictionary<uint, int>();   // a curse he just threw: did it land?
             public double NextBurst;
             public float HealAt, RetreatAt, ClosingSample = -1f;
             public DamageType ElemMelee = DamageType.Slash, ElemBolt = DamageType.Fire;
             public bool Prebuffed, Feinted, Announced;
             public int OpenTries;
-            public WorldObject Wand, Blade;   // the weapon he is not holding right now (a PK's swap)          // the opening: curses thrown before he first goes in for damage (owner 2026-09-29: vuln you first)
+            public WorldObject Wand, Blade;   // the weapon he is not holding right now // the opening
             public bool Opened;
             public readonly Queue<(double t, int hp)> Hp = new Queue<(double, int)>();
             public readonly Dictionary<string, int> Counts = new Dictionary<string, int>();
@@ -240,9 +207,7 @@ namespace RevivalGuard
 
         static readonly DamageType[] s_Types = { DamageType.Slash, DamageType.Pierce, DamageType.Bludgeon, DamageType.Fire, DamageType.Cold, DamageType.Acid, DamageType.Electric };
 
-        /// <summary>The assess: for each element, how much of a hit gets through. Melee counts their
-        /// armour (ACE's own monster-vs-player armour sum over the chest and the upper legs) times their
-        /// resistance; a war bolt ignores armour, so only the resistance counts.</summary>
+        /// <summary>The assess: for each element, how much of a hit gets through.</summary>
         static void Read(Creature c, St st, Player p, double rt, bool log)
         {
             st.ReadAt = rt + D(8) * Rand(0.8f, 1.2f);
@@ -345,13 +310,8 @@ namespace RevivalGuard
             float dist = c.GetDistanceToTarget();
             bool see = c.IsDirectVisible(p);
             st.Kind = Classify(p);
-            // Against a melee he keeps bolt range, unless it sticks to him and his blade gets through its
-            // armour about as well as a bolt does. Against an archer or a mage he closes: past 8 m he runs in
-            // (a melee choice is ACE's chase), and inside it he fights with the blade or, if their armour
-            // turns the blade, with bolts at arm's length.
+            // Against a melee he keeps bolt range, unless it sticks to him and his blade gets through its armour about as well as a bolt does.
             bool bladeWorks = st.MeleeMult >= 0.6f * st.BoltMult;
-            // 2026-09-29 (owner: "his attacks aren't that aggressive"): against a melee he now trades blows too while
-            // he is above ~55% health, and only falls back to bolts and step-backs once he is hurt.
             bool planMelee = bladeWorks && (st.Kind != Kind.Melee || st.Sticky || hp > 0.55f);
             bool closing = st.Kind != Kind.Melee && dist > 8f;
             var elem = planMelee ? st.ElemMelee : st.ElemBolt;
@@ -390,14 +350,10 @@ namespace RevivalGuard
                 else Opt("drain stamina", 0.36f + 0.32f * Frac(p.Stamina), DRAIN_STAM);
             }
 
-            // the stack, then the burst
-            // curses that keep being resisted lose their appeal; after two, he opens with Futility first
-            // and after five in a row he stops cursing for half a minute and bolts raw
+            // the stack, then the burst curses that keep being resisted lose their appeal
             bool cursing = rt >= st.CursesOffUntil;
             float Penalty(uint id) => Math.Min(0.45f, 0.15f * (st.ResistsOf.TryGetValue(id, out var k) ? k : 0));
-            // THE OPENING (owner 2026-09-29: "varrow should vuln you before he goes in to do damage"): from where
-            // he stands, the element's vulnerability and (for the blade) Imperil, then he goes in. Three throws
-            // at most, so a well-warded opponent does not stall him; he re-curses later as the stack drops.
+            // The opening: from where he stands, the element's vulnerability and (for the blade) Imperil, then he goes in.
             if (!st.Opened && (stacked || st.OpenTries >= 3 || !cursing)) st.Opened = true;
             bool opening = !st.Opened;
             // in reach with the blade, curses lose to the swing unless the stack is down
@@ -423,12 +379,7 @@ namespace RevivalGuard
             opts.Sort((a, b) => b.score.CompareTo(a.score));
             var pick = opts[0];
 
-            // STANCE COMMITMENT (owner playtest 2026-09-29: "kept going in and out of combat mode and not
-            // attacking me ... his animations just seem to not be playing"). Every blade/spell flip is a
-            // stance change with its own animation, so flipping on every decision left him switching
-            // stances instead of swinging. Within 4 s of a switch he keeps the current kind of attack if
-            // an option of that kind scores within 0.2 of the best; heals, dispels, cleanses and rebuffs
-            // (the urgent ones) still switch at once.
+            // Stance commitment.
             bool urgent = pick.name == "heal" || pick.name == "dispel" || pick.name == "cleanse" || pick.name == "rebuff";
             if (!urgent && rt - st.TypeSince < 4.0 && (pick.spell == 0) != st.LastWasMelee)
             {
@@ -441,22 +392,14 @@ namespace RevivalGuard
             if (pick.spell == 0)
             {
                 __result = CombatType.Melee;
-                // A human caster (AiUseHumanMagicAnimations) is left in the Magic stance by its last spell,
-                // and ACE's MeleeAttack only raises the melee stance from NonCombat: from Magic there is no
-                // combat maneuver, the swing returns 0 and nothing plays. Raise the blade stance here.
-                // and since 2026-09-29 the blade comes back out of his pack first (EnterBladeStance)
+                // A human caster is left in the Magic stance by its last spell, and ACE's MeleeAttack only raises the melee stance from NonCombat
                 if (c.CombatMode != CombatMode.Melee || c.GetEquippedWand() != null) EnterBladeStance(c, st);
             }
             else
             {
                 s_SetSpell(c, Sp(pick.spell));
                 __result = CombatType.Magic;
-                // A spell from the blade stance plays no gesture at all: the human motion table (0x09000001) has
-                // its cast gestures only under the Magic stance, and ACE's human pre-cast then falls back to a
-                // CastSpell the table does not hold in SwordCombat (the client showed his peace idle for it:
-                // owner 2026-09-29, "he healed and didn't show a spellcasting movement ... fighting stance and
-                // then peace mode on a loop"). ACE raises Magic only with a wand wielded; he duels with a sword,
-                // so raise the stance ourselves, as a PK drops to the casting stance.
+                // A spell from the blade stance plays no gesture at all
                 EnterMagicStance(c, st);
                 if (pick.name == "dispel") { st.NextDispel = rt + D(5) * Rand(0.85f, 1.25f); Interlocked.Increment(ref s_Dispels); }
                 if (pick.name.StartsWith("drain")) st.NextDrain = rt + D(7) * Rand(0.8f, 1.3f);
@@ -486,9 +429,7 @@ namespace RevivalGuard
             return false;
         }
 
-        /// <summary>Did the curse he threw land? Read off the target's own enchantments once its windup is over.
-        /// Called from both brains: before 2026-09-29 only the tick read it, and each new decision pushed the
-        /// check 5 s on, so a curse thrown every 3 s was never scored (Futility on repeat, 20 times running).</summary>
+        /// <summary>Did the curse he threw land?</summary>
         static void ResolvePending(Creature c, St st, Player p, double rt)
         {
             if (st.Pending == 0 || rt < st.CheckAt) return;
@@ -517,12 +458,7 @@ namespace RevivalGuard
             catch { return null; }
         }
 
-        /// <summary>A PK's swap to the caster (owner 2026-09-29: "varrow is casting spells with his sword in hand
-        /// instead of his caster"). The blade goes to his pack, the Shadownether Isparian Wand into his hand,
-        /// then ACE's own SetCombatMode(Magic), which with a wand wielded is the retail stance change. ACE's
-        /// monster weapon swap (Monster_Missile.SwitchToMeleeAttack) is the pattern: unwield with broadcast,
-        /// inventory, wield with broadcast (ObjDesc and parent events), stance. The wand is made here, once per
-        /// Varrow, and never enters his create list or death treasure, so it cannot drop.</summary>
+        /// <summary>A PK's swap to the caster.</summary>
         static void EnterMagicStance(Creature c, St st)
         {
             double rt = Timers.RunningTime;
@@ -673,7 +609,7 @@ namespace RevivalGuard
             // how fast they are closing on him, sampled over 1.5 s: a careless chase is a straight run in
             if (rt >= st.ClosingSampleAt) { st.ClosingSample = dist; st.ClosingSampleAt = rt + 1.5; }
 
-            // THE PUNISH: a chaser who comes round the corner straight onto him eats a riposte
+            // The punish: a chaser who comes round the corner straight onto him eats a riposte
             if (rt < st.AmbushUntil && dist < 3.2f && st.ClosingSample > 0 && st.ClosingSample - dist > 4.0f)
             {
                 st.AmbushUntil = 0;
@@ -691,7 +627,7 @@ namespace RevivalGuard
             }
             if (st.Kind != Kind.Melee && rt >= st.NextLos && see && (lost4 > 0.10f || hp < st.HealAt && st.Kits > 0))
                 opts.Add(("break los", 0.78f + Math.Min(0.15f, lost4) + Noise()));
-            // healthy, he stands and trades (the 2026-09-29 "press harder"); the step-back is for when he is hurt
+            // healthy, he stands and trades; the step-back is for when he is hurt
             if (st.Kind == Kind.Melee && !st.Sticky && hp < 0.6f && dist < 3.2f && rt >= st.NextKite && st.LastAttack != "burst melee")
                 opts.Add(("kite", 0.62f + (hp < 0.5f ? 0.1f : 0f) + Noise()));
             if (hp < st.HealAt && st.Kits > 0 && rt >= st.NextKit)
@@ -780,8 +716,7 @@ namespace RevivalGuard
             else Taunt(c, st, rt, Pick("Kits are cheap. Your vitae is not.", "One moment. I am not done with you.", "Patience. I will be right with you."));
         }
 
-        /// <summary>A double strike on whoever ran straight onto him: an ordinary ACE damage roll
-        /// (dodgeable, armour applies), then a second hit riposte_mult times as hard.</summary>
+        /// <summary>A double strike on whoever ran straight onto him</summary>
         static void Riposte(Creature c, St st, Player p, double rt)
         {
             Interlocked.Increment(ref s_Ripostes);
@@ -810,7 +745,7 @@ namespace RevivalGuard
             });
             chain.EnqueueChain();
             c.PrevAttackTime = rt;
-            c.NextMoveTime = rt + 0.9; c.NextAttackTime = rt + 0.8;   // was 1.3 / 1.2 (owner 2026-09-29: faster)
+            c.NextMoveTime = rt + 0.9; c.NextAttackTime = rt + 0.8;   // was 1.3 / 1.2
         }
 
         // ------------------------------------------------------------------ movement
@@ -844,8 +779,7 @@ namespace RevivalGuard
             return false;
         }
 
-        /// <summary>A spot behind the nearest arena pillar as seen from the target: the pillar between
-        /// them, and the spot out of the target's line of sight (tested, not assumed).</summary>
+        /// <summary>A spot behind the nearest arena pillar as seen from the target</summary>
         static bool HidePoint(Creature c, Player p, out Vector3 dest, float minFromTarget)
         {
             dest = default;
@@ -1028,9 +962,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>His swing speed (owner 2026-09-29: "his attack speed needs to be way faster"). ACE clamps a
-        /// creature's animation speed at 2.0 (Creature_Combat.MaxAttackSpeed); his is duelist_swing_speed (2.8).
-        /// Only while his brain is on, only for him.</summary>
+        /// <summary>His swing speed.</summary>
         [HarmonyPatch(typeof(Creature), nameof(Creature.GetAnimSpeed))]
         static class SwingSpeed
         {
@@ -1045,9 +977,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>After a swing ACE holds a monster still for the swing + 0.5 s and waits a random
-        /// 0..PowerupTime before the next (Monster_Melee.cs:151-156). His weenie's PowerupTime is 0.1 now; this
-        /// trims the move hold to the swing + 0.1 s, so he follows a backing opponent straight away.</summary>
+        /// <summary>After a swing ACE holds a monster still for the swing + 0.5 s and waits a random 0..PowerupTime before the next.</summary>
         [HarmonyPatch(typeof(Creature), nameof(Creature.MeleeAttack))]
         static class AfterSwing
         {
@@ -1062,8 +992,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>His bolts hit at duelist_spell_damage_mult of ACE's figure: a level VII bolt on a
-        /// vulnerable player is ~160, which ends a 290-health player in two. Tuned on staging.</summary>
+        /// <summary>His bolts hit at duelist_spell_damage_mult of ACE's figure</summary>
         [HarmonyPatch(typeof(SpellProjectile), nameof(SpellProjectile.CalculateDamage))]
         static class BoltDamage
         {

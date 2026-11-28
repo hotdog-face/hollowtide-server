@@ -20,29 +20,7 @@ using R = RevivalGuard.LeaderboardRule;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// LEADERBOARDS (ours, not retail; owner's pick 2026-11-14). `/top` shows each board's leader and your place;
-    /// `/top level|xp|lum|kills|pk|quests|raids` the top 10 and your rank; `/top hide` / `/top show` leave or rejoin the boards.
-    /// Who is listed, the ranking and every line are in LeaderboardRule (pure, tested by nettest LeaderboardCase): staff,
-    /// test and fleet accounts, the owner's accounts and the Hollow Company are left out; the Borg are listed as players.
-    /// Only characters that logged in within rg_top_active_days (30) are listed.
-    ///
-    /// NEVER ON THE WORLD THREAD: a timer thread rebuilds the boards every rg_top_refresh_minutes (15) from PlayerManager
-    /// (every character's properties are in memory) plus one query for logins and deletions and one for quest flags; the
-    /// command only reads the last finished build. Each build also writes leaderboards.json beside the dll (names and
-    /// numbers only) for a future website page.
-    ///
-    /// PK deaths: ACE counts PK kills (PlayerKillsPk) but no PK deaths, so this counts them from the day it is deployed
-    /// (top-pkdeaths.json beside the dll), and the PK board says from when.
-    ///
-    /// DAILY DISCORD POST: ON by default (rg_top_discord; owner 2026-11-14: "Turn it on"). When on, once a day at
-    /// or after rg_top_discord_hour_utc (17 = 9 or 10 AM Pacific) each board's top 3 goes to the Discord bridge's General
-    /// channel (the bot posts only to #general).
-    ///
-    /// Switches: rg_top (on), rg_top_refresh_minutes (15, 5..120), rg_top_active_days (30), rg_top_json (on), rg_top_discord
-    /// (ON), rg_top_discord_hour_utc (17). Extra names to leave out: top-exclude.txt beside the dll (account or character
-    /// names, one per line). Staff: `@top refresh` rebuilds now, `@top why <name>` says why a character is not listed.
-    /// </summary>
+    /// <summary>Leaderboards.</summary>
     static class Leaderboards
     {
         internal const string P_ON = "rg_top", P_REFRESH = "rg_top_refresh_minutes", P_DAYS = "rg_top_active_days",
@@ -198,8 +176,7 @@ namespace RevivalGuard
                 + $"Every {RefreshMinutes} min, active {c.Days} days, Discord post {(PropertyManager.GetBool(P_DISCORD, true).Item ? "ON" : "off")}.";
         }
 
-        /// <summary>A hide/show or an early ask brings the next build forward to the next minute's tick (so never more than
-        /// one build a minute, however often it is asked).</summary>
+        /// <summary>A hide/show or an early ask brings the next build forward to the next minute's tick.</summary>
         static void Soon()
         {
             var now = DateTime.UtcNow;
@@ -308,8 +285,6 @@ namespace RevivalGuard
             finally { Interlocked.Exchange(ref s_Busy, 0); }
         }
 
-        // ------------------------------------------------------------------ the daily Discord post (off by default)
-
         static void MaybePost(DateTime now)
         {
             if (!PropertyManager.GetBool(P_DISCORD, true).Item || !DiscordBridge.On) return;
@@ -317,7 +292,7 @@ namespace RevivalGuard
             if (c == null) return;
             string last = ReadState();
             if (!R.PostDue(now, last, (int)PropertyManager.GetLong(P_HOUR, 17).Item)) return;
-            WriteState(R.DayKey(now));   // first, so a failed post is never repeated all day
+            WriteState(R.DayKey(now));
             if (DiscordBridge.PostGeneral(R.DiscordText(c.Boards, c.Days, c.PkSince)))
                 Mod.Log.Info("[RevivalGuard] Leaderboards: daily post queued for the Discord bridge");
         }

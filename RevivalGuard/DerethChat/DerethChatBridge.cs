@@ -1,5 +1,4 @@
-// Dereth cross-server chat: the ACE side. One file, shared by the drop-in mod any ACE server can install
-// (cross-server-chat/ace-mod) and Hollowtide's RevivalGuard. AGPL-3.0. Design: docs/proposals/cross-server-chat.md.
+// Dereth cross-server chat: the ACE side.
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -23,19 +22,7 @@ using ACE.Server.WorldObjects;
 
 namespace DerethChat
 {
-    /// <summary>
-    /// THE DERETH CHANNEL: one chat line shared by every Asheron's Call server that joins the hub.
-    ///
-    ///   Out: "@dereth hi" is filtered, shown on this server as "Name (ThisServer): hi", and sent to the hub, which
-    ///        passes it to every other server.
-    ///   In:  lines from the hub are shown to everyone here who has the channel on, as "Name (Coldeve): hi".
-    /// ONE channel (owner 2026-11-08): no global room carries it. A host mod may deliver lines its own way (DeliverHook:
-    /// Hollowtide's client puts them in a tab of their own); everyone else gets a plain chat line.
-    ///
-    /// Only the character name, the server and the text cross. The hub checks the server's signature (an ECDSA key made
-    /// here on first start; the hub holds only its public half), and filters, rate-limits and bans; this side does the
-    /// same filters again and adds its own mutes. No config file, no bridge.
-    /// </summary>
+    /// <summary>The dereth channel: one chat line shared by every Asheron's Call server that joins the hub.</summary>
     public static class Bridge
     {
         public const string CONFIG = "dereth-chat.json", KEY = "dereth-chat-key.pem", STATE = "dereth-chat-state.json";
@@ -50,7 +37,7 @@ namespace DerethChat
             public string chatType { get; set; } = "Channel";
             /// <summary>Other servers' automated characters: "tag" (shown as "Name (bot)"), "hide" or "show".</summary>
             public string bots { get; set; } = "tag";
-            /// <summary>This server's own automated characters: by character or account name. They never send unless sendBots.</summary>
+            /// <summary>This server's own automated characters: by character or account name.</summary>
             public string[] botCharacters { get; set; } = Array.Empty<string>();
             public string[] botAccounts { get; set; } = Array.Empty<string>();
             public bool sendBots { get; set; } = false;
@@ -68,15 +55,14 @@ namespace DerethChat
             public bool paused { get; set; }                                            // staff turned the channel off on this server
         }
 
-        /// <summary>What the host server adds: its own bot test and a chat log. Both optional.</summary>
+        /// <summary>What the host server adds: its own bot test and a chat log.</summary>
         public static Func<Player, bool> IsBotHook;
         public static Action<string, string, string> ChatLogHook;   // (server, name, text)
         /// <summary>Deliver one line to one player some other way (player, server, name, text, bot); true = done.</summary>
         public static Func<Player, string, string, string, bool, bool> DeliverHook;
         /// <summary>A player turned the channel on or off (the host may tell its client).</summary>
         public static Action<Player> StateHook;
-        /// <summary>What players read: the channel's name in a sentence ("the Dereth channel", "cross-server chat"), the
-        /// command they are told to type ("@dereth", "/crossserver"), and extra command names that do the same.</summary>
+        /// <summary>What players read: the channel's name in a sentence, the command they are told to type</summary>
         public static string ChannelName = "the Dereth channel", PlayerHint = null;
         public static string[] Aliases = Array.Empty<string>();
         static string N => ChannelName;
@@ -114,7 +100,7 @@ namespace DerethChat
             lock (s_StateLock) return !s_State.paused && !s_State.off.Contains(p.Guid.Full);
         }
 
-        /// <summary>Called once from the host mod's Initialize. Reads the config beside the mod; without it, nothing happens.</summary>
+        /// <summary>Called once from the host mod's Initialize.</summary>
         public static void Start(string folder)
         {
             try
@@ -445,7 +431,7 @@ namespace DerethChat
                     case "say":
                         {
                             string server = Proto.CleanText(f.server, 24), name = Proto.CleanName(f.name);
-                            string text = Proto.Filter(f.text, out _);   // the same filters again: never trust the wire
+                            string text = Proto.Filter(f.text, out _);
                             if (server.Length == 0 || name == null || text == null) break;
                             s_Received++;
                             Show(server, name, text, f.bot == true, false);

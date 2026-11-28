@@ -12,19 +12,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE HOLLOW COMPANY IS NEVER COUNTED AS PEOPLE (owner, 2026-10-07: "a feature, not some deceptive plan
-    /// to fake population"). The mercenaries (tools/mercs, docs/MERCENARIES.md) are real game sessions on
-    /// accounts named hcmerc*, so ACE counts them as players everywhere. This leaves them out of:
-    ///   * the login screen's "N online" (PopulationQuery) and the radar's (/pop's count), EXCEPT THE BORG: the owner
-    ///     2026-11-08, "i want the borg to count in the population count under the radar". The Borg (BorgSwitch.IsBorg,
-    ///     on the same accounts) count there (ShownOnline) and /pop lists them with the players (their "of Borg" names
-    ///     tell them apart: owner 2026-11-08); the Hollow Company
-    ///     stays out. Everything else (the event director, telemetry, restarts) still uses RealOnline, people only.
-    ///   * the world-event director's minimum-players check (EventDirector),
-    ///   * the gameplay telemetry (Telemetry marks them "merc":1, and the reports skip them),
-    /// and /pop, which names everyone online but them.
-    /// </summary>
     public static class Mercenaries
     {
         const string PREFIX = "hcmerc";
@@ -33,10 +20,6 @@ namespace RevivalGuard
         public static bool IsReservedName(string accountName) =>
             accountName != null && accountName.StartsWith(PREFIX, StringComparison.OrdinalIgnoreCase);
 
-        // THE MERCENARIES ARE AN ALLOWLIST, NOT A PREFIX (security audit 2026-10-20): a name alone once granted
-        // @mercfollow and hid the account from chat logs and the population. The two accounts made on the console
-        // (docs/MERCENARIES.md) are built in; another one goes in mercenaries.txt beside the dll, one account name per
-        // line, read at startup. The prefix is still required, so the file cannot mark an ordinary player.
         static readonly string[] BUILT_IN = { "hcmerc1", "hcmerc2" };
         static HashSet<string> s_Allow;
 
@@ -66,8 +49,7 @@ namespace RevivalGuard
         /// <summary>By account name, for a character that may be offline (the PK ladder's re-judge).</summary>
         public static bool IsMercAccount(string name) => name != null && IsReservedName(name) && Allow().Contains(name);
 
-        /// <summary>A Hollow Company sellsword, not a Borg (BorgRule.IsHollowCompany): what PK leaves out. IsMerc is true for
-        /// both, since the Borg play on the same allowlisted accounts.</summary>
+        /// <summary>A Hollow Company sellsword, not a Borg (BorgRule.IsHollowCompany): what PK leaves out.</summary>
         public static bool IsHollowCompany(Player p) => p != null && BorgRule.IsHollowCompany(IsMerc(p), p.Name);
 
         /// <summary>By account and character name, for a character that may be offline (the PK ladder's re-judge).</summary>
@@ -80,8 +62,6 @@ namespace RevivalGuard
             catch { return PlayerManager.GetOnlineCount(); }
         }
 
-        /// <summary>The "N online" players see (the login screen, the browser's /pop, the radar): real players plus the
-        /// Borg (owner 2026-11-08), never the Hollow Company. Not for anything that needs people (use RealOnline).</summary>
         public static int ShownOnline()
         {
             try { return PlayerManager.GetAllOnline().Count(p => !IsMerc(p) || BorgSwitch.IsBorg(p)); }
@@ -94,14 +74,7 @@ namespace RevivalGuard
             catch { return 0; }
         }
 
-        // ---- /mercfollow: a sellsword rejoins its leader ----------------------------------------------------
-        //
-        // Owner, 2026-10-07: Sefa "followed me in [to a dungeon] but then disappeared". A merc follows by
-        // walking straight at its leader (tools/mercs/merc.py), and a dungeon corner stops it; past the corner
-        // the server stops showing it, and it is lost. Real pathfinding is a lot of work for a feature the owner
-        // may retire, so the merc's brain asks for this instead when it has lost its leader: the server puts it
-        // a step behind them. MERC ACCOUNTS ONLY (IsMerc), the leader of its OWN fellowship only, and only when
-        // the leader is out of reach (another landblock, or more than CATCHUP_MIN metres away).
+        // /mercfollow: a sellsword rejoins its leader
         const float CATCHUP_MIN = 15f;
 
         public static void Register()
@@ -127,18 +100,13 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>/pop: WHO is online, not only how many (owner, 2026-10-13: "make /pop list all players online for all
-    /// players. dont include the mercenaries in that"). Every player's name, sorted, a dozen to a line; the Hollow
-    /// Company is neither counted nor named. The Borg are counted and listed with the players (owner 2026-11-08).</summary>
+    /// <summary>/pop: WHO is online, not only how many.</summary>
     [HarmonyPatch(typeof(PlayerCommands), nameof(PlayerCommands.HandlePop))]
     public static class MercenaryPop
     {
         static bool Prefix(Session session)
         {
-            // THE BORG ARE LISTED AND COUNTED WITH THE PLAYERS (owner 2026-11-08: "in the /pop command just include borg
-            // along side normal players the word borg in their names is enough to distinguish them"; "i want the borg to
-            // count in the population count under the radar"): one sorted list, the "of Borg" names tell them apart. The
-            // Hollow Company stays out of the count and the list.
+            // The borg are listed and counted with the players: one sorted list, the "of Borg" names tell them apart.
             List<string> names;
             try { names = PlayerManager.GetAllOnline().Where(p => !Mercenaries.IsMerc(p) || BorgSwitch.IsBorg(p)).Select(p => p.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(); }
             catch { names = new List<string>(); }
@@ -147,9 +115,6 @@ namespace RevivalGuard
                 if (session == null) Console.WriteLine(line);
                 else session.Network?.EnqueueSend(new GameMessageSystemChat(line, ChatMessageType.Broadcast));
             }
-            // ONE LINE, the names after the count (owner 2026-10-14: "its still spamming"): every client hides the reply
-            // to its own automatic @pop by the "Current world population:" line, so names on a line of their own showed
-            // in chat each poll on any client older than 0.1.41. A name holds no digits, so the count still parses.
             Say($"Current world population: {names.Count:N0}" + (names.Count > 0 ? " (" + string.Join(", ", names) + ")" : ""));
             return false;
         }

@@ -10,28 +10,10 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AN ADMIN'S DAMAGE BOOST, FOR TESTING BOSS FIGHTS (owner 2026-09-29: an admin character "needs to do more damage so
-    /// he can win these boss fights while testing"). Ours, not retail, and never a player's.
-    ///
-    ///   @dmgboost on [x]   your damage to creatures times x (default 5, 1.5 to 1000)
-    ///   @dmgboost off      back to normal
-    ///   @dmgboost          what it is set to
-    ///
-    /// The admin panel's Self tab has it as the "Damage x5" switch (AcAdminHud reads the reply line).
-    ///
-    /// SAFE BY CONSTRUCTION: the command is AccessLevel.Admin, the boost lives in memory only (a restart or a
-    /// relog to another character drops it; nothing is written to anyone's character), and the hooks re-check
-    /// the attacker's session access level on every hit, so a boost can never outlive the rights that set it.
-    /// Creatures only: a boosted admin's damage to a PLAYER is untouched.
-    ///
-    /// What it multiplies: melee and missile hits (DamageEvent.CalculateDamage, which Player_Combat.cs and
-    /// ProjectileCollisionHelper.cs both land) and war-magic bolts (SpellProjectile.CalculateDamage).
-    /// Life-magic drains and harms are left alone.
-    /// </summary>
+    /// <summary>An admin's damage boost, for testing boss fights.</summary>
     internal static class DamageBoost
     {
-        const float DEFAULT = 5f, MIN = 1.5f, MAX = 1000f;   // 1000: enough to test a world boss (Bael, 1.25M health), owner 2026-09-29
+        const float DEFAULT = 5f, MIN = 1.5f, MAX = 1000f;
         static readonly ConcurrentDictionary<uint, float> s_On = new ConcurrentDictionary<uint, float>();
         static bool s_Registered;
 
@@ -80,8 +62,7 @@ namespace RevivalGuard
                 : "[DamageBoost] (ours) OFF: your damage is normal.");
         }
 
-        /// <summary>Melee and missile: the DamageEvent itself, so the "You hit ... for N" line shows the boosted
-        /// number that actually lands (Player_Combat.cs and ProjectileCollisionHelper.cs both read .Damage).</summary>
+        /// <summary>Melee and missile: the DamageEvent itself, so the "You hit ... for N" line shows the boosted number that actually lands.</summary>
         [HarmonyPatch(typeof(DamageEvent), nameof(DamageEvent.CalculateDamage))]
         static class MeleeMissile
         {

@@ -4,13 +4,7 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// PK NIGHT v2, THE MOVING HILL (owner 2026-11-22, docs/proposals/pk-night-v2.md), the pure half (tools/nettest compiles it
-    /// by path, PkNightCase). Within the night's spot the hill moves every HILL_MOVE_MINUTES between the spot's points (the
-    /// first is the spot's own centre), with a warning a minute before; its edge is marked by event objects (PkNightHill.cs)
-    /// and every BOARD_LINE_SECONDS each player near it is told who holds it. Scoring is unchanged (PkNightRules.Tick).
-    /// The hill's place is read from the clock (minutes since the start), so a restart mid-round puts it back where it was.
-    /// </summary>
+    /// <summary>PK night v2, the moving hill, the pure half (tools/nettest compiles it by path, PkNightCase).</summary>
     public static partial class PkNight
     {
         public const int HILL_MOVE_MINUTES = 10;
@@ -20,18 +14,11 @@ namespace RevivalGuard
         /// <summary>The battlefield line: this often, to each player within the radius plus BOARD_LINE_NEAR metres.</summary>
         public const double BOARD_LINE_SECONDS = 15, BOARD_LINE_NEAR = 30;
 
-        /// <summary>Each spot's hill points as map coordinates (north, east), the first being the spot's centre (SPOTS), the
-        /// others 60-120 m on from the one before. Picked 2026-11-22 from the client's walk grid
-        /// (Assets/StreamingAssets/walkgrid.bin, the atlas's 4 m ground squares): the centre and the 20 m around each point
-        /// walkable (no water, building or steep ground) and most of the 40 m circle too. The Dark Isle's also stay 48 m or
-        /// more from the event portal's landing and the way-home portal. A spot not listed has one point, its centre.</summary>
+        /// <summary>Each spot's hill points as map coordinates, the first being the spot's centre</summary>
         public static readonly Dictionary<string, (double Ns, double Ew)[]> HILLS = new Dictionary<string, (double, double)[]>
         {
             ["darkisle"] = new[] { (84.72, 58.42), (84.47, 58.4367), (84.77, 58.07), (84.87, 57.8367) },
             ["zombiecastle"] = new[] { (-45.2, 39.1), (-45.2833, 38.6167), (-45.4833, 38.8167), (-45.35, 39.2833) },
-            // 2026-11-27, same walk grid: the hilltop is a shelf of about 150 x 90 m (z 340-360), so its points loop round
-            // it and their 40 m circles are 84-99% walkable (the west one 49 m from the castle portal's landing; every
-            // point 87 m or more from the Tower Guardian)
             ["asheronscastle"] = new[] { (21.4667, 69.28), (21.3, 69.48), (21.4, 69.08), (21.5333, 69.48) },
             ["colosseum"] = new[] { (-11.24, 37.54), (-11.3233, 37.0567), (-11.0567, 37.0567), (-11.0567, 37.39) },
             ["empyreanruin"] = new[] { (81.4, -32.9), (81.3167, -33.3833), (81.5833, -33.3833), (81.3167, -33.1167) },
@@ -39,11 +26,8 @@ namespace RevivalGuard
             ["gaerlan"] = new[] { (57.01, 44.79), (56.9267, 44.3067), (57.1933, 44.3067), (56.9267, 44.5733) },
             ["tumerokfort"] = new[] { (-50.7, -81.8), (-50.25, -81.75), (-50.3833, -81.4833), (-50.65, -81.55) },
             ["mitemaze"] = new[] { (41.08, 57.03), (40.9967, 56.5467), (40.73, 56.68), (40.8633, 56.9467) },
-            // 2026-11-27: open grass east of the walls, all four 67 m or more from the Risen Shelf portal and 84 m or more
-            // from the east wall (the south-east one 38 m from the hand-started Omens raid generator)
             ["arwiclawn"] = new[] { (33.4, 57.3), (33.7333, 57.3667), (33.4667, 57.7), (33.1667, 57.5333) },
-            // the Darktide recall spots (owner 2026-11-27), same walk grid: every 20 m round a point walkable, the 40 m
-            // circle 99-100%, every point 70 m or more from anything placed
+            // the Darktide recall spots, same walk grid
             ["aphuslassel"] = new[] { (2.2747, 94.7403), (2.3413, 94.2737), (2.008, 94.0737), (2.2747, 94.0737) },
             ["sclavavania"] = new[] { (-22.321, 65.519), (-22.4543, 65.0523), (-22.2543, 64.8523), (-22.521, 64.8523) },
             ["sanctuary"] = new[] { (-82.0833, 92.9), (-82.0167, 92.5), (-82.4833, 92.5), (-82.2167, 92.6333) },
@@ -77,8 +61,7 @@ namespace RevivalGuard
 
         public enum HillNote { Warn, Move }
 
-        /// <summary>The move line or its one-minute warning, if one is due now (each once, in a short window: a line the server
-        /// slept through is skipped, never said late). Step k (1, 2, ...) is the k-th move. Uses live.Said.</summary>
+        /// <summary>The move line or its one-minute warning, if one is due now.</summary>
         public static (HillNote note, int step)? HillDue(Live live, Spot s, double now)
         {
             if (live == null || HillPoints(s).Length <= 1) return null;
@@ -134,9 +117,7 @@ namespace RevivalGuard
             return $"{s / 60}:{s % 60:00}";
         }
 
-        /// <summary>The battlefield line (every BOARD_LINE_SECONDS to each player near the hill): who holds it, their time,
-        /// the leader, the time left and the next move. mySide 0: the reader counts for no side (not a player killer, or
-        /// benched).</summary>
+        /// <summary>The battlefield line: who holds it, their time, the leader, the time left and the next move. mySide 0</summary>
         public static string HillLine(Live live, Spot spot, uint mySide, double now)
         {
             var parts = new List<string>();
@@ -172,8 +153,7 @@ namespace RevivalGuard
             return list;
         }
 
-        /// <summary>Which set of markers should stand now: null when none (no round, or its time is up), else a key that
-        /// changes when the hill moves (or the radius or the marker weenies change), so the old ring is removed.</summary>
+        /// <summary>Which set of markers should stand now</summary>
         public static string MarkerKey(Live live, Spot s, double now, double radius, string weenies = "") =>
             live == null || s == null || now >= live.EndsAt ? null : $"{s.Key}/{HillIndex(live, s, now)}/{radius:0}/{weenies}";
 
@@ -188,10 +168,6 @@ namespace RevivalGuard
 
         public enum MarkerDo { Keep, Make, Wait }
 
-        /// <summary>One marker on a tick (the Gateway rule, PkNightGate.Gone): never made, make it (this loads its landblock
-        /// once); destroyed, or out of the world past `remakeAfter` seconds (a landblock unload takes an unsaved object
-        /// with it), make it again only where its landblock is loaded (a player came back), so an empty field is not
-        /// kept awake; otherwise keep it.</summary>
         public static MarkerDo MarkerCheck(bool made, bool destroyed, bool inWorld, double age, bool landblockLoaded, double remakeAfter = 30)
         {
             if (!made) return MarkerDo.Make;

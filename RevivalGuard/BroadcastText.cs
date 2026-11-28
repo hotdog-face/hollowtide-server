@@ -7,15 +7,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// RETAIL'S WORDING ON FEAT BROADCASTS (owner 2026-11-02: "bring back retail's server-wide announcements of player
-    /// feats"; inventory in docs/findings/feat-broadcasts-2026-11-02.md). ACE already sends every retail feat line the
-    /// world data holds (Gauntlet and Colosseum Champion, the "Attention, all!" titles, Queenslayer, boss kills) and the
-    /// server-wide PK kill line; two of them print differently from retail's screenshots:
-    ///   - the PK kill line says "The kill occured at"; retail "The kill occurred at" (BroadcastTextRule.RetailKillAt);
-    ///   - Aerbax's Shadow's "%tn 's Fellowship has defeated Aerbax's Shadow!" prints "X 's"; retail "X's".
-    ///   @modifybool rg_broadcast_retail_text false   ACE's text for both
-    /// </summary>
+    /// <summary>Retail's wording on feat broadcasts.</summary>
     static class BroadcastText
     {
         internal const string P_ON = "rg_broadcast_retail_text";

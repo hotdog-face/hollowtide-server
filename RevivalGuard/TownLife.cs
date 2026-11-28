@@ -18,34 +18,7 @@ using static RevivalGuard.TownLifeRule;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// HOLTBURG'S TOWN LIFE (owner 2026-11-14: "bring Holtburg's NPCs to life the way the Royal Guards were"; and "i dont
-    /// want holtberg to be flooded with random npc talking ... keep it at a reasonable limit"). Ours, not retail
-    /// (docs/DIVERGENCES.md; findings docs/findings/holtburg-town-life-2026-11-14.md). ONE data-driven layer for the town's
-    /// placed NPCs (TownLife.json: who, role, post, rounds, gestures, lines, exchanges, rumours), the decisions in
-    /// TownLifeRule (pure, nettest TownLifeCase).
-    ///
-    ///   SILENT LIFE (most of it)  rounds out and back along legs checked offline against the DATs
-    ///             (tools/townlife/check_legs.py; ACE's MoveTo walks them server-side as the guards' patrols), stays through
-    ///             the evening (patrons drift into the tavern hall) or the night (townsfolk at their doors), idle gestures
-    ///             (ACE motion commands, as ACE's own emote Motion step sends them).
-    ///   SPEECH (the seasoning)    unprompted lines only through the town's speech budget (TownLifeRule.Budget), which the
-    ///             Royal Guards and Azimar's idle lines also go through; prompted answers to a greeting or keyword in local
-    ///             chat; an arrival greeting by name and visit count from the greeters; rare two-NPC exchanges; one NPC at
-    ///             most reacts to an event (a monster in town, a PK death, a level-up); rumours by level from the tavern.
-    ///   BUSINESS FIRST            a Use, an NPC's own emote chain or a vendor's customer stops it where it stands; it walks
-    ///             back to its post when that is over; a player at a vendor's post calls it back. Nothing here blocks a Use, a
-    ///             sale or a quest step (retail's emotes run untouched; this only adds).
-    ///
-    /// Switches (registered, read live):
-    ///   @modifybool rg_town_life false          the whole layer off: NPCs walk back to their posts and stand as in retail
-    ///   @modifybool rg_town_life_speech false   silent life only: no line from the layer (guards' and Azimar's idle lines too)
-    ///   @modifystring rg_town_life_off "patron,dwennon"   roles or NPC keys turned off (comma list)
-    ///   @modifydouble rg_town_life_line_gap_s 60 | _npc_gap_s 300 | _exchange_gap_s 600 | _talk_m 10 | _greet_gap_s 3600
-    ///                 | _again_gap_s 60 | _arrival_gap_s 300 | _screen_s 6 | _gesture_minutes 3
-    ///   @modifylong rg_town_life_trace 1        every line, routine step and gesture in the server log
-    ///   @townlife [status | reload | moment day|evening|night|auto | event raid|pkdeath]   (Developer)
-    /// </summary>
+    /// <summary>Holtburg's town life.</summary>
     static class TownLife
     {
         internal const string P_ON = "rg_town_life", P_SPEECH = "rg_town_life_speech", P_OFF = "rg_town_life_off", P_TRACE = "rg_town_life_trace";
@@ -106,8 +79,7 @@ namespace RevivalGuard
         static Data s_Data = new Data();
         static Dictionary<uint, Def> s_Defs = new Dictionary<uint, Def>();
         static volatile HashSet<uint> s_Guids = new HashSet<uint>();
-        // generator-spawned NPCs (Alcott, Buckminster, the tavern's quest folk...) get a new guid each spawn: matched by
-        // weenie inside Holtburg's landblock instead (each roster weenie stands once in the town)
+        // generator-spawned NPCs get a new guid each spawn: matched by weenie inside Holtburg's landblock instead
         static Dictionary<uint, Def> s_ByWcid = new Dictionary<uint, Def>();
         static volatile HashSet<uint> s_Wcids = new HashSet<uint>();
         static readonly HashSet<uint> s_Live = new HashSet<uint>();   // guids of the town NPCs seen ticking (Use lookups)
@@ -184,15 +156,10 @@ namespace RevivalGuard
             return rd.ReadToEnd();
         }
 
-        // Every TownLife.json shipped before the .seed sidecar (SeedFileRule.Hash of each git version): a sidecar-less
-        // file matching one was never hand-edited, so the newer embedded copy may replace it. Frozen: later versions
-        // are tracked by the sidecar.
         static readonly string[] s_SeedPast = { "b3e5d0de99a00c26", "7eda957a397af871" };
         static string SeedSidecar => FilePath + ".seed";
 
-        /// <summary>Bring the file beside the dll up to the embedded copy when it is an untouched older one we wrote
-        /// (SeedFileRule); a hand-edited file is kept with one WARN unless <paramref name="force"/> (@townlife reload
-        /// embedded). The replaced file is kept as TownLife.json.before-&lt;version&gt;. Returns what happened.</summary>
+        /// <summary>Bring the file beside the dll up to the embedded copy when it is an untouched older one we wrote</summary>
         static string SyncSeed(bool force)
         {
             lock (s_Lock)
@@ -254,8 +221,7 @@ namespace RevivalGuard
             PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true,
         };
 
-        /// <summary>The data file beside the dll (seeded from the embedded copy), read again when it changes; a file that will
-        /// not parse keeps the last good data.</summary>
+        /// <summary>The data file beside the dll, read again when it changes; a file that will not parse keeps the last good data.</summary>
         static void Load(bool force)
         {
             lock (s_Lock)
@@ -498,7 +464,7 @@ namespace RevivalGuard
             bool busyEmotes = c.EmoteManager?.IsBusy ?? false;
             bool used = now - n.UsedAt < 60;
             bool customer = d.D.Vendor && listeners.Any(l => l.Dist <= BUSINESS_M);
-            bool hold = used || customer || busyEmotes && now - n.UsedAt < 300;   // a Use and the emotes it set off; its own heartbeat emotes are not business: they only hold off the next move
+            bool hold = used || customer || busyEmotes && now - n.UsedAt < 300;   // a Use and the emotes it set off
             // summon: switched off, an alarm, or a player waiting at the post of a vendor or quest NPC that is away
             bool summon = !on || s_Event.key == "raid" && now < s_Event.until;
             if (!summon && Away(n.R) && (d.D.Vendor || d.D.Quest) && nearest != null)
@@ -571,8 +537,7 @@ namespace RevivalGuard
             catch { return 0; }
         }
 
-        /// <summary>One gesture, as ACE's emote Motion step plays it (the guards' Play): broadcast, then Ready when it ends. A
-        /// motion table without the gesture (a non-human NPC) plays nothing.</summary>
+        /// <summary>One gesture, as ACE's emote Motion step plays it (the guards' Play): broadcast, then Ready when it ends.</summary>
         static bool Play(Npc n, MotionCommand cmd, double delay, string why)
         {
             var c = n.Obj;
@@ -627,9 +592,7 @@ namespace RevivalGuard
         }
 
         // ---------------------------------------------------------------- speech
-        /// <summary>A line from the first pool that has one nobody listening has heard lately (each listener remembers its last
-        /// 24 town lines; the box hour of 2026-11-14 had three NPCs say the same news line within three minutes). When every
-        /// pool is spent for them, the first usable line is said anyway. Lines needing a token nobody can fill are skipped.</summary>
+        /// <summary>A line from the first pool that has one nobody listening has heard lately.</summary>
         static string FromPools(Npc n, IEnumerable<string> pools, Player p, out string pool, IList<Listener> hearers = null)
         {
             pool = null;
@@ -738,9 +701,7 @@ namespace RevivalGuard
             return PlayerManager.GetOnlinePlayer(id);
         }
 
-        /// <summary>A rumour for the player's level: from every band that holds it, one they have not heard lately; none left
-        /// (box 2026-11-14: the same daily twice in two minutes), null, and the caller says something else. Unprompted
-        /// rumours only point at what is fresh; an asked one may repeat.</summary>
+        /// <summary>A rumour for the player's level</summary>
         static string Rumour(Player p, bool asked = false)
         {
             var bands = s_Data.Rumours.Select(r => (r.Min, r.Max)).ToList();
@@ -758,8 +719,7 @@ namespace RevivalGuard
             }
         }
 
-        /// <summary>A greeter greets a player who comes within a few metres: by name, visit count, level, title or a fresh
-        /// death. Prompted (not counted against the budget), once per player per NPC per GreetGap, once per ArrivalGap per player.</summary>
+        /// <summary>A greeter greets a player who comes within a few metres: by name, visit count, level, title or a fresh death.</summary>
         static void Arrivals(Npc n, double now, List<Listener> listeners)
         {
             if (!n.Def.D.Greets || n.R.Held || n.Obj.EmoteManager?.IsBusy == true) return;
@@ -827,8 +787,7 @@ namespace RevivalGuard
         }
 
         // ---------------------------------------------------------------- the budget, for the guards and Azimar
-        /// <summary>For another module's unprompted line (the Royal Guards' ambient lines, Azimar's idle line): true = say it
-        /// now (the budget has counted it). Range: the listeners it is counted for (say it to that range).</summary>
+        /// <summary>For another module's unprompted line: true = say it now.</summary>
         internal static bool TryAmbient(WorldObject npc, out float range)
         {
             range = s_Budget.L.HearRange;
@@ -843,8 +802,7 @@ namespace RevivalGuard
         internal static float HearRange => s_Budget.L.HearRange;
 
         // ---------------------------------------------------------------- events
-        /// <summary>Something happened in town: a monster in the streets (the guards' call-out), a PK death. For a while the
-        /// NPCs near it go home (raid) and the first one whose turn comes says one line about it.</summary>
+        /// <summary>Something happened in town: a monster in the streets (the guards' call-out), a PK death.</summary>
         internal static void Notice(string key, Vector2 at, double seconds)
         {
             if (!On) return;
@@ -899,9 +857,7 @@ namespace RevivalGuard
             lock (s_Lock) if (s_Npcs.TryGetValue(target, out var n)) n.UsedAt = Now;
         }
 
-        /// <summary>A player spoke in local chat: the nearest town NPC within a few metres (or one named) answers a greeting
-        /// or a keyword. Prompted: not counted against the budget, but once per player per NPC per GreetGap for a greeting; a
-        /// repeat greeting inside it gets a short acknowledgement (greet.again) or, on a busy screen, a nod (Budget.TryAgain).</summary>
+        /// <summary>A player spoke in local chat: the nearest town NPC within a few metres (or one named) answers a greeting or a keyword.</summary>
         internal static void Heard(Player p, string message)
         {
             if (!On || !Speech || p?.Location == null || p.Location.Landblock != LB || s_Npcs.Count == 0) return;
@@ -941,7 +897,7 @@ namespace RevivalGuard
             string line;
             var mo = NowMoment();
             if (again) line = nodOnly ? null : FromPools(best, new[] { $"npc.{best.Def.D.Key}.again", "greet.again" }, p, out _)
-                ?? AGAIN[s_Rng.Next(AGAIN.Length)];   // a TownLife.json seeded before greet.again existed (the live copy is never re-seeded)
+                ?? AGAIN[s_Rng.Next(AGAIN.Length)];   // a TownLife.json seeded before greet.again existed
             else if (kw == "rumour") line = best.Def.D.Rumours ? Rumour(p, true) : FromPools(best, new[] { "kw.rumour.other" }, p, out _);
             else if (kw == "drink") line = FromPools(best, best.Def.D.Role is "barkeeper" or "server" ? new[] { "kw.drink" } : new[] { "kw.drink.other" }, p, out _);
             else if (kw != null) line = FromPools(best, new[] { $"npc.{best.Def.D.Key}.kw.{kw}", "kw." + kw }, p, out _);
@@ -962,7 +918,7 @@ namespace RevivalGuard
                 try
                 {
                     double turn = npc.R.State == RState.Post || npc.R.State == RState.Paused ? npc.Obj.Rotate(p) : 0;
-                    // a repeat hello: a nod, or a wave from an NPC with no nod (box 2026-11-14: a patron without Nod made no sign)
+                    // a repeat hello: a nod, or a wave from an NPC with no nod
                     var ack = npc.Def.Gestures.Contains(MotionCommand.Nod) ? MotionCommand.Nod : npc.Def.Gestures.Contains(MotionCommand.Wave) ? MotionCommand.Wave : MotionCommand.Invalid;
                     if (again && ack != MotionCommand.Invalid) Play(npc, ack, turn + 0.1, "again");
                     else if (greet && npc.Def.Gestures.Contains(MotionCommand.Wave)) Play(npc, MotionCommand.Wave, turn + 0.1, "answer");
@@ -1038,8 +994,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Retail's own heartbeat chatter of a town NPC (Buckminster's, the Pathwarden's) goes through the town's speech
-    /// budget too: a heartbeat set that would speak is skipped when the budget says no (motions alone always pass).</summary>
+    /// <summary>Retail's own heartbeat chatter of a town NPC goes through the town's speech budget too</summary>
     [HarmonyPatch(typeof(ACE.Server.WorldObjects.Managers.EmoteManager), nameof(ACE.Server.WorldObjects.Managers.EmoteManager.GetEmoteSet),
         new[] { typeof(EmoteCategory), typeof(string), typeof(VendorType?), typeof(uint?), typeof(bool) })]
     static class TownLifeHeartbeat

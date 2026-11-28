@@ -6,20 +6,7 @@ using System.Text.Json.Serialization;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// BOSS KILL NEWS, PURE (no ACE types): BossBroadcast.cs runs it, tools/nettest BossBroadcastCase checks it. Ours, not
-    /// retail (owner 2026-11-21: "add global messages for all bosses and other notable kills on the server"); retail bosses
-    /// mostly died in silence. docs/findings/boss-broadcast-2026-11-21.md.
-    ///
-    /// THE LIST: BossBroadcast.json (embedded, written by tools/bossbroadcast/build_list.py from the AC wiki's "Boss
-    /// Creatures" category matched to ace_world creature names, plus our own event, raid and festival bosses), then the
-    /// owner's overrides (BossBroadcastOverrides.json beside the dll, also written by @bossbroadcast add|remove): "allow"
-    /// adds or renames, "deny" silences. Bosses that already have a world line of their own (world bosses, the Lightbringer
-    /// scene, MonsterFun champions) are in the embedded "own" list and never get a second one.
-    ///
-    /// LIMITS: once per creature instance; a per-boss cooldown (a farmed boss speaks once per CooldownSeconds); a global
-    /// cap of PerMinute lines in any 60 s.
-    /// </summary>
+    /// <summary>Boss kill news, PURE (no ACE types): BossBroadcast.cs runs it, tools/nettest BossBroadcastCase checks it.</summary>
     static class BossBroadcastRule
     {
         public const int COOLDOWN_S = 600, PER_MINUTE = 3;
@@ -80,7 +67,7 @@ namespace RevivalGuard
             return all;
         }
 
-        /// <summary>The rate limits. Not thread safe: the caller locks.</summary>
+        /// <summary>The rate limits.</summary>
         public sealed class Limiter
         {
             readonly Dictionary<uint, double> m_LastByWcid = new Dictionary<uint, double>();
@@ -89,11 +76,11 @@ namespace RevivalGuard
             readonly Queue<double> m_Recent = new Queue<double>();
             public int Said, Cooled, Capped;
 
-            /// <summary>Should this death be said now? Records it when it is.</summary>
+            /// <summary>Should this death be said now?</summary>
             public Why Decide(double now, uint wcid, uint instance, int cooldownS, int perMinute)
             {
                 if (m_Instances.Contains(instance)) return Why.SameInstance;
-                Remember(instance);   // whatever happens next, this body never speaks
+                Remember(instance);
                 if (m_LastByWcid.TryGetValue(wcid, out var last) && now - last < cooldownS) { Cooled++; return Why.Cooldown; }
                 while (m_Recent.Count > 0 && now - m_Recent.Peek() >= 60) m_Recent.Dequeue();
                 if (m_Recent.Count >= perMinute) { Capped++; return Why.GlobalCap; }

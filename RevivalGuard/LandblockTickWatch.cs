@@ -11,14 +11,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// SLOW LANDBLOCK TICKS, NAMED (2026-10-20: world-tick stalls of 1-4 s, rising, inside the landblock tick). Each
-    /// landblock's TickMultiThreadedWork / TickSingleThreadedWork is timed; one over 500 ms logs the landblock, its
-    /// phases (ACE reports each phase's time to ServerPerformanceMonitor.AddToCumulativeEvent, read here) and the
-    /// slowest generator calls (GeneratorUpdate / GeneratorRegeneration). Fast ticks cost a few timestamps on the
-    /// ticking thread (landblock groups tick in parallel, so the state is per thread). At most one line per
-    /// landblock per 30 s, with a count of the ones held back.
-    /// </summary>
+    /// <summary>Slow landblock ticks, NAMED.</summary>
     static class LandblockTickWatch
     {
         internal const double DEFAULT_SLOW_MS = 500;
@@ -100,8 +93,7 @@ namespace RevivalGuard
             f.Phases.Add((phase.StartsWith("Landblock_Tick_") ? phase.Substring(15) : phase, seconds * 1000));
         }
 
-        /// <summary>One queued action (ActionEventDelegate.Act) on a ticking landblock: the slow ones are named by the
-        /// delegate's method (a lambda's name carries its enclosing method) and its target object.</summary>
+        /// <summary>One queued action on a ticking landblock: the slow ones are named by the delegate's method and its target object.</summary>
         internal static void Act(ACE.Server.Entity.Actions.ActionEventDelegate a, long start)
         {
             var f = t_Frame;

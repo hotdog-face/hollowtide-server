@@ -11,13 +11,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// FALLS, TRACED (FallWatch, 7 days to 2026-10-24: 188 hurt landings). A PK's server body is simulated between reports
-    /// (ACE FastTick) and each report only moves it, keeping its velocity. This records, per player, the client's own
-    /// reports (AutonomousPosition / MoveToState, contact byte, z) and jumps, for FallWatch's line and FallGuard's rule.
-    /// With rg_fall_trace on (default off; test shards only) it also logs every report, jump and moving server tick of
-    /// PK players: the server body's spot, velocity and contact beside what the client said.
-    /// </summary>
+    /// <summary>FALLS, TRACED.</summary>
     static class FallTrace
     {
         internal const string P_TRACE = "rg_fall_trace";
@@ -110,8 +104,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>Marks the span in which UpdatePlayerPosition applies a client report (so a landing found there is a
-    /// "report" landing, not a tick landing), and traces the body before and after.</summary>
+    /// <summary>Marks the span in which UpdatePlayerPosition applies a client report, and traces the body before and after.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.UpdatePlayerPosition))]
     static class FallTraceUpdate
     {
@@ -142,8 +135,6 @@ namespace RevivalGuard
         static Exception Finalizer(Exception __exception, bool forceUpdate) { if (!forceUpdate) FallTrace.t_InReport = false; return __exception; }
     }
 
-    /// <summary>Server ticks of a moving PK body (between reports), traced when the contact state or the vertical
-    /// speed band changes, so a fall the client never made shows its whole path.</summary>
     [HarmonyPatch(typeof(Player), nameof(Player.UpdatePlayerPhysics))]
     static class FallTraceTick
     {

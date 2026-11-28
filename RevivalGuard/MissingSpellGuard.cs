@@ -10,18 +10,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A SCROLL WHOSE SPELL DOES NOT EXIST CANNOT CRASH THE SERVER (box test shard, 2026-10-24: four crashes).
-    /// Scroll.SetEphemeralValues builds `new Spell(SpellDID)` and reads
-    /// its Name; a spell id missing from the portal DAT's spell table leaves the spell's DAT half null and Name throws.
-    /// It runs in the Scroll constructor, so a vendor opening (LoadInventory creates every item it sells), loot, @create
-    /// or a character loading one all threw on the landblock tick and the process died. Retail data has no such scroll;
-    /// imported or hand-made data can.
-    ///   - Vendor.LoadInventoryItem: a scroll weenie whose spell is missing is left off the shop list.
-    ///   - Scroll.SetEphemeralValues: such a scroll is built without a spell (Spell stays null, which ActOnUse already
-    ///     answers with "SpellDID not found"), so every other path makes an inert scroll instead of crashing.
-    /// Each logs once per weenie.
-    /// </summary>
     static class MissingSpellGuard
     {
         static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> s_Said = new System.Collections.Concurrent.ConcurrentDictionary<uint, bool>();
@@ -46,7 +34,7 @@ namespace RevivalGuard
             static bool Prefix(Vendor __instance, uint weenieClassId) => !LeftOffShop(__instance?.Name, weenieClassId);
         }
 
-        /// <summary>A shop item to leave off the list: a scroll whose spell does not exist. Also used by VendorPrewarm.</summary>
+        /// <summary>A shop item to leave off the list: a scroll whose spell does not exist.</summary>
         internal static bool LeftOffShop(string vendorName, uint weenieClassId)
         {
             try

@@ -17,18 +17,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE SCAVENGER HUNT (retail beta 1999-06-14; revived Jun 14 yearly, docs/EVENT-TESTS/scavenger-hunt.md). The
-    /// advocates "arranged a contest to recognize adventurers bringing them the most valuable collection of specified
-    /// monster trophies within a six-hour span" (wiki rev 475541); nothing else of it survives, so all but the trophies
-    /// and the six hours is ours. While the calendar's 'scavengerhunt' is on, from 18:00 to midnight retail time
-    /// (UTC-5), the row ScavengerHunt stands a Herald of the Advocates in Holtburg, Shoushi and Yaraq
-    /// (2027-06-14-scavenger-1-hunt.sql). Hand a herald a trophy on the list and its points are added to your tally
-    /// (any herald, one tally); standings go out on the hour, and at the end the three best tallies each get a Gem of
-    /// Wealth (pool item 11825, the owner's yes pending: docs/EVENT-TESTS/event-rewards.md) through the world-boss
-    /// reward queue. Mercenaries are not counted. The tally survives a restart (ScavengerHunt.json); a run that has
-    /// ended does not start again the same day. Admins: @scavengerhunt [start [minutes] | stop | status].
-    /// </summary>
     internal static class ScavengerHunt
     {
         const string FESTIVAL = "scavengerhunt", ROW = "ScavengerHunt", STATE_FILE = "ScavengerHunt.json";
@@ -36,7 +24,7 @@ namespace RevivalGuard
         const uint PRIZE = 11825;                  // Gem of Wealth (unreleased pool)
         const int START_HOUR = 18, HOURS = 6;      // retail local time; the six-hour span is retail's
 
-        /// <summary>The list (retail's trophies; the points are ours). Keep in step with gen_retired_jun14.py.</summary>
+        /// <summary>The list (retail's trophies; the points are ours).</summary>
         internal static readonly (uint wcid, string name, int points)[] TROPHIES =
         {
             (3669, "Drudge Charm", 1), (3693, "Banderling Scalp", 1), (3687, "Skeleton's Skull", 2), (4239, "Reedshark Hide", 3),

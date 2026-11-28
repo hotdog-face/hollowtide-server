@@ -3,22 +3,7 @@ using System.Collections.Generic;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure half of ElementalKnights (no ACE types; tools/nettest `elementalknight`). ELEMENTAL KNIGHT ARMOUR (owner
-    /// 2026-11-27: "the elemental knight armor in its various colors and dyeable. dont do the elemental body skin";
-    /// docs/findings/elemental-summons-armor-2026-11-27.md). The spiked plate the level-200 elemental summons and the
-    /// Empyrean knights wear, as five cosmetic pieces in retail's four finishes (one texture each, ClothingTables
-    /// 0x10000632-635), coloured by the piece's PaletteTemplate: the knights' own element tints, or a dye.
-    ///
-    /// Ids (tools/gpubox-ace/gen_elemental_knight.py writes the tables and the weenies with the same formulas):
-    ///   piece wcid PIECE0 + SLOTS x finish + slot, ClothingTable TABLE0 + SLOTS x finish + slot; tokens TOKEN0 + finish;
-    ///   the keeper KEEPER.
-    /// The colour: the armour's textures are indexed in its own palette 0x04001DEA, not the player's, so on a player retail
-    /// draws them in that natural palette whatever the template (CPartArray::SetPalette; the Red Bronze rule). So the
-    /// template is carried into the texture id instead: a worn piece's knight textures become our re-paletted ids
-    /// (client AcRepal, PALETTES index Repal(template)) in the wearer's ObjDesc. A template with no entry (21, the
-    /// knights' natural one) leaves the retail texture: the natural finish, on every client.
-    /// </summary>
+    /// <summary>The pure half of ElementalKnights (no ACE types; tools/nettest `elementalknight`).</summary>
     public static class ElementalKnightRule
     {
         public const int FINISHES = 4, SLOTS = 5;
@@ -36,8 +21,7 @@ namespace RevivalGuard
         public static bool IsTable(uint id) => id >= TABLE0 && id < TABLE0 + FINISHES * SLOTS;
         public static bool IsTexture(uint id) => Array.IndexOf(TEXTURE, id) >= 0;
 
-        /// <summary>The client's AcRepal.PALETTES index a template draws in, or -1 (natural). Must match AcRepal: 1-4 the
-        /// knights' element tints (templates 14 red, 2 blue, 8 green, 13 purple), 5-14 the retail dyes 84-93.</summary>
+        /// <summary>The client's AcRepal.PALETTES index a template draws in, or -1 (natural).</summary>
         public static int Repal(int? template)
         {
             switch (template)
@@ -61,17 +45,15 @@ namespace RevivalGuard
             return i < 0 || !IsTexture(newTexture) ? newTexture : RepalId(newTexture, i);
         }
 
-        // ------------------------------------------------------------------ who wears it (live ace_world 2026-11-27)
+        // ------------------------------------------------------------------ who wears it
         /// <summary>A creature wearing the armour: its finish (by its ClothingBase), the template its drop takes, its rate.</summary>
         public readonly record struct Knight(string Name, int Finish, int Template, double Chance);
 
-        /// <summary>The Guardians' rate (level 500, the rune table's 275-699 band) and the packs' (17-46 placed per spot,
-        /// so under the 5% band, as the bronze statues).</summary>
+        /// <summary>The Guardians' rate and the packs'.</summary>
         public const double GUARDIAN = 0.15, PACK = 0.02, TOKEN_CHANCE = 0.10;
         const int STEEL = 0, BLACK = 1, GILT = 2, MOSS = 3;
 
-        /// <summary>The Empyrean knights and guards, each with its own finish and colour. Caustic (acid) ones are natural
-        /// in retail; their drops take the acid summon's green (8) so the green tint has a source.</summary>
+        /// <summary>The Empyrean knights and guards, each with its own finish and colour.</summary>
         public static readonly Dictionary<uint, Knight> Knights = new()
         {
             [31972] = new("Flame Guardian", GILT, 14, GUARDIAN),           // level 500, one placed

@@ -2,10 +2,7 @@ using System.Collections.Generic;
 
 namespace RevivalGuard
 {
-    /// <summary>HelmOverHood's choice, pure (no ACE types), so tools/nettest compiles and checks it by path.
-    /// A worn robe whose ClothingTable puts a hood on the head (part 16) and a drawn helm both land in the ObjDesc;
-    /// the helm wins: the robe's head model and its head textures leave the desc, the helm's (or the wearer's own head)
-    /// stay. Ticket 261120-0019.</summary>
+    /// <summary>HelmOverHood's choice, pure (no ACE types), so tools/nettest compiles and checks it by path.</summary>
     public static class HelmOverHoodRule
     {
         /// <summary>The head on every playable setup (ACE GetVisualPriority's HUMAN_HEAD; the bare head ACE adds).</summary>
@@ -28,8 +25,7 @@ namespace RevivalGuard
             return false;
         }
 
-        /// <summary>What to take out of the desc: the hooded pieces' head models and head textures, unless a drawn helm
-        /// uses the very same one (the Hood helm shares the Faran Robe with Hood's head model).</summary>
+        /// <summary>What to take out of the desc</summary>
         public static (HashSet<uint> Models, HashSet<(uint Old, uint New)> Textures) Drop(IEnumerable<Piece> worn)
         {
             var models = new HashSet<uint>();

@@ -10,16 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A MONSTER SENT HOME IS A TELEPORT (watchdog 261025-0027: Gotrok Extas drawn 48 m away and 21.9 m up the hill for
-    /// seconds, gliding home in Ready). ACE's Creature.ForceHome (a returning monster whose MoveTo made no progress for 5 s:
-    /// CancelMoveTo) puts the body at Home with SetPosition(Teleport) but sends an ordinary position update, the teleport
-    /// stamp unchanged. A client then treats it as a move (InterpolateTo: under 100 m outdoors) and slides the body there at
-    /// catch-up speed, 50 m in 5-7 s. Retail's server bumped the teleport stamp on every teleport (teleport_hook), so here the
-    /// position goes out again with the next stamp, as ACE's own admin moves send it (SendUpdatePosition(true)); a client
-    /// places the body at home at once. Retail had no ForceHome; this only makes ACE's say what it did.
-    ///   @modifybool rg_forcehome_stamp false   ACE's plain update again
-    /// </summary>
+    /// <summary>A monster sent home is a teleport.</summary>
     [HarmonyPatch]
     static class ForceHomeStamp
     {

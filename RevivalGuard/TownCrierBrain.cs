@@ -10,26 +10,10 @@ using System.Text.RegularExpressions;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE TOWN CRIER'S HEAD (owner 2026-11-09: "yes do the Holtburg Town Crier"). A deterministic question answerer over
-    /// our own data, no model and no network: the client's offline wiki pack (tools/wiki/pack.py: 34k fandom pages plus our
-    /// own), the Journal's Where next grounds (where-next.json), the quest tracker's travel layer (travel.json: portals,
-    /// the Town Network), the map's places (map-places.json) and the wiki's quest levels (quests.tsv). The folder is
-    /// `crier/` beside the mod dll, filled by tools/crier/sync-knowledge.sh from the client's StreamingAssets. Nothing
-    /// here is ACE: TownCrier.cs is the glue, and tools/crier/harness runs this file on its own for the Q&A sheet.
-    ///
-    /// A question is read as one of: a level ("where do I level at 30"), a place ("how do I get to Cragstone", "where
-    /// is the Mana Forge"), a thing ("what does a Greater Mana Stone do", "what level is the Acid Axe Quest"), a creature
-    /// ("where are drudges"), or small talk. The subject is looked up as a town, a wiki title (aliases followed; "quest"
-    /// tried on and off; the singular tried), a map place, then the closest title whose words the subject holds. Every
-    /// fact in an answer is quoted from that data: a page's summary, its "Getting there" and "Level range" lines (the
-    /// wiki builder wrote those from the game data), a ground's level band, a portal's destination. When nothing fits he
-    /// says so and points at the Journal's Wiki tab. No em dashes (house rule). He never explains how anything of ours
-    /// works under the hood: questions about bots, staff or the server get one polite line.
-    /// </summary>
+    /// <summary>The town crier's head.</summary>
     public sealed class TownCrierBrain
     {
-        public const string WHO = "Holtburg Herald";   // owner 2026-11-10: renamed so he is not taken for retail's Town Crier nearby
+        public const string WHO = "Holtburg Herald";
         const double KM_PER_UNIT = 0.24;          // one map unit is 240 m (ACE PositionExtensions.GetMapCoords)
         const double NEAR_KM = 1.2;               // nearer than this a route is just "walk"
         const int OPEN_SPAN = 40;                 // a ground with no top is good for this many levels above its floor (where-next tune)
@@ -42,7 +26,7 @@ namespace RevivalGuard
         static readonly Regex STOP = new Regex(@"^(the|a|an|of|to|in|on|at|and|or|for|is|are|it|its|my|me|i|you|some|this|that|one|do|does|did|can|could|would|should|will|find|get|spawn|spawns|live|there|here|near|around|from|with|where|what|how|who|be|was|were|any|all|go|about|up|down|out|into)$", RegexOptions.Compiled);
         static readonly CultureInfo IC = CultureInfo.InvariantCulture;
 
-        /// <summary>Who asks and from where. CrierNS/EW: where the crier himself stands (the lifestone question).</summary>
+        /// <summary>Who asks and from where.</summary>
         public sealed class Asker { public string Name = ""; public double NS = 42.1, EW = 33.6; public bool Outdoors = true; public int Level = 1; public double CrierNS = 42.1, CrierEW = 33.6; }
 
         sealed class Entry { public string Title; public uint Offset, Length; public byte Flags, Rank, Kind; }
@@ -252,8 +236,7 @@ namespace RevivalGuard
             return m_Quests.Count > 0;
         }
 
-        /// <summary>The client's route files' names (tools/crier/sync-knowledge.sh lists Assets/StreamingAssets/routes), so he
-        /// can say the Assistant knows the way: "Olthoi Brood Hive, level 20+".</summary>
+        /// <summary>The client's route files' names, so he can say the Assistant knows the way: "Olthoi Brood Hive, level 20+".</summary>
         bool LoadRoutes()
         {
             string p = Path.Combine(m_Dir, "routes.txt");
@@ -363,8 +346,7 @@ namespace RevivalGuard
             return p;
         }
 
-        /// <summary>The first line under a "Getting there" style heading; a line that only announces a list ("There are three
-        /// means:") takes the next one too.</summary>
+        /// <summary>The first line under a "Getting there" style heading; a line that only announces a list takes the next one too.</summary>
         static void Direct(PageInfo p, string line)
         {
             if (string.IsNullOrEmpty(line)) return;
@@ -413,9 +395,7 @@ namespace RevivalGuard
 
         static string FmtKm(double km) => km < 0.95 ? $"{(int)Math.Round(km * 100) * 10} m" : km < 10 ? $"{km.ToString("0.0", IC)} km" : $"{(int)Math.Round(km)} km";
 
-        /// <summary>From where the asker stands to a spot: "2.3 km north-east of here" with the best portal hop from
-        /// travel.json when it saves most of the walk: a surface portal near the asker whose far side is near the spot, or
-        /// in through a hub (the Town Network) and out again. Indoors the asker's spot is unknown, so only hub routes.</summary>
+        /// <summary>From where the asker stands to a spot</summary>
         string Route(Asker who, double ns, double ew)
         {
             double direct = who.Outdoors ? Km(who.NS, who.EW, ns, ew) : double.MaxValue;
@@ -448,8 +428,7 @@ namespace RevivalGuard
         static bool Usable(Portal p, Asker who) =>
             (p.Min == 0 || who.Level >= p.Min) && (p.Max == 0 || who.Level <= p.Max) && p.Flag == "" && p.Pk != "npk";
 
-        /// <summary>A portal named for the subject ("Town Network", "Facility Hub"): the nearest usable one, through a hub
-        /// if that is where it stands. Null when no portal carries all the subject's words.</summary>
+        /// <summary>A portal named for the subject: the nearest usable one, through a hub if that is where it stands.</summary>
         string PortalRoute(string subj, Asker who)
         {
             var words = Words(subj).Select(Stem).Where(w => !STOP.IsMatch(w) && w != "portal").ToList();
@@ -692,8 +671,7 @@ namespace RevivalGuard
             if (fit.Count == 0) fit = Fit(level, 5);
             if (fit.Count == 0) fit = Fit(level, 15);
             if (fit.Count == 0) { o.Add($"Hear ye! I know no grounds I would send a level {level} to. Your Journal's Where next page lists what fits you."); return; }
-            // Nearest first, as the Journal does, one entry per name; a ground whose band holds the level squarely beats one
-            // the level has outgrown or not yet reached.
+            // Nearest first, as the Journal does, one entry per name
             var picks = fit.GroupBy(g => g.Name).Select(gr => gr.OrderBy(g => Km(who.NS, who.EW, g.NS, g.EW)).First())
                            .OrderBy(g => Km(who.NS, who.EW, g.NS, g.EW) + Misfit(g, level) * 1.5).Take(3).ToList();
             var sb = new StringBuilder($"Hear ye! Good hunting for level {level}: ");
@@ -727,8 +705,7 @@ namespace RevivalGuard
         /// <summary>"where are drudges": grounds whose name holds the creature word, nearest first.</summary>
         bool TryCreatureGrounds(string subj, Asker who, List<string> o)
         {
-            // a word counts as a creature's when the wiki has a creature or family page by that name ("Mosswart", "Drudge
-            // Skulker"), so "Mana Forge" does not hunt at the Power Forges
+            // a word counts as a creature's when the wiki has a creature or family page by that name, so "Mana Forge" does not hunt at the Power Forges
             var words = Words(subj).Where(w => w.Length > 3 && !STOP.IsMatch(w) && !Regex.IsMatch(w, @"^(some|many|good|hunt|kill|creature|monster|monsters)$"))
                                    .Select(Stem).Where(IsCreatureWord).ToList();
             if (words.Count == 0) return false;
@@ -750,8 +727,7 @@ namespace RevivalGuard
             return true;
         }
 
-        /// <summary>True when the wiki has a creature page, or a creature family page, by this word (any of the title's
-        /// words is this stem and the page is kind creature or list): "drudge", "tusker", "mosswart"; not "forge".</summary>
+        /// <summary>True when the wiki has a creature page, or a creature family page, by this word</summary>
         bool IsCreatureWord(string stem)
         {
             if (m_TitleWords == null || !m_TitleWords.TryGetValue(stem, out var l)) return false;
@@ -784,8 +760,7 @@ namespace RevivalGuard
         }
 
         // ------------------------------------------------------------------ places and things
-        /// <summary>What a subject names: a town, a wiki page (aliases followed; "quest" tried on and off; singular tried), a
-        /// map place, or the closest title whose words the subject holds.</summary>
+        /// <summary>What a subject names: a town, a wiki page, a map place, or the closest title whose words the subject holds.</summary>
         Target Resolve(string subj)
         {
             subj = Regex.Replace(subj.Trim(), @"^(the|a|an|some|my) ", "");
@@ -847,8 +822,7 @@ namespace RevivalGuard
             return t;
         }
 
-        /// <summary>The best title sharing the subject's words: one whose every word the subject holds (and that covers at least
-        /// half the subject), else one holding every word of the subject, else (loose only) the title sharing the most words.</summary>
+        /// <summary>The best title sharing the subject's words</summary>
         Target Loose(string subj, bool strict)
         {
             if (m_TitleWords == null) return null;
@@ -881,8 +855,7 @@ namespace RevivalGuard
             return Exact(m_Pages[best].Title);
         }
 
-        /// <summary>"where is the tailor", "the barber in holtburg": of the pages whose text holds every word of the subject and
-        /// that stand somewhere (an @map line: NPCs, dungeons, places, towns), the nearest to the asker. Needs words.bin.</summary>
+        /// <summary>"where is the tailor", "the barber in holtburg"</summary>
         Target NearestNamed(string subj, Asker who)
         {
             if (m_Words == null) return null;
@@ -907,8 +880,7 @@ namespace RevivalGuard
             return best;
         }
 
-        /// <summary>A page kind that names one thing standing somewhere (or one thing to describe), as against a general page
-        /// ("Archmage", "Tailor": the trade, not a person; "Aerlinthe": the island) that the nearest named one may beat.</summary>
+        /// <summary>A page kind that names one thing standing somewhere, as against a general page that the nearest named one may beat.</summary>
         static bool IsNamedKind(string k) =>
             k == "npc" || k == "town" || k == "dungeon" || k == "place" || k == "item" || k == "quest" || k == "creature" || k == "disambig" || k == "spell";
 
@@ -943,8 +915,7 @@ namespace RevivalGuard
                 else if (t.Kind == "dungeon" || t.Kind == "town") o.Add("Your Journal's Wiki tab has the page; its Guide me there line sets the Go arrow.");
                 return;
             }
-            // A page without a spot of its own: a creature family's hunting grounds; a portal named for it; the page's own
-            // directions; the lines that name a spot; its summary
+            // A page without a spot of its own
             bool creatureish = t.Kind == "creature" || t.Kind == "list";
             if (creatureish && TryCreatureGrounds(t.Asked ?? t.Title, who, o)) { if (info.Summary != null) o.Add(Clip(info.Summary, 200)); return; }
             string pr = PortalRoute(t.Asked ?? t.Title, who);

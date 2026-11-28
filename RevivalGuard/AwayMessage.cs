@@ -13,25 +13,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// AWAY MESSAGE (Feature Requests #33, "while macroing, give the option of an automated reply so people don't think
-    /// you're ignoring them (customisable)"). Ours, not retail. docs/findings/away-message-2026-11-20.md.
-    ///
-    ///   /away &lt;message&gt;   set the message and go away      /away on | off   (bare /away flips it)
-    ///   @rgaway ...        our client's silent form (Options/Assistant box): 1 | 0 | msg &lt;text&gt; | assist 1|0
-    ///
-    /// While away, a tell that reaches the character (not squelched, not hidden by Appear Offline) is answered to its
-    /// sender with "[Away] Name: message", at most once per sender per AwayMessageRule.COOLDOWN. The answer is a system
-    /// line, not a tell, so two away players cannot answer each other forever (the rest of the rule: AwayMessageRule).
-    ///
-    /// WHY NOT RETAIL'S /afk. ACE keeps retail's AFK (SetAfkMode 0x000F; GameActionTell answers every tell with "X is
-    /// away: ..."), but ends it on any run or combat-mode change (GameActionMoveToState, Player_Combat), which is exactly
-    /// what a macroing character does all the time. A character in retail AFK still gets ACE's own answer, not ours.
-    ///
-    /// KEPT ON THE CHARACTER (ON, MSG), so it works on any client and while ours is minimized. "assist 1" (the client's
-    /// "while the Assistant runs" box) also sets AUTO, and a login clears an AUTO away: the Assistant is off at every
-    /// login, and if it resumes (AcResume) the client says so again.
-    /// </summary>
+    /// <summary>Away message.</summary>
     public static class AwayMessage
     {
         internal const PropertyBool ON = (PropertyBool)29180, AUTO = (PropertyBool)29182;
@@ -67,7 +49,7 @@ namespace RevivalGuard
             Push(session);
         }
 
-        /// <summary>"@rgaway": the client's silent form. State back on the mod channel; the same chat lines as typing.</summary>
+        /// <summary>"@rgaway": the client's silent form.</summary>
         static void Option(Session session, params string[] parameters)
         {
             var p = session?.Player;
@@ -83,7 +65,7 @@ namespace RevivalGuard
             }
             else if (verb == "assist" && a.Length > 1)
             {
-                // The Assistant started or stopped. It never turns off an away the player set by hand.
+                // The Assistant started or stopped.
                 if (a[1] == "1" && !IsOn(p)) SetOn(p, true, true);
                 else if (a[1] == "0" && IsOn(p) && p.GetProperty(AUTO) == true) SetOn(p, false, true);
             }
@@ -127,8 +109,7 @@ namespace RevivalGuard
                 + ",\"msg\":" + Telemetry.J(Msg(p)) + "}");
         }
 
-        /// <summary>From GameActionTell's postfix: a tell <paramref name="told"/> from <paramref name="from"/> just
-        /// reached <paramref name="to"/>.</summary>
+        /// <summary>From GameActionTell's postfix: a tell told from from just reached to.</summary>
         internal static void Delivered(Player from, Player to, string told)
         {
             if (from == null || to == null || from == to || !IsOn(to) || to.IsAfk) return;   // retail AFK: ACE answered
@@ -161,8 +142,7 @@ namespace RevivalGuard
         }
     }
 
-    /// <summary>After ACE's GameActionTell: answer for an away target. Only when ACE itself ran (no Town Crier, Dereth
-    /// Network or Appear Offline prefix took the tell) and delivered it (online, not squelched, sender not gagged).</summary>
+    /// <summary>After ACE's GameActionTell: answer for an away target.</summary>
     [HarmonyPatch(typeof(GameActionTell), nameof(GameActionTell.Handle))]
     static class AwayMessageTell
     {

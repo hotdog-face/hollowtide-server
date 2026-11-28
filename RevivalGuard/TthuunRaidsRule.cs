@@ -4,21 +4,7 @@ using System.Linq;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// T'THUUN'S MARAUDERS, THE TOWN RAIDS, PURE (no ACE types): TthuunRaids.cs runs them, tools/event-director-test reads
-    /// this file. Retail Nov 5, 2008 to Feb 2009 (Seeds of Corruption; wiki "T'Thuun's Marauders" rev 477303), revived on the
-    /// calendar from Nov 16 to 29 (docs/EVENT-TESTS/tthuun-marauders.md). Each of the twelve retail sites is an Event Director
-    /// entry (tthuun-*) gated on its own Director row; the creatures are retail's own (the Patriarch's Valley pyramid families).
-    ///
-    /// WAVES, AS RETAIL'S WALKTHROUGH: (1) the site's raiders or marauders (the wave generators of the datafix); once every one
-    /// of them is down, (2) four Patriarch's Elite Raiders (raider sites) or Executioners (marauder sites); then (3) one
-    /// Patriarch's Inquisitor or Champion; at Arwic, Ayan Baqur and Mayoi then (4) the town's Raid Commander, whose fall leaves
-    /// a Spark for 3 minutes that gives anyone a Mana Forge Key. The last boss down is the raid won.
-    ///
-    /// STONES: every raid creature carries ITS site's Invoking Stone, 1 in 3, the wave 2 to 4 bosses always (wiki: "33% drop
-    /// rate", "The bosses and sub bosses will always drop an invoking stone"). The retail creatures' own lists name four
-    /// sites' stones (the Patriarch's Valley pyramids' mix); at a raid site those are swapped for the site's own.
-    /// </summary>
+    /// <summary>T'thuun's marauders, the town raids, PURE: TthuunRaids.cs runs them, tools/event-director-test reads this file.</summary>
     static class TthuunRaidsRule
     {
         public const string FESTIVAL = "tthuun";
@@ -35,7 +21,6 @@ namespace RevivalGuard
             public string Quest;        // its stones' quest prefix on the Royal Scouts (InvokingStone<Quest>30/60/90)
         }
 
-        // wcids: retail creatures; ours from the datafix 2026-11-16-tthuun-1-raids.sql (904160-904181)
         public const uint ROYAL_SCOUT = 904160;
         public const uint SPARK_KAZYK = 904162, SPARK_MINIK = 904163, SPARK_NIVINIZK = 904164;
         public const uint KAZYK_COMMANDER = 88286, MINIK_COMMANDER = 88287, NIVINIZK_COMMANDER = 88288;
@@ -81,14 +66,11 @@ namespace RevivalGuard
 
         public const double STONE_CHANCE = 1.0 / 3;
 
-        /// <summary>THE KAREB MASK (owner 2026-11-08, ticket 261108-0035): retail's Kareb Mask 10920, unchanged (attuned,
-        /// bonded), on a town-raid Raid Commander's corpse 1 time in 10. Only raid-spawned Commanders: the same weenies stand
-        /// in the Patriarch's Valley pyramids all year and drop nothing new there.</summary>
+        /// <summary>The kareb mask: retail's Kareb Mask 10920, unchanged</summary>
         public const uint KAREB_MASK = 10920;
         public const double KAREB_CHANCE = 0.1;
 
-        // ---- the Royal Scouts' kill tasks (wiki: "three kill tasks ... 50 Moarsmen, 50 Sclavus, and 50 Falatacot ...
-        //      100 mill exp and a grand casino chest / mana forge key", "Timer for the kill tasks is 6 days") ----
+        // the Royal Scouts' kill tasks (wiki: "three kill tasks ... 50 Moarsmen, 50 Sclavus, and 50 Falatacot ...
 
         public const int TASK_KILLS = 50;
         public const long TASK_XP = 100_000_000, BOSS_XP = 5_000_000;
@@ -100,13 +82,11 @@ namespace RevivalGuard
         public static string PaidQuest(string family) => $"TthuunRaid{family}Paid";
         public const string TASK_WAIT = "TthuunRaidTaskWait";
 
-        // titles (ACE CharacterTitle; awarded by nothing before this): Guardian in the Patriarch Raids 627, Warden 628,
-        // Hero 629, Marked by the Patriarchs 630; Minik Ra's Bane 639, Kazyk Ri's Bane 640, Nivinizk's Bane 641
+        // titles: Guardian in the Patriarch Raids 627, Warden 628, Hero 629, Marked by the Patriarchs 630
         public const uint TITLE_GUARDIAN = 627, TITLE_HERO = 629, TITLE_MARKED = 630;
         public const uint TITLE_MINIK_BANE = 639, TITLE_KAZYK_BANE = 640, TITLE_NIVINIZK_BANE = 641;
 
-        /// <summary>The boss kills a Royal Scout rewards (wiki, Patriarch's Champion: "speak to a Royal Scout for a one time
-        /// xp reward and a title"): the flag a kill stamps, the title, the XP and the scout's line.</summary>
+        /// <summary>The boss kills a Royal Scout rewards: the flag a kill stamps, the title, the XP and the scout's line.</summary>
         public static readonly (uint wcid, string flag, uint title, long xp, string line)[] BossCredits =
         {
             (CHAMPION, "TthuunRaidChampionKilled", TITLE_MARKED, BOSS_XP, "Another of the Patriarch's Champions down? You're a killing machine!"),
@@ -116,8 +96,7 @@ namespace RevivalGuard
             (NIVINIZK_COMMANDER, "TthuunRaidNivinizkKilled", TITLE_NIVINIZK_BANE, 0, "You brought down Nivinizk's Raid Commander? Mayoi owes you a great deal."),
         };
 
-        /// <summary>What a Royal Scout says about the kill tasks, given each family's count, whether it is already paid, and
-        /// the seconds left on the 6-day wait (0 = none). Pure, for the tests: returns the lines and which families to pay.</summary>
+        /// <summary>What a Royal Scout says about the kill tasks, given each family's count, whether it is already paid</summary>
         public static (List<string> lines, List<string> pay, bool start, bool allDone) TaskTalk(IReadOnlyDictionary<string, int> kills,
             IReadOnlyDictionary<string, bool> paid, bool active, double waitLeft)
         {

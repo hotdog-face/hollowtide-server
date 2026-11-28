@@ -11,14 +11,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The Festival Stones goal (FestivalStonesRule has the rule and the words). Mod code only: the stones are retail's
-    /// (5376-5395, ItemUseable No, so a visit is standing within RANGE_M of one), the record is three quest flags on the
-    /// character, and nothing in ace_world changes. While the Anniversary runs (SeasonalCalendar, forced states
-    /// included), every CHECK_S each online player who still has a doll coming is checked against the stones in their
-    /// landblock. A stone not yet counted this year says "Festival Stones: N of 20."; the twentieth gives both dolls in
-    /// one hand-out (all the free slots first; a doll the burden refuses stays owed), retried at any stone or at login.
-    /// </summary>
+    /// <summary>The Festival Stones goal (FestivalStonesRule has the rule and the words).</summary>
     static class FestivalStones
     {
         const double CHECK_S = 2, CACHE_S = 30, RETRY_S = 60;
@@ -82,7 +75,7 @@ namespace RevivalGuard
                 GiveDolls(p);
                 return;
             }
-            // all twenty seen and a doll still owed (pack was full): try again, at most once a minute
+            // all twenty seen and a doll still owed: try again, at most once a minute
             if (FestivalStonesRule.Count(seen) < FestivalStonesRule.N) return;
             double now = Now;
             if (s_Retried.TryGetValue(p.Guid.Full, out var at) && now - at < RETRY_S) return;
@@ -122,15 +115,11 @@ namespace RevivalGuard
             if (FestivalStonesRule.Count(Seen(p)) >= FestivalStonesRule.N) Later(p, () => GiveDolls(p));
         }
 
-        /// <summary>
-        /// A flag's value, written straight into the registry. ACE's SetQuestCompletions clamps to the quest row's
-        /// MaxSolves and a flag with no row reads MaxSolves 0, so every value came back 0 (box 2026-10-30: each stone
-        /// said "1 of 20"). These flags have no row on purpose (no world data), so the registry entry is set directly.
-        /// </summary>
+        /// <summary>A flag's value, written straight into the registry.</summary>
         static void Set(Player p, string flag, int value)
         {
             var qm = p.QuestManager;
-            if (!qm.HasQuest(flag)) qm.Stamp(flag);                 // creates the entry (solves 1, now)
+            if (!qm.HasQuest(flag)) qm.Stamp(flag);                 // creates the entry
             var q = qm.GetQuest(flag);
             if (q == null) return;
             q.NumTimesCompleted = value;

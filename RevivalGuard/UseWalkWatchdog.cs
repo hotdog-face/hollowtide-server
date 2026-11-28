@@ -7,18 +7,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A USE WHOSE SERVER WALK CAN NEVER END. For a PK (FastTick) every use of a world object, corpse or use-with target is
-    /// CreateMoveToChain2: the use runs from Player.MoveToParams.Callback when the server body's MoveToManager arrives. Two
-    /// ways it never does, both leaving no UseDone ("the server never finished use ... Corpse of Olthoi Gardener", John
-    /// Yaya 261023-0007): the body is off walkable ground (ServerFooting: RunForward is refused, no progress, and ACE
-    /// never reads FailProgressCount), or the move was cancelled and ACE waits for the body to stop, checking only on a
-    /// physics tick that was moving. UseWalkRule decides; Settle calls ACE's own HandleMoveToCallback, Fail cancels the
-    /// move and fails the use the way a newer use does (CheckMoveToParams: callback(false), UseDone). Runs on
-    /// PlayerManager.Tick; the act is queued on the player's own action queue. Switch: rg_use_walk_watchdog;
-    /// use.settle_seconds, use.unfooted_seconds, use.walk_limit_seconds, use.cancelled_seconds (a cancelled turn whose body
-    /// keeps moving, e.g. a heal kit on a fellow while the fighter turns: answered by ACE's own check, 261023-0019).
-    /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class UseWalkWatchdog
     {

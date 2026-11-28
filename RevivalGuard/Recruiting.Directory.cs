@@ -12,18 +12,7 @@ using S = RevivalGuard.AllegianceFinderRule.State;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE ALLEGIANCE DIRECTORY (owner 2026-11-25: "it should list all the allegiances that exist for players to discover
-    /// ones to join"; "provide players a way to get into an ali easily": Request to join). Every player allegiance of two
-    /// or more, listed or not, with its monarch, size, who is on, who played this week and when a member was last seen; a
-    /// listing (Recruiting.cs) adds its line and settings. Small, active allegiances first (AllegianceBalanceRule.Sort).
-    ///
-    ///   Request to join works on any of them: the online members who can take the asker (AllegianceBalanceRule.Prompted)
-    ///   get a Yes/No; the first Yes is the patron. Both are told who and where, and they meet: the asker swears in person
-    ///   with retail's Swear (owner 2026-11-25; ACE's distance and every swear rule apply). Never a swear at a distance.
-    ///   Never a bot's or staff's allegiance (the Borg open to players only by their gate).
-    /// Behind rg_recruit with the rest of Recruiting.
-    /// </summary>
+    /// <summary>The allegiance directory.</summary>
     public static partial class Recruiting
     {
         const int DIR_CACHE_S = 60, DIR_MAX = 120;
@@ -32,8 +21,7 @@ namespace RevivalGuard
         {
             public uint Monarch; public IPlayer M; public Allegiance A; public string Name;
             public int Members, Active, Online, Avg; public double SeenHours; public List<string> Names;
-            /// <summary>Distinct accounts, and those with a member on this week (owner 2026-11-27: size and activity are
-            /// accounts, so alts neither crowd nor shrink an allegiance's place or bonus).</summary>
+            /// <summary>Distinct accounts, and those with a member on this week.</summary>
             public int Accounts, ActiveAccounts;
         }
 
@@ -55,8 +43,7 @@ namespace RevivalGuard
             var groups = new Dictionary<uint, List<IPlayer>>();
             foreach (var p in PlayerManager.GetAllPlayers())
             {
-                // no IsDeleted here: on an offline player it is a database read each (ACE OfflinePlayer); a deleted
-                // character leaves PlayerManager and its allegiance (HandlePlayerDelete)
+                // no IsDeleted here: on an offline player it is a database read each; a deleted character leaves PlayerManager and its allegiance
                 if (p == null || p.MonarchId == null) continue;
                 uint m = p.MonarchId.Value;
                 if (!groups.TryGetValue(m, out var l)) groups[m] = l = new List<IPlayer>();
@@ -96,8 +83,7 @@ namespace RevivalGuard
 
         static void DirtyDirectory() { lock (s_Lock) s_DirAt = DateTime.MinValue; }
 
-        /// <summary>The members ACE would let take this asker, asked in AllegianceBalanceRule's order (the listing's
-        /// contact first).</summary>
+        /// <summary>The members ACE would let take this asker, asked in AllegianceBalanceRule's order (the listing's contact first).</summary>
         static List<Player> PromptedFor(Allegiance a, Entry e, Player asker, int askerLevel, uint askerGuid)
         {
             var members = new List<AllegianceBalanceRule.Member>();
@@ -118,10 +104,7 @@ namespace RevivalGuard
                 .Select(g => PlayerManager.GetOnlinePlayer(g)).Where(p => p != null).ToList();
         }
 
-        // ------------------------------------------------------------------ meeting to swear (owner 2026-11-25)
-        // "players have to get together and do the swearing into the allegiance in person so the kneeling animation plays
-        // and the players see each other in person." A Yes only matches the two: both are told who and where, and the
-        // asker swears with retail's Swear, side by side (ACE's walk-to and distance). Nothing here swears anybody.
+        // meeting to swear
 
         /// <summary>The place words for a player now ("at 42.1N, 33.6E near Holtburg", "in &lt;dungeon&gt;"), or null.</summary>
         static string PlaceOf(Player p)
@@ -176,9 +159,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ the reader's own allegiance, for the panel
 
-        /// <summary>"me": the reader's allegiance as our panel's My Allegiance and Actions views need it: ACE's permission
-        /// level (what the buttons may do), the MOTD, the name, lock, the chain from the monarch down to the reader, and
-        /// the small-allegiance bonus it gets now.</summary>
+        /// <summary>"me": the reader's allegiance as our panel's My Allegiance and Actions views need it</summary>
         static void AppendMe(StringBuilder sb, Player p)
         {
             var a = p.Allegiance;

@@ -3,14 +3,10 @@ using ACE.Server.Physics.Common;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// Drop a placed physics object straight down onto what is under it, with ACE's own transition (the creature's own
-    /// spheres, cells, buildings, other objects), as one fall of retail's server physics would. ACE types only, no
-    /// Harmony, so the box probe (docs/findings/floating-creatures-2026-10-23.md) compiles it by path.
-    /// </summary>
+    /// <summary>Drop a placed physics object straight down onto what is under it, with ACE's own transition</summary>
     public static class PhysicsDrop
     {
-        /// <summary>True when it moved the object; <paramref name="fell"/> is the metres it came down.</summary>
+        /// <summary>True when it moved the object; fell is the metres it came down.</summary>
         public static bool Drop(PhysicsObj po, float max, out float fell, out string why)
         {
             fell = 0f; why = "";

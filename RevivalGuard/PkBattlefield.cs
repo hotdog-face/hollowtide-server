@@ -7,15 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// CORPSES THAT STAY (owner 2026-11-22, docs/proposals/pk-battlefield-corpses.md; rules in PkBattlefieldRules.cs).
-    /// Owns every player corpse that outlasts ACE's timer: MansionPk's mansion-lawn timer (switch off, exactly as before)
-    /// and the PK battlefields (pk_battlefield_corpses on): the Dark Isle beach, Arwic's lawn, every mansion landblock
-    /// and every PK Night spot. A kept corpse carries KEPT_SINCE (PropertyInt64 29113, unix ms, ours); the Decay prefix
-    /// holds it while its zone's cap keeps it, saves it once (ACE saves a player corpse only when something dropped, so
-    /// an empty one would not survive a restart), and lets the oldest over the cap fade the ACE way (15 s; ACE itself
-    /// never rots one a player has open, and the cap skips it for the next oldest). Name and appraisal stay ACE's.
-    /// </summary>
+    /// <summary>Corpses that stay.</summary>
     public static partial class PkBattlefield
     {
         internal const string P_ON = "pk_battlefield_corpses", P_CAP = "pk_battlefield_cap";
@@ -154,8 +146,7 @@ namespace RevivalGuard
             {
                 s_Loaded[g] = c;
                 {
-                    // where it lies NOW, each tick (Codex review 11-23: an indexed corpse a staff teleport moved kept its old
-                    // zone): out of every zone it is ACE's again; into another zone it counts against that zone's cap
+                    // Where it lies now, each tick: out of every zone it is ACE's again; into another zone it counts against that zone's cap
                     var loc = c.Location;
                     var z = loc == null ? null : ZoneOf(loc.LandblockId.Landblock, loc.PositionX, loc.PositionY);
                     if (z == null) { s_Index.Remove(g); return true; }
@@ -180,9 +171,7 @@ namespace RevivalGuard
             return act != Tick.Hold;
         }
 
-        /// <summary>A player corpse made before the switch was on (owner 2026-11-22: keep PK Night #1's corpses on the Dark
-        /// Isle): on its first decay tick inside a zone it is kept like one marked at death, aged by its creation time so
-        /// the cap still lets the oldest go first. Monster corpses and capsules (IsMonster) never.</summary>
+        /// <summary>A player corpse made before the switch was on</summary>
         static long? Adopt(Corpse c)
         {
             if (!On || c.IsMonster) return null;

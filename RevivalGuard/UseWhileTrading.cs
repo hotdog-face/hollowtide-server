@@ -4,15 +4,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A USE OF AN OBJECT THE SERVER CANNOT FIND, WHILE TRADING (Haha, 2026-11-09, retail client, 4 throws in 3 s):
-    /// ACE's Player.HandleActionUseItem (Player_Use.cs:186-188) does `item = FindObject(...)` and then
-    /// `if (IsTrading &amp;&amp; item.IsBeingTradedOrContainsItemBeingTraded(...))` before its own null check, so with a
-    /// trade open and the item not found it throws a NullReferenceException and never sends the UseDone the client
-    /// waits on. In exactly that case this sends what ACE sends for a not-found item outside a trade (SendUseDoneEvent()
-    /// after StopExistingMoveToChains) and skips the original; every other case runs ACE untouched.
-    /// Runs last, and does nothing when another prefix (PkShrines, MansionFurniture) already took the use.
-    /// </summary>
     [HarmonyPatch(typeof(Player), nameof(Player.HandleActionUseItem))]
     public static class UseWhileTrading
     {

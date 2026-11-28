@@ -14,47 +14,7 @@ using ACE.Server.Network.GameMessages.Messages;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// @SETHERITAGE: CORRECT AN OFFLINE CHARACTER'S HERITAGE (AND LOOK) THE WAY CREATION WOULD HAVE SET IT.
-    ///
-    /// Heritage is chosen at creation and never changes in retail, so there is no retail procedure to
-    /// copy. This exists for one case: a character re-made on this shard with the wrong heritage
-    /// (an admin character, restored 2026-09-20 as Aluvian on a loadout file's word; her own 2016-17
-    /// character sheet says Female Sho). It is a database correction of our own error, and it says
-    /// so in the Audit channel.
-    ///
-    /// What heritage actually is, in ACE (Factories/PlayerFactory.cs, Create): PropertyInt.HeritageGroup
-    /// and PropertyString.HeritageGroup; the sex's block from the CharGen table in the portal DAT
-    /// (Setup, PaletteBase, MotionTable, SoundTable, PhysicsEffectTable, CombatTable, DefaultScale);
-    /// the hair style's HeadObject and the character row's HairTexture / DefaultHairTexture; the eye,
-    /// nose and mouth textures and their defaults; the skin, hair and eye palettes resolved from THAT
-    /// heritage's palette sets; and the melee/ranged masteries (PlayerFactory.GetMasteries). The
-    /// attribute budget, skill credits, templates and skill-cost overrides are read from the same
-    /// table and are identical for the four human heritages (checked in the DAT, 2026-09-22), so
-    /// nothing numeric follows from the change; the innate augmentation (JackOfAllTrades) is the same
-    /// for all four as well (PlayerFactory.SetInnateAugmentations).
-    ///
-    ///   @setheritage [dry] &lt;character name&gt; | &lt;heritage&gt; &lt;sex&gt; [hair=n] [haircolor=n] [hairpal=n | hairhue=0..1]
-    ///                                                      [eyecolor=n] [skinhue=0..1] [eyes=n] [nose=n] [mouth=n]
-    ///
-    /// Every index is an index into the NEW heritage-and-sex's own CharGen lists, exactly what the
-    /// character generator sends: hair = HairStyleList, haircolor = HairColorList (a palette set each),
-    /// hairpal = the n-th palette inside that set (or hairhue, the 0..1 slider PalSet::GetPaletteID
-    /// takes), eyecolor = EyeColorList (extended indices resolve through ExtendedEyeColors as at
-    /// creation), skinhue = the slider over SkinPalSet, eyes/nose/mouth = the strip lists. Anything not
-    /// given is kept where the new lists still contain the current value (same head object, same
-    /// texture, same palette) and otherwise falls back to index 0 and says so; a hair colour that the
-    /// new heritage does not offer is refused rather than guessed, because a value the generator would
-    /// never produce is exactly what this verb exists to undo.
-    ///
-    /// Limits, all deliberate: the four human heritages only (the others change the body, the innate
-    /// augmentation and the clothing rules); the target sex's Setup must equal the character's current
-    /// Setup (ClothingBases are keyed by setup, and the character's worn and packed gear was resolved
-    /// against the body they have); offline characters only, Admin only. `dry` prints the full plan
-    /// and changes nothing. The write happens on the database thread, in order with any queued save,
-    /// through the OfflinePlayer's own setters so the in-memory biota (which WorldManager.PlayerEnterWorld
-    /// takes in preference to the database) and the rows agree. Admin command feedback is ours.
-    /// </summary>
+    /// <summary>@SETHERITAGE: correct an offline character's heritage (and look) the way creation would have set it.</summary>
     public static class SetHeritage
     {
         static readonly HeritageGroup[] HUMANS = { HeritageGroup.Aluvian, HeritageGroup.Gharundim, HeritageGroup.Sho, HeritageGroup.Viamontian };
@@ -119,8 +79,6 @@ namespace RevivalGuard
             try { if (op.IsDeleted || op.IsPendingDeletion) { Say(session, $"{target.Name} is deleted or pending deletion. Nothing was changed."); return; } }
             catch (Exception e) { Say(session, $"Could not read {target.Name}'s deletion state ({e.GetType().Name}). Nothing was changed."); return; }
 
-            // THE BODY MUST NOT CHANGE. ClothingBases are keyed by setup id, and everything the
-            // character wears or carries was resolved against the body they have now.
             uint curSetup = op.GetProperty(PropertyDataId.Setup) ?? 0;
             if (sex.SetupID != curSetup)
             {
@@ -258,8 +216,7 @@ namespace RevivalGuard
                 string step = "re-checking";
                 try
                 {
-                    // Re-checked on the database thread: a login between the command and here would take
-                    // the old biota into the world and save it back over these rows later.
+                    // Re-checked on the database thread
                     var again = PlayerManager.FindByGuid(guid, out bool onlineNow);
                     if (again == null || onlineNow || !(again is OfflinePlayer opNow)) { Say(session, $"{name} {(again == null ? "vanished" : "logged in")} before the write. Nothing was changed."); return; }
 

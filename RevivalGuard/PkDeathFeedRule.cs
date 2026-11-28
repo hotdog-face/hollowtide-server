@@ -4,20 +4,14 @@ using System.Text;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// #pk-deaths, THE PURE HALF (no ACE types; tools/nettest compiles this file by path). Player idea (Rekah, Discord
-    /// #ideas): "PK death channel in discord so we know who killed us if we are not at keys"; owner 2026-11-26 "i like
-    /// this idea if its possible. a new channel that shows this info." Who is posted, the line, and the 10 s batches.
-    /// PkDeathFeed.cs hooks the death; DiscordBridge posts.
-    /// </summary>
+    /// <summary>#pk-deaths, the pure half (no ACE types; tools/nettest compiles this file by path).</summary>
     public static class PkDeathFeedRule
     {
         public const double WINDOW_S = 10;       // kills inside one window go out as one post (a big fight cannot spam)
         public const int MAX_LINES = 15;         // lines in one post; the rest become "+N more kills"
         public const int MAX_CHARS = 1900;       // Discord's limit is 2000
 
-        /// <summary>Post this kill? Staff on either side (a "+" name or an account above Player) never; a Borg or
-        /// mercenary killing another one never; a bot and a player, either way round, yes.</summary>
+        /// <summary>Post this kill?</summary>
         public static bool ShouldPost(string killer, string victim, bool killerStaff, bool victimStaff, bool killerBot, bool victimBot)
         {
             if (string.IsNullOrWhiteSpace(killer) || string.IsNullOrWhiteSpace(victim)) return false;
@@ -55,8 +49,7 @@ namespace RevivalGuard
             return sb.ToString();
         }
 
-        /// <summary>One kill: "&lt;t:UNIX:t&gt; **Killer** killed **Victim** at 42.1N, 33.6E near Holtburg (fire)", with
-        /// " [PK Night]" when it was on PK Night's hill. where is DeathLogRule.Where's words ("at ...", "in ...").</summary>
+        /// <summary>One kill: "&lt;t:UNIX:t&gt</summary>
         public static string Line(string killer, string victim, string where, long unixSeconds, uint damageType, bool pkNight)
         {
             var sb = new StringBuilder();
@@ -89,8 +82,7 @@ namespace RevivalGuard
             return sb.ToString();
         }
 
-        /// <summary>The 10 s window. Add() a line as it happens; Due(now) hands back the post once the first line in it
-        /// is WINDOW_S old, and starts again. Not thread safe: the caller locks.</summary>
+        /// <summary>The 10 s window.</summary>
         public sealed class Batch
         {
             readonly List<string> m_Lines = new List<string>();

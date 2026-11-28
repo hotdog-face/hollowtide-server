@@ -10,35 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE SHADOW SHRINES: RETAIL'S LAND CONTROL, SMALLER (docs/PK-EXPANSION.md, idea 1). Ours, on
-    /// retail's pattern. Off until `pk_shrines_enabled` is true, and inert without its world rows
-    /// (tools/gpubox-ace/pk-shrines.sql places three shrines, weenies 900900-900902, in the Altar of
-    /// Bael'Zharon's own model).
-    ///
-    /// Retail (wiki "Land Control", Ancient Powers 2008): player killers of a society took a keep by
-    /// holding its banners, and the holders got a boon; the designers wanted "fewer battles that are
-    /// more epic", on a schedule people could plan around. Turbine's own 2006 diagnosis of PvP was
-    /// that "PvP players want something meaningful to fight over". So:
-    ///
-    ///   * A player killer uses a shrine and must stay within ATTUNE_RANGE of it for
-    ///     pk_shrine_attune_seconds (60) while no ENEMY player killer (another allegiance, another
-    ///     account) stands within CONTEST_RANGE. An enemy near freezes the count; the attuner dying,
-    ///     leaving or teleporting breaks it. Whoever holds the shrine is told the moment someone
-    ///     starts, so defenders can ride out.
-    ///   * Taken, the shrine is held by the taker's allegiance (the monarch; a lone player holds it
-    ///     for themselves) for pk_shrine_hold_hours (12) unless renewed the same way, and cannot be
-    ///     taken again for pk_shrine_lock_minutes (30). A world line names the new holder.
-    ///   * THE BOON is small and not combat power: pk_shrine_xp_bonus (5%) more experience from
-    ///     creature kills per shrine held, to every member of the holding allegiance, PK or not.
-    ///   * pk_shrine_hours (UTC, e.g. "18-23") limits when shrines can be taken; empty = always.
-    /// Non-PKs and newcomers are never involved: only a PK can attune, and the shrines stand far from
-    /// towns and starter areas.
-    ///
-    ///     @shrines        who holds what (our client: the PK board's Shrines tab)
-    ///
-    /// State: PkLedger/shrines.json beside the dll.
-    /// </summary>
+    /// <summary>The shadow shrines: retail's land control, SMALLER (docs/PK-EXPANSION.md, idea 1).</summary>
     internal static class PkShrines
     {
         internal const string P_ATTUNE = "pk_shrine_attune_seconds", P_BONUS = "pk_shrine_xp_bonus",
@@ -46,8 +18,7 @@ namespace RevivalGuard
         const float ATTUNE_RANGE = 15f, CONTEST_RANGE = 35f, NEWS_RANGE = 300f;
         const double TICK = 2.0, CONTEST_NOTE = 20.0;
 
-        /// <summary>The shrines: weenie class, name, and where (for the board and the world lines).
-        /// Must match tools/gpubox-ace/pk-shrines.sql.</summary>
+        /// <summary>The shrines: weenie class, name, and where (for the board and the world lines).</summary>
         internal static readonly (uint wcid, string name, string place)[] SHRINES =
         {
             (900900, "Shadow Shrine of the Empyrean Ruin", "the Empyrean ruin, 81.4N 32.9W"),
@@ -70,7 +41,7 @@ namespace RevivalGuard
             public uint Wcid, Player, Side, Account; public string Name, Label, Of;
             public ACE.Entity.Position At;
             public double Progress, LastNote; public bool HalfSaid, Contested;
-            public WorldObject Shrine;   // for the effects (2026-09-29, owner: "looks awesome but does nothing so far")
+            public WorldObject Shrine;   // for the effects
         }
 
         static readonly object s_Lock = new object();
@@ -93,8 +64,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ using a shrine
 
-        /// <summary>A use of a shrine: walk to it (ACE's own move-to), then attune. With the feature
-        /// off ACE handles the use as it would any Generic, which does nothing.</summary>
+        /// <summary>A use of a shrine: walk to it (ACE's own move-to), then attune.</summary>
         [HarmonyPatch(typeof(Player), nameof(Player.HandleActionUseItem))]
         static class Use
         {
@@ -334,7 +304,6 @@ namespace RevivalGuard
         }
 
         /// <summary>Every online member of the allegiance whose monarch is `side` (or that lone player).</summary>
-        /// <summary>A client effect on the shrine or a player (retail PlayScripts from the DATs). Never throws.</summary>
         static void Fx(WorldObject wo, PlayScript script)
         {
             try { if (wo?.Location != null && !wo.IsDestroyed) wo.EnqueueBroadcast(new GameMessageScript(wo.Guid, script)); }
@@ -368,7 +337,7 @@ namespace RevivalGuard
                 int wait = (from - h + 24) % 24;
                 if (first == null || wait < (first.Value - h + 24) % 24) first = from;
             }
-            if (first == null) return true;   // an unreadable setting never locks the shrines
+            if (first == null) return true;
             opens = $"{first.Value:00}:00";
             return false;
         }

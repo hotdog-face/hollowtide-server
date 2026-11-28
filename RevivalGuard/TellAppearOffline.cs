@@ -9,10 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>A tell by name to a character who appears offline is answered as if they were offline
-    /// (TellAppearOfflineRule). Runs last, after the Town Crier's and the Dereth Network's prefixes, and only when none of
-    /// them took the tell; the payload is put back for ACE. Our client names the person in chat ("X is offline now.",
-    /// BRIDGE-NOTES note 164) from ACE's own 0x052B, so offline and hidden read the same.</summary>
+    /// <summary>A tell by name to a character who appears offline is answered as if they were offline (TellAppearOfflineRule).</summary>
     [HarmonyPatch(typeof(GameActionTell), nameof(GameActionTell.Handle))]
     static class TellAppearOffline
     {

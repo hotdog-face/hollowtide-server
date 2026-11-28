@@ -13,26 +13,9 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A DELETED CHARACTER'S HOUSE GOES BACK ON THE MARKET. Retail released a house when its owner was
-    /// deleted. ACE does too (PlayerManager.HandlePlayerDelete -> HouseManager.DoHandlePlayerDelete ->
-    /// HandleEviction), but every step looks the owner up in PlayerManager, and the shard's
-    /// char_delete_instant_teardown drops the character from PlayerManager straight after queueing that
-    /// work on the world thread. So the lookup fails ("couldn't find player guid"), the house stays owned
-    /// by nobody, and it is never in the rent queue or the for-sale list again. Found 2026-09-19: test
-    /// character Firsthour Eight (0x50000076), deleted, still owned cottage 0x7B2B309A.
-    ///
-    /// Three patches:
-    ///  - DoHandlePlayerDelete: when the owner is already gone, find the house through the rent queue
-    ///    (keyed by the owner's guid, which outlives the player cache) and evict anyway.
-    ///  - HandleEviction: with no owner to update, release the house and stop (stock code would throw on
-    ///    the missing player).
-    ///  - BuildRentQueue (startup): any house whose owner no longer exists is released on the first world
-    ///    tick. This repairs houses orphaned before this fix and any other path to the same state.
-    /// </summary>
+    /// <summary>A deleted character's house goes back on the market.</summary>
     static class HouseRelease
     {
-        /// <summary>HandleEviction's own steps, minus the owner's properties. Runs on the world thread.</summary>
         internal static void Release(House house, string why)
         {
             var slumlord = house.SlumLord;
@@ -110,8 +93,7 @@ namespace RevivalGuard
                 }
                 if (orphans.Count == 0) return;
 
-                // After start-up: GetHouse on an unloaded landblock only registers a callback that runs
-                // once the slumlord's inventory loads, so load each house's landblock to run it now.
+                // After start-up: GetHouse on an unloaded landblock only registers a callback that runs once the slumlord's inventory loads
                 WorldManager.EnqueueAction(new ActionEventDelegate(() =>
                 {
                     foreach (var (houseGuid, ownerGuid) in orphans)

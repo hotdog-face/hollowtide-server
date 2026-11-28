@@ -8,13 +8,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// FAILED DYES FLOOR ARMOR AT ZERO (owner 2026-11-02 "does ours work the correct way against retail?"). Ours.
-    /// A failed dye turns the item the botched colour (PaletteTemplate 87: orange on metal, pink on cloth) and takes Armor
-    /// Level off it; retail never took it below zero (AC wiki Dyeing). ACE's ModifyInt adds the recipe's -20 and -30 rows
-    /// unfloored, even to cloth with no armour. Here a negative Armor Level add is floored by DyeFailArmorRule.
-    ///   @modifybool rg_dye_fail_floor false   ACE's original rule
-    /// </summary>
+    /// <summary>Failed DYES floor armor at zero.</summary>
     [HarmonyPatch]
     static class DyeFailArmor
     {

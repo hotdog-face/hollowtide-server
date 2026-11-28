@@ -12,23 +12,13 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// `@voidtest` (Developer and Admin, acts on the caller; ours, not retail; owner 2026-10-20: "id also like to test void
-    /// spells on an admin character"). Void Magic specialised at full ranks (as @crafttest) and lifted to VOID_SKILL so level 8
-    /// spells (power 400; SkillCheck factor 0.07) land almost always; every player void spell learned (ACE's
-    /// PlayerSpellTable, School Void, levels 1-8, as @addallspells); the components those spells' formulas take for
-    /// THIS account (tapers differ per account), topped up to COMP_TARGET; and one Heart of Darkest Flame (nether caster,
-    /// no wield requirement, 1.22 elemental damage; casters have no school restriction, the nether damage type is the bonus).
-    /// Then every spell this shard adds or newly makes obtainable (ShardSpells, the one list; owner 2026-10-20: "any new
-    /// spells made need to be added to my an admin character spellbook to test"), with their components too.
-    /// `@testspells` is the same command. Idempotent: known spells are skipped, components and the caster are topped up.
-    /// </summary>
+    /// <summary>`@voidtest`.</summary>
     public static class AdminVoid
     {
         const uint VOID_SKILL = 450;      // level 8 power 400: 450 gives ~97% (SkillCheck.GetMagicSkillChance)
-        const int COMP_TARGET = 100;      // of each void component; a cast burns at most one of each (250 of 40 kinds encumbered a test character)
+        const int COMP_TARGET = 100;      // of each void component; a cast burns at most one of each
         const int EXTRA_TARGET = 20;      // of a component only the shard's other spells take (the fireworks alone take a dozen kinds)
-        const uint CASTER_WCID = 43848;   // Heart of Darkest Flame (ace_world 2026-10-20: DamageType Nether, ElementalDamageMod 1.22, no wield req)
+        const uint CASTER_WCID = 43848;   // Heart of Darkest Flame
 
         internal static void Register()
         {
@@ -75,8 +65,7 @@ namespace RevivalGuard
                 AddComps(p, spell, need);
             }
 
-            // Ours and the retail spells we unlocked. LearnSpellWithNetworking, not AddKnownSpell, so a learn hook
-            // (NetherRift: a quest flag, never the spellbook) still decides where the spell goes.
+            // Ours and the retail spells we unlocked.
             int xLearned = 0;
             var extra = new List<string>();
             var needX = new Dictionary<uint, int>();

@@ -8,25 +8,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE BROWSER PLAYER'S REAL ADDRESS (docs/BROWSER-CLIENT-PLAN.md, "Blocker before any public hosting").
-    /// A browser cannot send UDP, so browser players reach ACE through the WebSocket gateway on this machine
-    /// (tools/public-shard/ws-gateway), one UDP socket each, and ACE sees every one of them at 127.0.0.1. This
-    /// shard TRUSTS its own network: StaffLoginGate lets admin logins in only from it, and the new-account cap
-    /// and the account query's rate limit exempt it. Through the gateway that trust would extend to anyone.
-    ///
-    /// So a loopback endpoint is asked about: the gateway answers GET /who?port=N (loopback only) with the
-    /// address of the player behind its UDP port N, and every check here uses that address instead. The decision
-    /// table is GatewayAddressRule (pure, unit-tested in tools/nettest): it FAILS CLOSED (security review
-    /// 2026-11-14, SEC-001): a loopback endpoint stays local only when no gateway runs here or a version-2 gateway
-    /// is sure the port is not its own; anything else that is not a positive address is UNKNOWN (not trusted).
-    ///
-    /// No answer is cached for trust decisions. <see cref="RealAddress"/> always asks; the packet-thread rate
-    /// limits use <see cref="RealAddressForLimits"/>, whose port-keyed cache holds only positive OUTSIDE answers
-    /// for a few seconds, so a port the gateway hands to the next browser session never inherits local trust.
-    ///
-    /// The gateway is asked at http://127.0.0.1:9080 (REVIVAL_GATEWAY to move it, "off" to never ask).
-    /// </summary>
+    /// <summary>The browser player's real address (docs/BROWSER-CLIENT-PLAN.md, "Blocker before any public hosting").</summary>
     static class Gateway
     {
         static readonly string s_Url = GatewayUrl();
@@ -43,7 +25,6 @@ namespace RevivalGuard
         /// <summary>Is this the "gateway could not say" marker?</summary>
         internal static bool IsUnknown(IPAddress a) => a != null && a.Equals(GatewayAddressRule.UNKNOWN);
 
-        /// <summary>The address to judge this endpoint by, asked now (never cached): every trust decision.</summary>
         internal static IPAddress RealAddress(IPEndPoint ep)
         {
             if (ep == null) return null;
@@ -51,8 +32,7 @@ namespace RevivalGuard
             return Ask(ep);
         }
 
-        /// <summary>The same, for the unauthenticated packet-thread rate limits (AccountQuery, PasswordRecovery):
-        /// a positive outside answer is reused for a few seconds. Never use it to grant trust.</summary>
+        /// <summary>The same, for the unauthenticated packet-thread rate limits: a positive outside answer is reused for a few seconds.</summary>
         internal static IPAddress RealAddressForLimits(IPEndPoint ep)
         {
             if (ep == null) return null;
@@ -101,9 +81,7 @@ namespace RevivalGuard
             return false;
         }
 
-        // THE ADDRESS AN ACCOUNT IS CREATED FROM. AccountCreationCap counts accounts by the creation address ACE
-        // stores, and ACE stores the session's (127.0.0.1 for every browser player). DoLogin runs CreateAccount
-        // on its own thread with no port in the call, so the login prefix leaves the real address here first.
+        // The address an account is created from.
         [ThreadStatic] internal static IPAddress t_LoginReal;
 
         [HarmonyPatch(typeof(AuthenticationDatabase), nameof(AuthenticationDatabase.CreateAccount))]

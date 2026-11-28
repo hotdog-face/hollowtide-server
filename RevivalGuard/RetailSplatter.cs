@@ -9,23 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// BLOOD SPLATTER SIZED BY THE HIT, AS RETAIL (owner 2026-10-20 "Size by hit"; audit effects-sound.md #5;
-    /// docs/findings/splatter-intensity-2026-10-20.md). ACE sends every Splatter* PlayEffect (0xF755) at speed 1.0
-    /// (GameMessageScript's default). Retail's speed, fitted on the 31 January-2017 captures by pairing each splatter with
-    /// the damage event of the same hit:
-    ///     speed = min(1, damage / maxHealth + damage / healthAfterTheHit)
-    /// Own hits taken (602 paired): exactly 2 x damage/max at full health, rising as health falls, and the health it
-    /// implies drops by each next hit's damage (150 rapid pairs, median error -0.4 HP). Hits dealt (224 with a fresh
-    /// UpdateHealth): 79% within 3%. A blow that leaves no health is 1.0.
-    ///
-    /// How: a prefix on the two TakeDamage methods that precede ACE's splatters (Creature's, for a player or pet hitting
-    /// a creature; Player's, for a creature hitting a player, which sends the splatter inside it) notes the target's
-    /// health before; in the three splatter sites (Player.DamageTarget, Player.TakeDamage, Creature.EmitSplatter) the
-    /// PlayEffect is built by Make, which for a Splatter script at 1.0 for that guid within 0.1 s reads the health now
-    /// and sets the speed. Anything unmatched keeps ACE's 1.0.
-    ///   @modifybool retail_splatter_size false   ACE's 1.0 for every splatter
-    /// </summary>
+    /// <summary>Blood splatter sized by the hit, as retail.</summary>
     static class RetailSplatter
     {
         const string P_ON = "retail_splatter_size";
@@ -39,13 +23,13 @@ namespace RevivalGuard
             try
             {
                 if (c?.Health == null || !On) return;
-                if (t_Before != null && t_Before.Count > 256) t_Before.Clear();   // hits with no splatter (spells, DoTs) never get read
+                if (t_Before != null && t_Before.Count > 256) t_Before.Clear();
                 (t_Before ??= new Dictionary<uint, (Creature, int, uint, long)>())[c.Guid.Full] = (c, (int)c.Health.Current, c.Health.MaxValue, Environment.TickCount64);
             }
             catch { }
         }
 
-        /// <summary>Retail's splatter speed for a hit of <paramref name="damage"/> leaving <paramref name="after"/> of <paramref name="max"/>.</summary>
+        /// <summary>Retail's splatter speed for a hit of damage leaving after of max.</summary>
         internal static float Speed(int damage, int after, uint max)
         {
             if (after <= 0 || max == 0) return 1f;
@@ -76,8 +60,7 @@ namespace RevivalGuard
             static void Prefix(Player __instance) => Note(__instance);
         }
 
-        /// <summary>Every "new GameMessageScript(guid, script, speed)" in ACE's three splatter sites becomes Make(guid,
-        /// script, speed). A prefix on the constructor itself had no effect on the box (likely inlined at the call sites).</summary>
+        /// <summary>Every "new GameMessageScript(guid, script, speed)" in ACE's three splatter sites becomes Make(guid, script, speed).</summary>
         [HarmonyPatch]
         static class Size
         {

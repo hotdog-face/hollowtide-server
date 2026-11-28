@@ -15,13 +15,7 @@ using R = RevivalGuard.TownRaidRule;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// @adminspawn &lt;wcid&gt;: one creature in front of the admin that stays until it is killed (owner 2026-11-21: a Thunder
-    /// Chicken he made with @create "vanished before he could kill it"). ACE's decay (WorldObject_Decay) takes a dynamic
-    /// object with no generator, Lifespan or TimeToRot 5 minutes after it appears, the bug TownRaid.Spawn fixed for raiders;
-    /// these get TimeToRot -1. So they never pile up, one with no player within 100 m for an hour is removed
-    /// (R.AdminSpawnStale). The admin panel's Turkeys page sends it (AcAdminHud COMMANDS).
-    /// </summary>
+    /// <summary>@adminspawn &lt;wcid&gt;: one creature in front of the admin that stays until it is killed.</summary>
     internal static class AdminSpawn
     {
         sealed class Entry { public WeakReference<Creature> Ref; public double LastNear; public string Name; }
@@ -38,7 +32,7 @@ namespace RevivalGuard
             Mod.Log.Info("[RevivalGuard] AdminSpawn: @adminspawn (creatures that stay until killed)");
         }
 
-        static void Cmd(Session s, params string[] args)
+        internal static void Cmd(Session s, params string[] args)
         {
             var me = s?.Player;
             if (me == null) return;

@@ -1,19 +1,13 @@
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure half of RuneSkins (no ACE types; tools/nettest `runeskins`). The 7 rune skin sets as end-game armour,
-    /// all numbers PROPOSED (docs/proposals/rune-skins-endgame.md): which bosses drop which set and how often, the set
-    /// bonus ladder, and the PK Night pick. Pieces: wcid PIECE0 + 10 x set + slot, EquipmentSetId SET0 + set
-    /// (tools/gpubox-ace/gen_rune_suits.py; THEMES there must match Themes here).
-    /// </summary>
+    /// <summary>The pure half of RuneSkins (no ACE types; tools/nettest `runeskins`).</summary>
     internal static class RuneSkinsRule
     {
         internal const int SETS = 28, SLOTS = 9, FIRST_SETS = 7;
         internal const uint PIECE0 = 915600, MORE0 = 916000;   // the first 7 sets, then the rest (gen_rune_suits.py piece_ids)
         internal const int SET0 = 9150;
-        /// <summary>Cragstone Guise: the PK Night set (owner 2026-11-25), never a boss drop.</summary>
         internal const int CRAGSTONE = 16;
-        /// <summary>Sets no creature drops: only Cragstone (the bronze statue skins drop from the Bronze Statues Attack since 2026-11-26).</summary>
+        /// <summary>Sets no creature drops: only Cragstone.</summary>
         internal static readonly int[] NoBoss = { CRAGSTONE };
 
         internal static uint Piece(int set, int slot) =>
@@ -23,11 +17,9 @@ namespace RevivalGuard
         /// <summary>A boss: the sets whose look it wears (one picked per drop) and its chance per kill.</summary>
         internal readonly record struct Boss(string Name, int[] Sets, double Chance);
 
-        // Levels and places from the world DB; kills measured in the proposal. Rates (owner-approved 2026-11-25 for the
-        // first 7): 25% level 700+, 15% 275-699, 5% under 275. The later sets' bosses are proposed.
+        // Levels and places from the world DB; kills measured in the proposal.
         const double HI = 0.25, MID = 0.15, LO = 0.05;
-        /// <summary>The Bronze Statues Attack's living statues (owner 2026-11-26: the bronze skins drop there). Under the 5% band:
-        /// 33 towns' statues respawn every 3.5 hours for 10 days, so a full-band rate would flood a repeating spawn.</summary>
+        /// <summary>The Bronze Statues Attack's living statues.</summary>
         internal const double STATUE = 0.02;
         static readonly int[] Bronze = { 8, 9, 10 };
         static readonly int[] SpectralHost = { 6, 20, 21 }, Bushi = { 6, 22, 23, 24, 25 };
@@ -65,8 +57,6 @@ namespace RevivalGuard
             [46430] = new("Ronin Ginmura", new[] { 19 }, MID),
             [46426] = new("Ronin Hirachi", new[] { 19 }, MID),
             [70715] = new("General Tarkaris", new[] { 26 }, LO),             // his own skin
-            // the Bronze Statues Attack (SeasonalCalendar "bronzestatues"): the 17 living statue copies of
-            // 2027-03-18-bronze-1-statues.sql (903850-903882, even; the odd ids are their generators)
             [903850] = new("Bronze Statue", Bronze, STATUE), [903852] = new("Bronze Statue", Bronze, STATUE),
             [903854] = new("Bronze Statue", Bronze, STATUE), [903856] = new("Bronze Statue", Bronze, STATUE),
             [903858] = new("Bronze Statue", Bronze, STATUE), [903860] = new("Bronze Statue", Bronze, STATUE),
@@ -78,10 +68,7 @@ namespace RevivalGuard
             [903882] = new("Bronze Statue", Bronze, STATUE),
         };
 
-        /// <summary>Keeper credit only (no drop): sets 0, 1, 3 and 4's listed bosses (Hatshepsut, Nephthys, Vvermurgor) are
-        /// friendly quest NPCs in the world DB (Attackable false), so no player can kill them. The keeper's gate is earned
-        /// from these instead (2026-11-26): Hatshepsut's jailer and the Temple's Grand Vizier (Neftet), the Root's two
-        /// Corruptors (level 300).</summary>
+        /// <summary>Keeper credit only: sets 0, 1, 3 and 4's listed bosses are friendly quest NPCs in the world DB</summary>
         internal static readonly Dictionary<uint, int[]> SlainCredit = new()
         {
             [44098] = new[] { 0 },   // Mu-miyah Slave Master (300), the Temple under Neftet: holds Hatshepsut
@@ -106,8 +93,7 @@ namespace RevivalGuard
             return forcePercent > 0 ? Math.Min(100, forcePercent) / 100.0 : b.Chance;
         }
 
-        /// <summary>One roll per kill: null on a miss, else the piece (set from the boss's list, slot at random).
-        /// roll, pickSet and pickSlot are uniform in [0, 1).</summary>
+        /// <summary>One roll per kill: null on a miss, else the piece. roll, pickSet and pickSlot are uniform in [0, 1).</summary>
         internal static uint? Drop(uint wcid, double chance, double roll, double pickSet, double pickSlot)
         {
             if (chance <= 0 || roll >= chance || !Bosses.TryGetValue(wcid, out var b)) return null;
@@ -136,8 +122,7 @@ namespace RevivalGuard
         /// <summary>PK Night: one Cragstone Guise piece, slot at random.</summary>
         internal static uint PkPrize(double pickSlot) => Piece(CRAGSTONE, Math.Clamp((int)(pickSlot * SLOTS), 0, SLOTS - 1));
 
-        /// <summary>PK Night's one prize winner (proposed): of the winning side's players who stood on the hill, the one
-        /// counted there on the most ticks; a tie goes to the lowest guid (stable). 0 when nobody stood there.</summary>
+        /// <summary>PK Night's one prize winner</summary>
         internal static uint PkWinner(IEnumerable<uint> present, IReadOnlyDictionary<uint, int> ticks)
         {
             uint best = 0; int most = -1;
@@ -149,8 +134,7 @@ namespace RevivalGuard
             return best;
         }
 
-        // ------------------------------------------------------------------ the set bonus
-        // ArmorModVs float ids -> the retail item-set resistance spells (Incidental, Crude, Effective, Masterwork)
+        // the set bonus
         static readonly Dictionary<int, uint> Resist0 = new()
         {
             [13] = 4784, [14] = 4780, [15] = 4764, [16] = 4772, [17] = 4768, [18] = 4760, [19] = 4776,   // slash pierce bludg cold fire acid elec
@@ -162,7 +146,7 @@ namespace RevivalGuard
 
         const uint HERO1 = 4734, HERO2 = 4735, HERO3 = 4736, SURVIVOR3 = 4755, GUARD1 = 4858, GUARD2 = 4859, GUARD3 = 4860, WAY2 = 4863, WAY3 = 4864;
 
-        /// <summary>The spells a set grants with this many pieces worn: Wardenforged's ladder (tiers 2, 4, 6, 8, 9) with the set's resistances.</summary>
+        /// <summary>The spells a set grants with this many pieces worn: Wardenforged's ladder with the set's resistances.</summary>
         internal static uint[] Tier(int set, int pieces)
         {
             if (set < 0 || set >= SETS) return Array.Empty<uint>();

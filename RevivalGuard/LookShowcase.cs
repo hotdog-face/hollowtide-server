@@ -9,22 +9,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE LOOK SHOWCASE'S EFFECTS (owner 2026-11-24, after the rune-skin suits: "stage a bunch in the base for me to review";
-    /// docs/findings/look-showcase-2026-11-24.md). Retail PhysicsScripts where retail never put them, named per weenie in
-    /// LookShowcase.json (embedded; tools/gpubox-ace/gen_look_showcase.py):
-    ///   on=item    the wielded item's DefaultScript is that 0x33 script while wielded (as BorgShield): our client's
-    ///              AcWielded plays a 0x33 value in place of the setup's own effect. Set at equip, and on each tick for a
-    ///              wielder who logged in with it (equip at login does not go through TryEquipObject).
-    ///   on=wearer  the script is re-played on the wearer every N s while worn (a finite retail script: an Aetheria surge,
-    ///              Black Madness). PlayEffect with a 0x33 id; ServerLink.PlayEffectOn plays it as is, a retail client
-    ///              looks it up as a type and plays nothing.
-    /// The showcase's looks (ClothingTables 0x1000F200-0x1000F2FF) are CustomClothing's, behind the same switch.
-    /// Switch rg_look_showcase, default OFF: nothing is set or played, a set item script is cleared on the next tick.
-    /// Wearers are online players and any creature seen equipping a showcase item (the Staff Base mannequins).
-    /// LOOK LAB ITEMS (docs/proposals/look-lab.md): LookLab.json (embedded; tools/looklab/package.py) names the packaged
-    /// looks' effects the same way, behind their own switch rg_look_lab (default OFF; the package's datafix turns it on).
-    /// </summary>
+    /// <summary>The look showcase's effects.</summary>
     [HarmonyPatch(typeof(Creature), nameof(Creature.TryEquipObject))]
     public static class LookShowcase
     {
@@ -84,8 +69,12 @@ namespace RevivalGuard
         {
             try
             {
-                if (!__result || worldObject == null || !s_Fx.TryGetValue(worldObject.WeenieClassId, out var fx)) return;
+                if (!__result || worldObject == null) return;
+                // a made item with a worn effect may be on an NPC
+                bool made = (worldObject.GetProperty(LookLabMake.P_EVERY) ?? 0) > 0;
+                if (!s_Fx.TryGetValue(worldObject.WeenieClassId, out var fx) && !made) return;
                 s_Wearers[__instance.Guid.Full] = new WeakReference<Creature>(__instance);
+                if (fx == null) return;
                 // the wielder's own client already holds the item: tell it the script (observers get it with the wield)
                 if (fx.OnItem && __instance is Player p && On(fx)) p.Session?.Network.EnqueueSend(new GameMessageUpdateObject(worldObject));
             }
@@ -96,7 +85,7 @@ namespace RevivalGuard
         {
             try
             {
-                bool on = PkCommon.On(P_ON) || PkCommon.On(P_LAB) || PkCommon.On(LookLabMake.P_ON);
+                bool on = PkCommon.On(P_ON) || PkCommon.On(P_LAB) || PkCommon.On(LookLabMake.P_ON) || DressingRoom.LabOn;
                 if (!on && !s_WasOn) return;
                 s_WasOn = on;
                 WorldManager.EnqueueAction(new ActionEventDelegate(() => Apply()));
@@ -126,7 +115,7 @@ namespace RevivalGuard
                             // a Look Lab "Make it now" item worn: its own DefaultScript re-played on the wearer (LookLabMake.P_EVERY)
                             double every = item.GetProperty(LookLabMake.P_EVERY) ?? 0;
                             uint ds = item.DefaultScriptId ?? 0;
-                            if (every <= 0 || ds >> 24 != 0x33 || !PkCommon.On(LookLabMake.P_ON)) continue;
+                            if (every <= 0 || ds >> 24 != 0x33 || !(PkCommon.On(LookLabMake.P_ON) || DressingRoom.LabOn)) continue;
                             var mk = (c.Guid.Full, item.Guid.Full);
                             if (s_Next.TryGetValue(mk, out var mdue) && now < mdue) continue;
                             s_Next[mk] = now.AddSeconds(every);

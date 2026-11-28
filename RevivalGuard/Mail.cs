@@ -15,17 +15,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// MESSAGES TO OFFLINE FRIENDS (docs/CHAT-IMPROVEMENTS-01.md piece 5, ours; retail had none).
-    ///
-    ///   /mail Name, text     leaves a message for a character who is offline; they get it as a tell when they next
-    ///                        log in, marked "(mail, Oct 13)". To someone online it says to use /tell instead.
-    ///   /mail                says how it works and how many of yours are waiting.
-    ///
-    /// Kept small on purpose: 300 characters a message, 5 waiting per sender for one person and 20 in all, 30 days
-    /// before an unread one is dropped. Never to or from a mercenary. Stored in mail.json beside the mod, written
-    /// through a temp file, under one lock.
-    /// </summary>
+    /// <summary>Messages to offline friends (docs/CHAT-IMPROVEMENTS-01.md piece 5, ours; retail had none).</summary>
     public static class Mail
     {
         const string FILE = "mail.json";
@@ -136,8 +126,7 @@ namespace RevivalGuard
                 s_Notes.RemoveAll(n => string.Equals(n.To, p.Name, StringComparison.OrdinalIgnoreCase));
                 Save();
             }
-            // As a tell, so it lands in the Tells channel, the Social tab and the sender's conversation tab, and a click
-            // on the name answers it. Marked as mail with the day it was sent: it is not a live tell.
+            // As a tell, so it lands in the Tells channel, the Social tab and the sender's conversation tab, and a click on the name answers it.
             foreach (var n in mine)
                 p.Session?.Network.EnqueueSend(new GameMessageSystemChat($"{n.From} tells you, \"(mail, {n.Utc:MMM d}) {n.Text}\"", ChatMessageType.Tell));
             Mod.Log.Info($"[RevivalGuard] Mail: {mine.Count} delivered to {p.Name}");

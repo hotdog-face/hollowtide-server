@@ -10,28 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// THE WARDENFORGED PLATE (weenies 901350-901360; docs/ARMOR-SET.md). Made, not added: both switches
-    /// default OFF, and nothing hands the set out yet.
-    ///
-    /// wardenforged_shield_part. The shield (901359) draws its own GfxObj 0x01FF1361 in the hand. Its
-    /// weenie deliberately carries NO anim_part row: ACE's appearance pass lists every equipped
-    /// ItemType.Armor item, shields included, and ApplyOwnAnimParts would copy a part-0 row onto the
-    /// wearer's abdomen. So the part comes from here, on the shield's OWN ObjDesc only (never a
-    /// Creature's), replacing part 0 of its setup the way AcWielded reads it. Off, it is held as the
-    /// Covenant Shield it clones. Keep it off on any shard a retail acclient.exe plays on.
-    ///
-    /// wardenforged_set_bonus. EquipmentSetId 901, which client_portal.dat's SpellTable does not have,
-    /// answered the way the DAT answers for a retail set: a tier per piece count, from retail's own
-    /// item-set spells, tiers at 2, 4, 6, 8 and 9 pieces as the Society armour set (30) does, so the
-    /// full nine is the reward:
-    ///   2: Incidental Flame Resistance, Incidental Lightning Resistance
-    ///   4: Crude Flame and Lightning Resistance, Novice Hero's Endurance
-    ///   6: Effective Flame and Lightning Resistance, Apprentice Hero's Endurance, Novice Guardian's Invulnerability
-    ///   8: the same, Journeyman Hero's Endurance, Apprentice Guardian's Invulnerability, Apprentice Wayfarer's Impregnability
-    ///   9: Masterwork Flame and Lightning Resistance, Journeyman Hero's Endurance, Journeyman Survivor's Health,
-    ///      Journeyman Guardian's Invulnerability, Journeyman Wayfarer's Impregnability
-    /// </summary>
+    /// <summary>The wardenforged plate.</summary>
     static class WardenforgedPlate
     {
         internal const int SET_ID = 901;

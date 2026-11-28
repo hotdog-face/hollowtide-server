@@ -6,14 +6,7 @@ using System.Text.Json;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// The pure part of CustomClothing.cs (no ACE types: tools/nettest compiles it by path, CustomClothingCase.cs). A
-    /// ClothingTable written as JSON (the layout of JawnTide's CustomClothingBase files, github.com/AzraelTL/JawnTide,
-    /// AGPL-3.0: Id, ClothingBaseEffects by setup, ClothingSubPalEffects by palette template) becomes the exact bytes a
-    /// portal.dat 0x10 file holds, so ACE's own ClothingTable.Unpack reads it and the table is the same object a DAT
-    /// table would be. Numbers may be JSON numbers or strings, decimal or "0x" hex.
-    /// Only ids in LO..HI: retail's tables end at 0x1000086C, so a file can never replace a retail one.
-    /// </summary>
+    /// <summary>The pure part of CustomClothing.cs (no ACE types: tools/nettest compiles it by path, CustomClothingCase.cs).</summary>
     public static class CustomClothingRule
     {
         public const uint LO = 0x1000F000, HI = 0x1000FFFF;
@@ -86,8 +79,7 @@ namespace RevivalGuard
             return (id, ms.ToArray(), setups, templates);
         }
 
-        /// <summary>Reads the bytes back the way ACE's ClothingTable.Unpack does: {setup: [(part, model, [(old, new)])]}
-        /// and the palette templates. For the test, and a check that a blob is whole.</summary>
+        /// <summary>Reads the bytes back the way ACE's ClothingTable.Unpack does: {setup: []} and the palette templates.</summary>
         public static (uint id, Dictionary<uint, List<(uint part, uint model, List<(uint oldTex, uint newTex)> tex)>> parts, List<uint> templates) Read(byte[] blob)
         {
             var r = new BinaryReader(new MemoryStream(blob));

@@ -18,29 +18,7 @@ using E = RevivalGuard.AllegianceFinderRule.Event;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// FIND AN ALLEGIANCE (owner 2026-11-23: "the allegance panel in our ui might be a spot for players to find an
-    /// allegiance to join. players who join an ali are more retailed according to our data"; growth review 2026-11-17:
-    /// 22 of 29 stayers swore, 56 of 662 others). The listing of Recruiting.cs, grown into a board our client shows on
-    /// the Allegiance panel's "Find an allegiance" view, with a request the recruiters answer Yes or No.
-    ///
-    ///   A listing adds: a level range, PK or PvE, play times (the old hours), and how to join: ask (a Yes/No to the
-    ///   monarch and online officers), or auto-accept an asker whose own allegiance rank is under X. The monarch picks
-    ///   which officers may change it (/recruit officers 1-4). Live facts: members, active this week, average level,
-    ///   the allegiance's mansion or villa. A listing whose monarch has been away STALE_DAYS comes down by itself.
-    ///
-    ///   A request: one open per player; asks are spaced and capped (AllegianceFinderRule.CanAsk). The first recruiter
-    ///   to answer decides; nobody on, it waits PENDING_HOURS and the next recruiter to log in is asked. On Yes the
-    ///   asker is told who and where, and swears to THAT recruiter in person with retail's Swear (owner 2026-11-25: the
-    ///   kneel plays, they see each other; ACE's walk-to, distance, vassal cap and locks all apply); since the recruiter
-    ///   already said Yes to this asker, ACE's second Yes/No to the patron is skipped for that one swear. Not sworn within
-    ///   ACCEPTED_HOURS, the request closes.
-    ///
-    ///   Client: "@recruit board" answers on the mod channel ("allegfind"); "@recruit ask 0x&lt;monarch&gt;", "@recruit
-    ///   cancel"; the recruiter verbs as Recruiting's. Staff: "@allegiancelist [remove &lt;n|monarch&gt;]".
-    ///   Newcomer hint: once per character (quest stamp), first week, level 10+, no patron, when anything is listed.
-    /// All behind rg_recruit (default off) as the rest of Recruiting.
-    /// </summary>
+    /// <summary>Find an allegiance.</summary>
     public static partial class Recruiting
     {
         const int PUSH_READERS_S = 180, FACTS_CACHE_S = 60, HALL_CACHE_S = 600, MAX_VASSALS = 11;
@@ -186,7 +164,7 @@ namespace RevivalGuard
             if (x == null && int.TryParse(arg.Trim(), out int n) && n >= 1 && n <= list.Count) x = list[n - 1];
             if (x == null)
             {
-                // not listed: any allegiance of the directory (owner 2026-11-25, Request to join), its entry made to hold the request
+                // not listed: any allegiance of the directory, its entry made to hold the request
                 var d = key == 0 ? null : Directory().FirstOrDefault(v => v.Monarch == key);
                 if (d != null)
                 {
@@ -235,8 +213,7 @@ namespace RevivalGuard
             Push(x.E, me.Guid.Full);
         }
 
-        /// <summary>Put a pending request to the recruiters who are on: auto-accept by the first with room when the listing
-        /// takes this asker's rank, else a Yes/No to each (once per login). Returns how many were asked.</summary>
+        /// <summary>Put a pending request to the recruiters who are on</summary>
         static int Offer(Entry e, Allegiance a, Request r, uint contact)
         {
             if (r.State != S.Pending || a == null) return 0;
@@ -352,9 +329,7 @@ namespace RevivalGuard
 
         // ------------------------------------------------------------------ the swear
 
-        /// <summary>The asker swears in person (retail's Swear: ACE's walk-to, then this) to the recruiter who said Yes:
-        /// that Yes stands for the patron's, so ACE's second Yes/No is skipped for this one swear, and only side by side
-        /// (SIDE_BY_SIDE_M; ACE's walk-to ends within 2 m). The vassal cap, locks, ignore-requests: all still ACE's.</summary>
+        /// <summary>The asker swears in person to the recruiter who said Yes</summary>
         [HarmonyPatch(typeof(Player), nameof(Player.SwearAllegiance))]
         static class SwearAccepted
         {
@@ -436,13 +411,13 @@ namespace RevivalGuard
         {
             var now = DateTime.UtcNow;
             int lvl = p.Level ?? 1;
-            // the directory: every player allegiance (owner 2026-11-25); a listing adds its line and settings
+            // the directory: every player allegiance; a listing adds its line and settings
             var dir = On ? Directory() : new List<Dir>();
             var listed = On ? Listings().ToDictionary(x => x.E.Monarch) : new Dictionary<uint, Live>();
             var byKey = dir.ToDictionary(d => d.Monarch);
             var sorted = AllegianceBalanceRule.Sort(dir.Select(d => new AllegianceBalanceRule.Row
             {
-                // accounts, not characters: a main and its alts count once in the order (owner 2026-11-27)
+                // accounts, not characters: a main and its alts count once in the order
                 Monarch = d.Monarch, Name = d.Name, Members = d.Accounts, Active = d.ActiveAccounts, Online = d.Online,
                 Fit = listed.TryGetValue(d.Monarch, out var x0) ? AllegianceFinderRule.Fit(lvl, x0.E.LevelMin, x0.E.LevelMax) : 1.0,
             }));

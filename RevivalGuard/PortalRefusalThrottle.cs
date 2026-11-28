@@ -5,16 +5,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// ONE REFUSAL, NOT A WALL OF THEM (owner 2026-10-15: walking into a portal you are too low for printed "You are not
-    /// powerful enough to interact with that portal!" over and over: "it should only say it once").
-    ///
-    /// ACE's Portal.OnCollideObject runs OnActivate on every collision, and a player standing in a portal collides on
-    /// every movement update, so each one re-ran the requirement check and sent its refusal again. After a collision
-    /// that did NOT send the player through (Teleporting stays false), further collisions of that player with that
-    /// portal are ignored for HUSH_S seconds. A collision that does teleport is never held back; a deliberate Use
-    /// (OnActivate through use) is not touched at all.
-    /// </summary>
     [HarmonyPatch(typeof(Portal), nameof(Portal.OnCollideObject))]
     static class PortalRefusalThrottle
     {

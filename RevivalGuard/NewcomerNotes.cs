@@ -10,19 +10,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// NOTES FOR NEW PLAYERS (owner 2026-11-21). Ours, not retail. Rules and every line: NewcomerNotesRule.cs (nettest).
-    ///   * The first gank: a character under 30 killed by another player for the first time gets one note (a notice at
-    ///     the top of the screen plus chat lines) once it is out of portal space at its lifestone.
-    ///   * The swap coins: at level 30, a character that has not collected its Imbue Swap Coins is told where they are.
-    ///   * Luminance (owner 2026-11-27): at level 200, or at the first login past it, a character without luminance is told
-    ///     where it starts (Nalicana's Test).
-    /// Each once per character (a quest stamp). Switch rg_newcomer_notes (default on); off, nothing is said or stamped.
-    ///
-    /// Hooks: Player.HandlePKDeathBroadcast (ACE's PK-death step, still at the death spot; PkRenown uses it too) marks the
-    /// victim pending; Corpse.RecalculateDecayTime(player) (called after the death items are on the corpse) records the
-    /// corpse's real timer and item count; the note waits until the player is no longer teleporting.
-    /// </summary>
+    /// <summary>Notes for new players.</summary>
     public static class NewcomerNotes
     {
         internal const string P_ON = "rg_newcomer_notes";

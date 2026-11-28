@@ -11,25 +11,7 @@ using ACE.Server.WorldObjects;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// NEW HUMAN ANIMATIONS THE SERVER CAN TRIGGER (docs/NEW-ANIMATIONS.md). Ours, not retail.
-    /// ON BY DEFAULT since 2026-09-28 (owner approved Flex permanently): server property rg_expansion_motions.
-    /// Off, both commands do nothing at all and nothing is ever sent.
-    ///
-    /// A new clip cannot go in the DAT, and a new MotionCommand on the wire would reach retail clients
-    /// that cannot read it. So the clip lives in our client (expansion/animations/human) and the
-    /// trigger travels on the mod channel (ModChannel, opcode RGM1), and only to a session that asked:
-    ///
-    ///   @rgexpansion 1      our client, after the mod channel's hello, when its own switch is on.
-    ///                       Marks the SESSION (a new login is a new session, as ModChannel does), so a
-    ///                       character that logs in later with a retail client is sent nothing.
-    ///   @rgemote &lt;trigger&gt;  an emote the DAT does not have ("flex"). Everyone in range gets the emote
-    ///                       TEXT, which every client reads ("Aldric flexes his muscles."); opted-in
-    ///                       clients also get "xanim" {g, m} and play the clip on that body. The sender
-    ///                       animated and printed its own line already, so it is sent neither.
-    ///
-    /// Also the channel NetherRift uses for its cast gesture ("xover") and effect ("xfx").
-    /// </summary>
+    /// <summary>New human animations the server can trigger (docs/NEW-ANIMATIONS.md).</summary>
     static class ExpansionMotions
     {
         internal const string P_ON = "rg_expansion_motions";
@@ -47,7 +29,7 @@ namespace RevivalGuard
         sealed class Mark { public DateTime LastEmote; }
         static readonly ConditionalWeakTable<Session, Mark> s_OptedIn = new ConditionalWeakTable<Session, Mark>();
 
-        internal static bool On => PropertyManager.GetBool(P_ON, true).Item;   // owner-approved permanent 2026-09-28
+        internal static bool On => PropertyManager.GetBool(P_ON, true).Item;
 
         /// <summary>This connection asked for expansion messages (and the switch is on).</summary>
         internal static bool OptedIn(Session s) => s != null && On && s_OptedIn.TryGetValue(s, out _) && ModChannel.Capable(s);
@@ -69,6 +51,7 @@ namespace RevivalGuard
             if (!yes) return;
             s_OptedIn.Add(session, new Mark());
             NetherRift.OnOptIn(session);
+            ExperimentalSpells.OnOptIn(session);
         }
 
         static void Emote(Session session, params string[] parameters)
@@ -106,9 +89,7 @@ namespace RevivalGuard
 
         internal static string F(float v) => v.ToString("0.###", CultureInfo.InvariantCulture);
 
-        /// <summary>Makes a switch an ordinary ACE property so @modifybool accepts it (MonsterAi's
-        /// route: the Default*Properties maps are ReadOnlyDictionaries over private dictionaries). If
-        /// this fails the switch is still read, at its default, off.</summary>
+        /// <summary>Makes a switch an ordinary ACE property so @modifybool accepts it.</summary>
         internal static void RegisterProperty(string key, bool def, string desc)
         {
             try

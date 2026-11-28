@@ -11,18 +11,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// FELLOWSHIP PASSWORDS (owner 2026-11-20, "Fellowship password yes lets do it"; ours, not retail's). The leader types
-    /// /fpass &lt;word&gt; (shown to the fellowship), /fpass off clears it; anyone may then type
-    /// /fjoin &lt;leader&gt; &lt;password&gt; from anywhere and is added as if the leader had invited them and they had
-    /// said yes (Fellowship.AddConfirmedMember, so ACE's own roster, XP-share and loot lines run unchanged). Not joinable:
-    /// a locked (quest) fellowship, a full one (Fellowship.MaxFellows, 9), or one a merc or Borg leads. The password lives
-    /// in memory against the Fellowship object: a disband drops it, and a new leader clears it (AssignNewLeader). Rules
-    /// and lines in FellowPasswordRule. Switch rg_fellow_password (default on; false: both commands answer that it is off).
-    /// Not "/fellow password": @f, @fellow and @fellowship are retail's fellowship-chat aliases, so every client (ours,
-    /// Program.AcClient.Net.cs EnqueueChat, and retail's) sends "/fellow ..." as fellowship chat and the server never sees it
-    /// (M5 proof 2026-11-21: 16 of 20 checks unanswered).
-    /// </summary>
+    /// <summary>Fellowship passwords.</summary>
     [HarmonyPatch(typeof(Fellowship), nameof(Fellowship.AssignNewLeader))]
     public static class FellowPassword
     {
@@ -46,7 +35,6 @@ namespace RevivalGuard
             Mod.Log.Info($"[RevivalGuard] FellowPassword: {(On ? "on" : "off")} ({P_ON}); /fpass | /fjoin");
         }
 
-        /// <summary>The password of a fellowship, or null; one set under an earlier leader no longer counts.</summary>
         internal static string PasswordOf(Fellowship f)
         {
             if (f == null || !s_Passwords.TryGetValue(f, out var e)) return null;
@@ -115,8 +103,7 @@ namespace RevivalGuard
             TryJoin(session, p, leader, name, given, false);
         }
 
-        /// <summary>A merc or Borg leads or rides in this fellowship (DESIGN-DECISIONS: Borg fellowships never open to
-        /// players; never listed on the Looking for Group board either).</summary>
+        /// <summary>A merc or Borg leads or rides in this fellowship.</summary>
         internal static bool HasBot(Fellowship f)
         {
             if (f == null) return false;
@@ -126,18 +113,14 @@ namespace RevivalGuard
             return Mercenaries.IsMerc(PlayerManager.GetOnlinePlayer(f.FellowshipLeaderGuid));
         }
 
-        /// <summary>Join <paramref name="leader"/>'s fellowship as if they had recruited <paramref name="p"/> and they had said
-        /// yes: with the password (/fjoin, the board's Password rows), or with none when the leader listed it open on the
-        /// Looking for Group board (<paramref name="open"/>). The same checks either way: not in a fellowship, not full,
-        /// not quest-locked, not Olthoi, no merc or Borg in it. Says the one line; returns the outcome.</summary>
+        /// <summary>Join leader's fellowship as if they had recruited p and they had said yes</summary>
         internal static FellowPasswordRule.Outcome TryJoin(Session session, Player p, Player leader, string name, string given, bool open)
         {
             if (!On && !open) { Say(session, FellowPasswordRule.Line(FellowPasswordRule.Outcome.Off, "", 0)); return FellowPasswordRule.Outcome.Off; }
             var lf = leader?.Fellowship;
             bool leads = lf != null && lf.FellowshipLeaderGuid == leader.Guid.Full;
             string pw = leads ? PasswordOf(lf) : null;
-            // A leader hidden by Appear Offline reads as offline unless they set a password or listed the fellowship
-            // (they asked to be found).
+            // A leader hidden by Appear Offline reads as offline unless they set a password or listed the fellowship (they asked to be found).
             bool hidden = leader != null && leader.GetAppearOffline() && pw == null && !open && session.AccessLevel < AccessLevel.Sentinel;
             var facts = new FellowPasswordRule.Facts
             {

@@ -9,25 +9,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// EVERY TAILORING LINE SAYS WHAT HAPPENED AND WHAT TO DO NEXT, NAMING THE ITEM (owner 2026-11-06: "review all
-    /// tailoring messages and make them as clear to players as possible"). docs/findings/tailoring-reduction-2026-11-06.md,
-    /// "Messages". Retail's own tailoring lines are not on record (no hits in the 2017 captures, nothing in the client),
-    /// so every line here replaces ACE's or fills a refusal that said nothing but the generic "Either you or one of the
-    /// items involved does not pass the requirements for this craft interaction." (retail's WeenieError 0x0437 text,
-    /// which still follows each refusal, unchanged). Kept as they are: "You must use Sandstone Salvage to remove the
-    /// retained property before tailoring." (the wiki's retail rule, ACE's words) and the pack-space lines.
-    ///
-    ///   SUCCESS LINES: ACE's four fixed sentences ("You tailor the appearance off an existing piece of armor.", "...off
-    ///   the weapon.", "...onto a different piece of armor.", "...onto a different weapon.", "You modify your armor.")
-    ///   are swapped in the IL for a line built from the items (a transpiler on each ldstr), so the rest of ACE's code
-    ///   runs untouched.
-    ///   REFUSAL LINES: one prefix per method, last in order, speaks only when ACE itself is about to refuse (it tests
-    ///   ACE's own conditions) and only when no guard of ours already refused (__runOriginal false: RobeTailoring,
-    ///   ExpansionTailoring, ReducedTailoring and TailoringParity say their own line).
-    ///   @modifybool tailoring_retail_rules false turns these off with TailoringParity (ACE's lines).
-    /// The client (AcCraftWhy) stays quiet when one of these lines came first (AcTailoring.ServerExplains).
-    /// </summary>
     static class TailoringWords
     {
         static bool On => ACE.Server.Managers.PropertyManager.GetBool(TailoringParity.P_ON, true).Item;
@@ -114,15 +95,13 @@ namespace RevivalGuard
             static void Postfix(Player player, WorldObject source, WorldObject target, WeenieError __result)
             {
                 if (!On || __result == WeenieError.None || player == null || source == null || target == null || source == target) return;
-                // EVERY REFUSAL NAMES ITS REASON (owner F7 261125-0018, three tries of a kit on a Radiant Blood Helm, no line):
-                // ACE refuses a target outside the pack before its society test, and only a worn one is let through
-                // (WornTailoring), so a helm on the ground, a hook or a mannequin got the bare generic line.
+                // Every refusal names its reason
                 bool srcHere = player.FindObject(source.Guid.Full, Player.SearchLocations.MyInventory) != null;
                 bool tgtPack = player.FindObject(target.Guid.Full, Player.SearchLocations.MyInventory) != null;
                 bool tgtWorn = !tgtPack && player.FindObject(target.Guid.Full, Player.SearchLocations.MyEquippedItems) != null;
                 if (source.IsSocietyArmor || target.IsSocietyArmor)
                 {
-                    var soc = source.IsSocietyArmor ? source : target;   // name the piece (owner 2026-11-06; codex job tailor-society-words)
+                    var soc = source.IsSocietyArmor ? source : target;   // name the piece
                     Say(player, $"The {N(soc)} is Society armor and cannot be tailored. Use ordinary armor instead."); return;
                 }
                 if (!srcHere) { Say(player, $"Your {N(source)} must be in your pack to use it."); return; }

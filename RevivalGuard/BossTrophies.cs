@@ -7,16 +7,7 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// BONDED QUEST TROPHIES ARE PERSONAL LOOT (owner, 2026-10-01: "could one person steal them all from the
-    /// fellowship that kills her?"). Ours, the world boss's rule (docs/WORLD-BOSS-SYSTEM.md). A boss in
-    /// <see cref="Specs"/> no longer drops its bonded trophy into the corpse (gen_sunken_lyceum.py); when it
-    /// dies, every player in its damage history (a pet's damage counts for its owner), the killer, and every
-    /// fellow of the killer's fellowship on the boss's landblock and inside fellowship XP-share range
-    /// (Fellowship.GetDistanceScalar) gets ONE trophy in the pack through WorldBossSchedule.Grant (a full or
-    /// overloaded pack keeps it owed for the next login or @worldboss claim). Each grant stamps the trophy's
-    /// own pickup timer, the retail item Quest a stray trophy on a corpse or generator is also gated by.
-    /// </summary>
+    /// <summary>Bonded quest trophies are personal loot.</summary>
     static class BossTrophies
     {
         internal sealed class Spec
@@ -58,8 +49,7 @@ namespace RevivalGuard
                     if (g != 0) why.TryAdd(g, "damage");
                 }
             var killer = (lastDamager ?? boss.DamageHistory?.LastDamager)?.TryGetPetOwnerOrAttacker() as Player;
-            // The killer always: ACE scales every damager's total down as the boss heals (DamageHistory.OnHeal),
-            // so a tiny early share can read 0 by the end (seen live: an @smite after 1-damage hits).
+            // The killer always: ACE scales every damager's total down as the boss heals, so a tiny early share can read 0 by the end.
             if (killer != null) why.TryAdd(killer.Guid.Full, "killer");
             var lb = boss.Location?.Landblock;
             if (killer?.Fellowship != null && lb != null)
@@ -87,9 +77,7 @@ namespace RevivalGuard
                     p.SendMessage(s.Line, ChatMessageType.Broadcast);
                     WorldBossSchedule.Grant(g, s.Trophy, s.Why);
                 }
-                // Offline at the kill (hit and logged out, or a disconnect): still owed, but the pickup timer is
-                // checked and stamped at delivery, so a real disconnect keeps its reward and an alt cannot bank
-                // one per kill.
+                // Offline at the kill: still owed, but the pickup timer is checked and stamped at delivery
                 else WorldBossSchedule.Grant(g, s.Trophy, s.Why, s.Taken, s.Slain != null && why[g] != "killer" ? s.Slain : null);
                 given++;
             }
@@ -108,7 +96,7 @@ namespace RevivalGuard
             return m;
         }
         static bool Prepare(MethodBase original) => original != null || TargetMethod() != null;
-        // A PREFIX, as ForgeWarden's: the damage history is whole before ACE's death sequence runs.
+        // A prefix, as ForgeWarden's: the damage history is whole before ACE's death sequence runs.
         static void Prefix(Creature __instance, DamageHistoryInfo lastDamager)
         {
             if (__instance == null || !BossTrophies.Specs.ContainsKey(__instance.WeenieClassId)) return;

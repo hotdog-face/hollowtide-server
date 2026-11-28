@@ -8,24 +8,6 @@ using HarmonyLib;
 
 namespace RevivalGuard
 {
-    /// <summary>
-    /// A drink, food or gem use that never finishes leaves the player "too busy" for good, the same shape as a stuck cast
-    /// (CastWatchdog). Every character here is FastTick (pk_server), so with allow_fast_chug ACE runs
-    /// ApplyConsumableWithAnimationCallbacks: IsBusy = true and no timed UseDone; only the server body's motion-done for
-    /// the Drink/Eat motion and then for Ready (Player_Use HandleMotionDone_UseConsumable) finishes it. Lost callback:
-    /// nothing times it out. Seen as auto tickets "the server never finished use" right after a run of Stamina Elixir or
-    /// Tincture uses in a fight (261018-0032, 261018-0052, 261020-0069, 261022-0004, 261022-0047) and the player report
-    /// "Macro keeps crashing trying to stam elixirs while fighting" (261022-0046).
-    ///
-    /// The rescue does what ACE's own callbacks would have done, in their order: the drink's motion-done (the boost and
-    /// the item used, as the player asked), then Ready's (FinishChugging, back to the stance the drink left, UseDone,
-    /// IsBusy cleared). A phase is timed from when this watchdog first saw it (ChugWatchdogRule). Runs on
-    /// PlayerManager.Tick (TeleportWatchdog says why not Heartbeat); the rescue is queued on the player's own action
-    /// queue. Switch: rg_chug_watchdog; chug.stuck_seconds. Off walkable ground (ServerFooting) the motion-done cannot come,
-    /// so the phase is finished once its animation time plus chug.unfooted_grace_seconds has passed (Genki 261023-0010).
-    /// On walkable ground it is finished past its animation time plus chug.footed_grace_seconds (3 s), not 10 s: a
-    /// dispel potion's MimeEat held The Forsaken Moustache 10 s on flat ground (261023-0014, "spell hanging").
-    /// </summary>
     [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.Tick))]
     public static class ChugWatchdog
     {
